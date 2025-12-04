@@ -1,2 +1,2 @@
 # Server de mine na oracle
-Configuração doserver na Oracle Free Tier
+Configuração do server na Oracle Free Tier
