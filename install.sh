@@ -171,21 +171,21 @@ install_mods_qol() {
     # Universal Graves - Sistema de túmulos
     print_step "Baixando Universal Graves v${UNIVERSAL_GRAVES_VERSION}..."
     curl -fsSL -o "$SERVER_DIR/mods/universal-graves.jar" \
-        "https://cdn.modrinth.com/data/3i7fqf9n/versions/${UNIVERSAL_GRAVES_VERSION}/graves-${UNIVERSAL_GRAVES_VERSION}.jar" || \
+        "https://cdn.modrinth.com/data/3i7fqf9n/versions/rZeFZ5ip/graves-${UNIVERSAL_GRAVES_VERSION}.jar" || \
     curl -fsSL -o "$SERVER_DIR/mods/universal-graves.jar" \
         "https://github.com/Patbox/UniversalGraves/releases/download/${UNIVERSAL_GRAVES_VERSION}/graves-${UNIVERSAL_GRAVES_VERSION}.jar"
     
     # TabTPS - Mostra TPS na lista de jogadores
     print_step "Baixando TabTPS v${TABTPS_VERSION}..."
     curl -fsSL -o "$SERVER_DIR/mods/tabtps.jar" \
-        "https://cdn.modrinth.com/data/cUhi3iB2/versions/${TABTPS_VERSION}/tabtps-fabric-mc1.21.11-${TABTPS_VERSION}.jar" || \
+        "https://cdn.modrinth.com/data/cUhi3iB2/versions/hTiqRp4H/tabtps-fabric-mc1.21.11-${TABTPS_VERSION}.jar" || \
     curl -fsSL -o "$SERVER_DIR/mods/tabtps.jar" \
         "https://github.com/jpenilla/TabTPS/releases/download/v${TABTPS_VERSION}/tabtps-fabric-mc1.21.11-${TABTPS_VERSION}.jar"
     
     # Styled Chat - Melhora formatação do chat
     print_step "Baixando Styled Chat v${STYLED_CHAT_VERSION}..."
     curl -fsSL -o "$SERVER_DIR/mods/styled-chat.jar" \
-        "https://cdn.modrinth.com/data/doqSKB0e/versions/${STYLED_CHAT_VERSION}/styled-chat-${STYLED_CHAT_VERSION}.jar" || \
+        "https://cdn.modrinth.com/data/doqSKB0e/versions/nW0Cfq7D/styled-chat-${STYLED_CHAT_VERSION}.jar" || \
     curl -fsSL -o "$SERVER_DIR/mods/styled-chat.jar" \
         "https://github.com/Patbox/StyledChat/releases/download/${STYLED_CHAT_VERSION}/styled-chat-${STYLED_CHAT_VERSION}.jar"
     
