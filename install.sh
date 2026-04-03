@@ -117,7 +117,7 @@ install_mrpack_install() {
     
     MRPACK_URL="https://github.com/nothub/mrpack-install/releases/download/v0.16.10/mrpack-install-linux"
     
-    curl -sSL -o "/tmp/mrpack-install" "$MRPACK_URL"
+    curl -fsSL -o "/tmp/mrpack-install" "$MRPACK_URL"
     install -m 755 "/tmp/mrpack-install" "/usr/local/bin/mrpack-install"
     
     print_success "mrpack-install instalado"
@@ -152,38 +152,38 @@ install_mods_qol() {
     
     # Chunky - Pré-geração de chunks (ESSENCIAL)
     print_step "Baixando Chunky v${CHUNKY_VERSION}..."
-    curl -sSL -o "$SERVER_DIR/mods/chunky.jar" \
-        "https://github.com/pop4959/Chunky/releases/download/${CHUNKY_VERSION}/Chunky-${CHUNKY_VERSION}.jar" || \
-    curl -sSL -o "$SERVER_DIR/mods/chunky.jar" \
-        "https://cdn.modrinth.com/data/fALzjamp/versions/${CHUNKY_VERSION}/chunky-${CHUNKY_VERSION}.jar"
+    curl -fsSL -o "$SERVER_DIR/mods/chunky.jar" \
+        "https://cdn.modrinth.com/data/fALzjamp/versions/${CHUNKY_VERSION}/chunky-${CHUNKY_VERSION}.jar" || \
+    curl -fsSL -o "$SERVER_DIR/mods/chunky.jar" \
+        "https://github.com/pop4959/Chunky/releases/download/${CHUNKY_VERSION}/Chunky-${CHUNKY_VERSION}.jar"
     
     # Essential Commands - Comandos básicos (/home, /spawn, /tpa, /back)
     print_step "Baixando Essential Commands v${ESSENTIAL_COMMANDS_VERSION}..."
-    curl -sSL -o "$SERVER_DIR/mods/essential-commands.jar" \
-        "https://github.com/John-Paul-R/Essential-Commands/releases/download/${ESSENTIAL_COMMANDS_VERSION}/essential-commands-${ESSENTIAL_COMMANDS_VERSION}.jar" || \
-    curl -sSL -o "$SERVER_DIR/mods/essential-commands.jar" \
-        "https://cdn.modrinth.com/data/6VdDUivB/versions/${ESSENTIAL_COMMANDS_VERSION}/essential-commands-${ESSENTIAL_COMMANDS_VERSION}.jar"
+    curl -fsSL -o "$SERVER_DIR/mods/essential-commands.jar" \
+        "https://cdn.modrinth.com/data/6VdDUivB/versions/${ESSENTIAL_COMMANDS_VERSION}/essential-commands-${ESSENTIAL_COMMANDS_VERSION}.jar" || \
+    curl -fsSL -o "$SERVER_DIR/mods/essential-commands.jar" \
+        "https://github.com/John-Paul-R/Essential-Commands/releases/download/${ESSENTIAL_COMMANDS_VERSION}/essential-commands-${ESSENTIAL_COMMANDS_VERSION}.jar"
     
     # Universal Graves - Sistema de túmulos
     print_step "Baixando Universal Graves v${UNIVERSAL_GRAVES_VERSION}..."
-    curl -sSL -o "$SERVER_DIR/mods/universal-graves.jar" \
-        "https://github.com/Patbox/UniversalGraves/releases/download/${UNIVERSAL_GRAVES_VERSION}/graves-${UNIVERSAL_GRAVES_VERSION}.jar" || \
-    curl -sSL -o "$SERVER_DIR/mods/universal-graves.jar" \
-        "https://cdn.modrinth.com/data/3i7fqf9n/versions/${UNIVERSAL_GRAVES_VERSION}/graves-${UNIVERSAL_GRAVES_VERSION}.jar"
+    curl -fsSL -o "$SERVER_DIR/mods/universal-graves.jar" \
+        "https://cdn.modrinth.com/data/3i7fqf9n/versions/${UNIVERSAL_GRAVES_VERSION}/graves-${UNIVERSAL_GRAVES_VERSION}.jar" || \
+    curl -fsSL -o "$SERVER_DIR/mods/universal-graves.jar" \
+        "https://github.com/Patbox/UniversalGraves/releases/download/${UNIVERSAL_GRAVES_VERSION}/graves-${UNIVERSAL_GRAVES_VERSION}.jar"
     
     # TabTPS - Mostra TPS na lista de jogadores
     print_step "Baixando TabTPS v${TABTPS_VERSION}..."
-    curl -sSL -o "$SERVER_DIR/mods/tabtps.jar" \
-        "https://github.com/jpenilla/TabTPS/releases/download/v${TABTPS_VERSION}/tabtps-fabric-mc1.21.11-${TABTPS_VERSION}.jar" || \
-    curl -sSL -o "$SERVER_DIR/mods/tabtps.jar" \
-        "https://cdn.modrinth.com/data/cUhi3iB2/versions/${TABTPS_VERSION}/tabtps-fabric-mc1.21.11-${TABTPS_VERSION}.jar"
+    curl -fsSL -o "$SERVER_DIR/mods/tabtps.jar" \
+        "https://cdn.modrinth.com/data/cUhi3iB2/versions/${TABTPS_VERSION}/tabtps-fabric-mc1.21.11-${TABTPS_VERSION}.jar" || \
+    curl -fsSL -o "$SERVER_DIR/mods/tabtps.jar" \
+        "https://github.com/jpenilla/TabTPS/releases/download/v${TABTPS_VERSION}/tabtps-fabric-mc1.21.11-${TABTPS_VERSION}.jar"
     
     # Styled Chat - Melhora formatação do chat
     print_step "Baixando Styled Chat v${STYLED_CHAT_VERSION}..."
-    curl -sSL -o "$SERVER_DIR/mods/styled-chat.jar" \
-        "https://github.com/Patbox/StyledChat/releases/download/${STYLED_CHAT_VERSION}/styled-chat-${STYLED_CHAT_VERSION}.jar" || \
-    curl -sSL -o "$SERVER_DIR/mods/styled-chat.jar" \
-        "https://cdn.modrinth.com/data/doqSKB0e/versions/${STYLED_CHAT_VERSION}/styled-chat-${STYLED_CHAT_VERSION}.jar"
+    curl -fsSL -o "$SERVER_DIR/mods/styled-chat.jar" \
+        "https://cdn.modrinth.com/data/doqSKB0e/versions/${STYLED_CHAT_VERSION}/styled-chat-${STYLED_CHAT_VERSION}.jar" || \
+    curl -fsSL -o "$SERVER_DIR/mods/styled-chat.jar" \
+        "https://github.com/Patbox/StyledChat/releases/download/${STYLED_CHAT_VERSION}/styled-chat-${STYLED_CHAT_VERSION}.jar"
     
     # Verificar downloads
     print_step "Verificando downloads..."
@@ -555,8 +555,9 @@ main() {
     check_root
     check_arch
     
-    # Criar diretório temporário para scripts
+    # Criar diretório temporário para scripts e copiar os arquivos
     mkdir -p /tmp/minecraft-server-scripts
+    cp start-server.sh mc-manager.sh minecraft.service backup-cron.sh setup-cron.sh server-icon.png /tmp/minecraft-server-scripts/ 2>/dev/null || true
     
     # Extrair scripts embutidos (serão criados pelo usuário)
     print_step "Preparando arquivos..."
@@ -574,6 +575,7 @@ main() {
     print_summary
 }
 
+# === INÍCIO DAS CORREÇÕES ===
 # Verificar se scripts existem
 if [ ! -f "start-server.sh" ] || [ ! -f "mc-manager.sh" ] || [ ! -f "minecraft.service" ]; then
     print_error "Arquivos necessários não encontrados!"
@@ -586,8 +588,6 @@ if [ ! -f "start-server.sh" ] || [ ! -f "mc-manager.sh" ] || [ ! -f "minecraft.s
     exit 1
 fi
 
-# Copiar scripts e arquivos para diretório temporário
-cp start-server.sh mc-manager.sh minecraft.service backup-cron.sh setup-cron.sh server-icon.png /tmp/minecraft-server-scripts/ 2>/dev/null || true
-
 # Executar instalação
 main
+

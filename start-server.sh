@@ -9,8 +9,8 @@
 # === CONFIGURAÇÕES ===
 SERVER_DIR="/opt/minecraft-server"
 SERVER_JAR="server.jar"
-MIN_RAM="2.5G"
-MAX_RAM="2.5G"
+MIN_RAM="2560M"
+MAX_RAM="2560M"
 
 # === FLAGS JVM OTIMIZADAS PARA HARDWARE LIMITADO ===
 # Baseado em Aikar's Flags + otimizações para G1GC com pouca RAM
@@ -60,7 +60,7 @@ JAVA_OPTS="$JAVA_OPTS -Dlog4j2.formatMsgNoLookups=true"
 cd "$SERVER_DIR" || exit 1
 
 # Verificar se há RAM suficiente disponível
-AVAILABLE_RAM=$(free -m | awk '/^Mem:/{print $7}')
+AVAILABLE_RAM=$(free -m | awk 'NR==2{print $7}')
 if [ "$AVAILABLE_RAM" -lt 2560 ]; then
     echo "=========================================="
     echo "AVISO: Pouca RAM disponível ($AVAILABLE_RAM MB)"
