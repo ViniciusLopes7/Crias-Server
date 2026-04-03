@@ -438,20 +438,17 @@ EOF
     fi
     cpupower frequency-set -g performance || true
 
-    # Desabilitar/Remover serviços inúteis para esse servidor (Headless + Cabeado)
-    print_step "Removendo e desabilitando pacotes não utilizados (Bluetooth, Áudio, Wi-Fi)..."
+    # Desabilitar/Remover serviços inúteis para esse servidor (Headless)
+    print_step "Removendo e desabilitando pacotes não utilizados (Bluetooth, Áudio)..."
     
     # 1. Parar serviços que possam estar rodando antes de remover
     systemctl disable --now bluetooth.service 2>/dev/null || true
-    systemctl disable --now iwd.service 2>/dev/null || true
-    systemctl disable --now wpa_supplicant.service 2>/dev/null || true
     systemctl --user mask pipewire wireplumber pulseaudio 2>/dev/null || true
     
     # 2. Desinstalar (se existirem) para economizar RAM máxima
     # Usando --noconfirm para não travar o script se não existir
     pacman -Rns --noconfirm bluez bluez-utils 2>/dev/null || true
     pacman -Rns --noconfirm pipewire pipewire-pulse pipewire-alsa pipewire-jack wireplumber pulseaudio 2>/dev/null || true
-    pacman -Rns --noconfirm wpa_supplicant iwd dialog 2>/dev/null || true
 
     # Limites de arquivos
     if ! grep -q "minecraft soft nofile" /etc/security/limits.conf; then
