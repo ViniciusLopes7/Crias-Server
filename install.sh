@@ -92,7 +92,11 @@ install_dependencies() {
         base-devel \
         zram-generator \
         cpupower \
-        lm_sensors
+        lm_sensors \
+        openssh
+    
+    print_step "Habilitando e iniciando OpenSSH (sshd)..."
+    systemctl enable --now sshd
     
     print_success "Dependências instaladas"
 }
