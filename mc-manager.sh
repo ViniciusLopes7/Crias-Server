@@ -11,6 +11,19 @@ SERVER_JAR="server.jar"
 SCREEN_NAME="minecraft"
 # Inicialização delegada ao start-server.sh para manter as flags JVM em um único lugar
 
+export SCREENDIR="/opt/minecraft-server/.screen"
+
+# Garante que este script sempre rode como o usuário 'minecraft'
+if [ "$(id -nu)" != "minecraft" ]; then
+    if [ "$(id -u)" -eq 0 ]; then
+        exec sudo -u minecraft SCREENDIR="$SCREENDIR" "$0" "$@"
+    else
+        echo -e "\033[0;31m[ERRO]\033[0m Este script deve ser acionado com permissões de administrador (sudo)."
+        echo "Tente rodar: sudo $0 $@"
+        exit 1
+    fi
+fi
+
 # Cores para output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
