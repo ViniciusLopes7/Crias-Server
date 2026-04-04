@@ -178,10 +178,11 @@ install_mods_qol() {
     download_mod "universal-graves" "rZeFZ5ip"
     download_mod "tabtps" "hTiqRp4H"
     download_mod "styled-chat" "nW0Cfq7D"
+    download_mod "polymer" "wugBT1fU"
     
     # Verificar downloads
     print_step "Verificando downloads..."
-    for mod in chunky essential-commands universal-graves tabtps styled-chat; do
+    for mod in chunky essential-commands universal-graves tabtps styled-chat polymer; do
         if [ -f "$SERVER_DIR/mods/${mod}.jar" ]; then
             size=$(du -h "$SERVER_DIR/mods/${mod}.jar" | cut -f1)
             print_success "${mod}.jar baixado (${size})"
