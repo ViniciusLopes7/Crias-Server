@@ -179,10 +179,11 @@ install_mods_qol() {
     download_mod "tabtps" "hTiqRp4H"
     download_mod "styled-chat" "nW0Cfq7D"
     download_mod "polymer" "wugBT1fU"
+    download_mod "placeholder-api" "qxjzQ9xY"
     
     # Verificar downloads
     print_step "Verificando downloads..."
-    for mod in chunky essential-commands universal-graves tabtps styled-chat polymer; do
+    for mod in chunky essential-commands universal-graves tabtps styled-chat polymer placeholder-api; do
         if [ -f "$SERVER_DIR/mods/${mod}.jar" ]; then
             size=$(du -h "$SERVER_DIR/mods/${mod}.jar" | cut -f1)
             print_success "${mod}.jar baixado (${size})"
@@ -334,14 +335,14 @@ EOF
 EOF
 
     # Configurar Styled Chat
-    mkdir -p "$SERVER_DIR/config/styledchat"
-    cat > "$SERVER_DIR/config/styledchat/config.json" << 'EOF'
+    cat > "$SERVER_DIR/config/styled-chat.json" << 'EOF'
 {
-  "formats": {
-    "chat": "<yellow>[<gray>%server:tabtps_tps%<yellow>] <white>%player:displayname% <gold>» <white>${message}",
-    "joined": "<gold>🔔 O cria <white>%player:displayname% <yellow>chegou no Reino!",
-    "left": "<red>🚪 <white>%player:displayname% <gray>partiu em viagem...",
-    "death": "<dark_red>☠ <white>%player:displayname% <red>pereceu em combate: <gray>%message%"
+  "CONFIG_VERSION_DONT_TOUCH_THIS": 2,
+  "defaultStyle": {
+    "chat": "<yellow>${player}</yellow> <dark_gray>»</dark_gray> <white>${message}</white>",
+    "join": "<gold>🔔</gold> <yellow>${player} chegou no Reino!</yellow>",
+    "left": "<red>🚪</red> <yellow>${player} partiu em viagem...</yellow>",
+    "death": "<dark_red>☠</dark_red> <red>${player}</red> <gray>${default_message}</gray>"
   }
 }
 EOF
