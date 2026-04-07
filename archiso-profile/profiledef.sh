@@ -24,7 +24,6 @@ airootfs_image_tool_options=('-comp' 'zstd' '-b' '1M')
 
 # Set bash to auto-load in live USB
 file_permissions=(
-  ["/etc/shadow"]="0:0:400"
   ["/root"]="0:0:750"
   ["/root/.automated_script.sh"]="0:0:755"
 )

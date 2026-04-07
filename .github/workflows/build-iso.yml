@@ -2,15 +2,19 @@ name: Build Archiso and Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*.*.*'
     paths:
-      - '**.sh'
+      - '**/*.sh'
       - '.github/workflows/**'
       - 'archiso-profile/**'
   pull_request:
+    branches:
+      - main
     paths:
-      - '**.sh'
+      - '**/*.sh'
       - '.github/workflows/**'
       - 'archiso-profile/**'
   workflow_dispatch:
