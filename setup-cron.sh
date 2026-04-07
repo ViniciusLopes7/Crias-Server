@@ -34,7 +34,7 @@ echo "3) A cada 4 horas"
 echo "4) Semanal (domingo às 3h)"
 echo "5) Personalizado"
 echo ""
-read -p "Opção (1-5): " choice
+read -r -p "Opção (1-5): " choice
 
 case $choice in
     1)
@@ -62,7 +62,7 @@ case $choice in
         echo "  0 */6 * * *  = A cada 6 horas"
         echo "  0 2 * * 1    = 2h da manhã às segundas"
         echo ""
-        read -p "Cron: " custom_cron
+        read -r -p "Cron: " custom_cron
         CRON_LINE="$custom_cron /opt/minecraft-server/backup-cron.sh >> /var/log/minecraft-backup.log 2>&1"
         DESC="Backup personalizado: $custom_cron"
         ;;
@@ -109,7 +109,7 @@ echo "  mcbackup (se carregou os atalhos)"
 echo ""
 
 # Testar backup
-read -p "Deseja executar um backup de teste agora? (s/N): " -n 1 -r
+read -r -p "Deseja executar um backup de teste agora? (s/N): " -n 1
 echo
 if [[ $REPLY =~ ^[Ss]$ ]]; then
     echo ""

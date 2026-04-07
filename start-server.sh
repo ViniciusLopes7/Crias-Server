@@ -101,4 +101,5 @@ echo "Iniciando servidor..."
 echo ""
 
 # Iniciar servidor
+# shellcheck disable=SC2086  # JAVA_OPTS is intentionally word-split into multiple JVM flags
 exec java $JAVA_OPTS -jar "$SERVER_JAR" nogui

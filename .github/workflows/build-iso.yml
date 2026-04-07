@@ -18,6 +18,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -28,8 +31,6 @@ jobs:
         uses: ludeeus/action-shellcheck@master
         with:
           scandir: './'
-        # Em caso de falha de estilo muito estrita, por enquanto deixa passar como success
-        continue-on-error: true
 
   build:
     needs: lint
@@ -39,23 +40,23 @@ jobs:
       options: --privileged
     steps:
       - name: Install dependencies
-        run: pacman -Syu --noconfirm archiso git github-cli
-        
+        run: pacman -Syu --noconfirm archiso git github-cli grub
+
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Build ISO
         run: |
           mkdir -p out
           mkarchiso -v -w /tmp/archiso-tmp -o out/ archiso-profile/
-          
+
       - name: Upload ISO Artifact
         uses: actions/upload-artifact@v4
         with:
           name: minecraft-server-iso
           path: out/*.iso
           retention-days: 7
-          
+
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         env:

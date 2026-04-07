@@ -3,6 +3,9 @@ base
 linux
 linux-firmware
 mkinitcpio
+syslinux
+grub
+efibootmgr
 
 # Networking
 networkmanager
@@ -16,6 +19,7 @@ jdk21-openjdk
 screen
 tar
 gzip
+zstd
 
 # System utilities
 nano

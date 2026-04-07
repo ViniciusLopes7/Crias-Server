@@ -10,17 +10,17 @@ echo "  BEM-VINDO AO INSTALADOR DO SERVIDOR"
 echo "=========================================="
 echo ""
 echo "A ISO detectou que o Tailscale, Java 21, e dependências já estão instaladas."
-echo "Pressione [ENTER] para baixar a última versão do script de setup e inciar o servidor."
+echo "Pressione [ENTER] para baixar a última versão do script de setup e iniciar o servidor."
 
-read -p "Continuar? " _
+read -r -p "Continuar? " _
 
-cd /opt
+cd /opt || exit 1
 if [ -d "Server-Mine" ]; then
     rm -rf Server-Mine
 fi
 
 git clone https://github.com/ViniciusLopes7/Server-Mine
-cd Server-Mine
+cd Server-Mine || exit 1
 
 # Roda o instalador interativo modificado recém
 chmod +x install.sh

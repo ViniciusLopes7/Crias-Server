@@ -20,7 +20,7 @@ if [ "$(id -nu)" != "$SERVER_USER" ]; then
         exec sudo -u "$SERVER_USER" SCREENDIR="$SCREENDIR" "$0" "$@"
     else
         echo -e "\033[0;31m[ERRO]\033[0m Este script deve ser acionado com permissões de administrador (sudo)."
-        echo "Tente rodar: sudo $0 $@"
+        echo "Tente rodar: sudo $0 $*"
         exit 1
     fi
 fi
@@ -130,7 +130,7 @@ stop_server() {
     
     # Aguardar parada
     log "Aguardando parada..."
-    for i in {1..60}; do
+    for _ in {1..60}; do
         if ! check_server_running; then
             log "Servidor parado com sucesso!"
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] Servidor parado" >> "$SERVER_DIR/server-manager.log"
@@ -166,15 +166,15 @@ server_status() {
             echo "PID: $PID"
             
             # Uso de RAM
-            RAM_USAGE=$(ps -p $PID -o rss= | awk '{printf "%.1f MB", $1/1024}')
+            RAM_USAGE=$(ps -p "$PID" -o rss= | awk '{printf "%.1f MB", $1/1024}')
             echo "RAM em uso: $RAM_USAGE"
             
             # Uso de CPU
-            CPU_USAGE=$(ps -p $PID -o %cpu=)
+            CPU_USAGE=$(ps -p "$PID" -o %cpu=)
             echo "CPU: ${CPU_USAGE}%"
             
             # Tempo de execução
-            UPTIME=$(ps -p $PID -o etime=)
+            UPTIME=$(ps -p "$PID" -o etime=)
             echo "Uptime: $UPTIME"
         fi
         
@@ -281,7 +281,7 @@ chunky_menu() {
     echo "5) Ver status/progresso"
     echo "6) Cancelar pré-geração"
     echo ""
-    read -p "Opção (1-6): " chunky_choice
+    read -r -p "Opção (1-6): " chunky_choice
     
     case $chunky_choice in
         1)
@@ -290,9 +290,9 @@ chunky_menu() {
             log_cmd "chunky start"
             ;;
         2)
-            read -p "Raio em blocos (ex: 500, 1000, 2000): " radius
-            read -p "Centro X (padrão: 0): " center_x
-            read -p "Centro Z (padrão: 0): " center_z
+            read -r -p "Raio em blocos (ex: 500, 1000, 2000): " radius
+            read -r -p "Centro X (padrão: 0): " center_x
+            read -r -p "Centro Z (padrão: 0): " center_z
             center_x=${center_x:-0}
             center_z=${center_z:-0}
             
@@ -363,7 +363,7 @@ say_to_players() {
     MESSAGE="$*"
     
     if [ -z "$MESSAGE" ]; then
-        read -p "Mensagem para enviar: " MESSAGE
+        read -r -p "Mensagem para enviar: " MESSAGE
     fi
     
     if [ -n "$MESSAGE" ]; then
@@ -390,7 +390,7 @@ whitelist_manage() {
     echo "4) Remover jogador"
     echo "5) Listar jogadores na whitelist"
     echo ""
-    read -p "Opção (1-5): " wl_choice
+    read -r -p "Opção (1-5): " wl_choice
     
     case $wl_choice in
         1)
@@ -402,12 +402,12 @@ whitelist_manage() {
             screen -S "$SCREEN_NAME" -p 0 -X stuff "whitelist off\n"
             ;;
         3)
-            read -p "Nome do jogador: " player
+            read -r -p "Nome do jogador: " player
             log "Adicionando $player à whitelist..."
             screen -S "$SCREEN_NAME" -p 0 -X stuff "whitelist add $player\n"
             ;;
         4)
-            read -p "Nome do jogador: " player
+            read -r -p "Nome do jogador: " player
             log "Removendo $player da whitelist..."
             screen -S "$SCREEN_NAME" -p 0 -X stuff "whitelist remove $player\n"
             ;;
@@ -462,7 +462,7 @@ backup() {
     
     # Limpar backups antigos (manter últimos 7)
     cd "$BACKUP_DIR" || exit 1
-    ls -t backup-*.tar.* 2>/dev/null | tail -n +8 | xargs -r rm --
+    find . -maxdepth 1 -name 'backup-*.tar.*' -printf '%T@ %p\n' 2>/dev/null | sort -rn | tail -n +8 | cut -d' ' -f2- | xargs -r rm --
 }
 
 update_modpack() {
@@ -509,7 +509,7 @@ mod_manager() {
     case "$action" in
         list)
             log "Mods instalados em $SERVER_DIR/mods:"
-            ls -1 *.jar 2>/dev/null || echo "Nenhum mod .jar encontrado."
+            find . -maxdepth 1 -name '*.jar' -printf '%f\n' 2>/dev/null || echo "Nenhum mod .jar encontrado."
             ;;
         add)
             if [ -z "$mod_name_or_id" ]; then
@@ -519,7 +519,8 @@ mod_manager() {
             log "Buscando versão mais recente de '$mod_name_or_id' (Fabric 1.21.11) no Modrinth..."
             
             local api_url="https://api.modrinth.com/v2/project/$mod_name_or_id/version?loaders=%5B%22fabric%22%5D"
-            local modrinth_url=$(curl -s "$api_url" | jq -r '.[0].files[0].url // empty')
+            local modrinth_url
+            modrinth_url=$(curl -s "$api_url" | jq -r '.[0].files[0].url // empty')
             
             if [ -n "$modrinth_url" ]; then
                 log "Baixando $modrinth_url ..."
@@ -534,7 +535,8 @@ mod_manager() {
                 log_error "Forneça parte do nome do mod para remover. Ex: mcmod remove chunky"
                 return 1
             fi
-            local target=$(ls -1 | grep -i "$mod_name_or_id" | head -n 1)
+            local target
+            target=$(find . -maxdepth 1 -iname "*${mod_name_or_id}*" -printf '%f\n' | head -n 1)
             if [ -n "$target" ]; then
                 rm "$target"
                 log "Mod '$target' removido com sucesso!"

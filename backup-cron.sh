@@ -61,21 +61,21 @@ create_backup() {
     mkdir -p "$BACKUP_DIR"
     cd "$SERVER_DIR" || exit 1
     
-    # Criar lista de diretórios para backup
-    BACKUP_LIST=""
+    # Criar lista de diretórios para backup (usando array para evitar word splitting)
+    local backup_dirs=()
     for dir in "${WORLD_DIRS[@]}"; do
         if [ -d "$dir" ]; then
-            BACKUP_LIST="$BACKUP_LIST $dir"
+            backup_dirs+=("$dir")
         fi
     done
     
-    if [ -z "$BACKUP_LIST" ]; then
+    if [ ${#backup_dirs[@]} -eq 0 ]; then
         log_error "Nenhum diretório de mundo encontrado!"
         return 1
     fi
     
-    # Criar backup com zstd e ionice iddle
-    if ionice -c3 tar -I 'zstd -3' -cf "$BACKUP_DIR/$BACKUP_NAME" $BACKUP_LIST 2>/dev/null; then
+    # Criar backup com zstd e ionice idle
+    if ionice -c3 tar -I 'zstd -3' -cf "$BACKUP_DIR/$BACKUP_NAME" "${backup_dirs[@]}" 2>/dev/null; then
         BACKUP_SIZE=$(du -h "$BACKUP_DIR/$BACKUP_NAME" | cut -f1)
         log "Backup criado com sucesso: $BACKUP_SIZE"
         return 0
@@ -94,7 +94,7 @@ cleanup_old_backups() {
     COUNT_BEFORE=$(find . -name "minecraft-backup-*.tar.*" -type f | wc -l)
     
     # Remover backups antigos
-    find . -name "minecraft-backup-*.tar.*" -type f -mtime +$RETENTION_DAYS -delete
+    find . -name "minecraft-backup-*.tar.*" -type f -mtime +"$RETENTION_DAYS" -delete
     
     # Contar backups depois
     COUNT_AFTER=$(find . -name "minecraft-backup-*.tar.*" -type f | wc -l)
