@@ -6,7 +6,7 @@
 # Para: Arch Linux Minimal | i3-6006U | 4GB RAM
 # ============================================
 
-set -e  # Sair em caso de erro
+set -eo pipefail  # Sair em caso de erro e falhas no pipe
 
 # Cores
 RED='\033[0;31m'
@@ -16,17 +16,78 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# Variáveis
+# Variáveis Default
 MINECRAFT_USER="minecraft"
 SERVER_DIR="/opt/minecraft-server"
-ADRENALINE_VERSION=""  # Deixe vazio para última versão
+SERVER_PORT=25565
+SERVER_RAM="2560M"
+ONLINE_MODE="false"
 
-# Versões dos mods (atualizadas para 1.21.11)
-ESSENTIAL_COMMANDS_VERSION="0.38.6-mc1.21.11"
-UNIVERSAL_GRAVES_VERSION="3.10.2+1.21.11"
-TABTPS_VERSION="1.3.30"
-STYLED_CHAT_VERSION="2.11.0+1.21.11"
-CHUNKY_VERSION="1.4.55"
+MINECRAFT_VERSION="1.21.11"
+LOADER_TYPE="fabric"
+
+INSTALL_MODPACK="true"
+ADRENALINE_VERSION=""
+INSTALL_QOL_MODS="true"
+INSTALL_TAILSCALE="true"
+
+VIEW_DISTANCE=6
+SIMULATION_DISTANCE=4
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Carregar config.env se existir
+if [ -f "$SCRIPT_DIR/config.env" ]; then
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/config.env"
+fi
+
+# ============================================
+# PROMPTS INTERATIVOS
+# ============================================
+
+ask_confirm() {
+    local prompt="$1"
+    local default_ans="${2:-Y}"
+    local ans
+    local prompt_text
+
+    if [ "${default_ans^^}" == "Y" ]; then
+        prompt_text="$prompt [Y/n]: "
+    else
+        prompt_text="$prompt [y/N]: "
+    fi
+
+    read -r -p "$prompt_text" ans
+    if [ -z "$ans" ]; then
+        ans="$default_ans"
+    fi
+
+    if [[ "${ans^^}" == "Y" || "${ans^^}" == "YES" || "${ans^^}" == "S" || "${ans^^}" == "SIM" ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+ask_value() {
+    local prompt="$1"
+    local default_val="$2"
+    local var_name="$3"
+    local ans
+    
+    read -r -p "$prompt [$default_val]: " ans
+    if [ -z "$ans" ]; then
+        printf -v "$var_name" '%s' "$default_val"
+    else
+        printf -v "$var_name" '%s' "$ans"
+    fi
+}
+
+validate_java_ram_value() {
+    local value="${1^^}"
+    [[ "$value" =~ ^[0-9]+[MG]$ ]]
+}
 
 # ============================================
 # FUNÇÕES
@@ -66,7 +127,7 @@ check_root() {
 check_arch() {
     if [ ! -f "/etc/arch-release" ]; then
         print_warning "Este script foi projetado para Arch Linux"
-        read -p "Deseja continuar mesmo assim? (s/N): " -n 1 -r
+        read -r -p "Deseja continuar mesmo assim? (s/N): " -n 1
         echo
         if [[ ! $REPLY =~ ^[Ss]$ ]]; then
             exit 1
@@ -93,7 +154,8 @@ install_dependencies() {
         zram-generator \
         cpupower \
         lm_sensors \
-        openssh
+        openssh \
+        jq
     
     print_step "Habilitando e iniciando OpenSSH (sshd)..."
     systemctl enable --now sshd
@@ -105,223 +167,182 @@ create_user() {
     print_step "Criando usuário minecraft..."
     
     if id "$MINECRAFT_USER" &>/dev/null; then
-        print_warning "Usuário $MINECRAFT_USER já existe"
+        print_warning "Usuário ${MINECRAFT_USER} já existe"
     else
         useradd -m -s /bin/bash "$MINECRAFT_USER"
-        print_success "Usuário $MINECRAFT_USER criado"
+        print_success "Usuário ${MINECRAFT_USER} criado"
     fi
     
     # Criar diretório do servidor
     mkdir -p "$SERVER_DIR"
-    chown "$MINECRAFT_USER:$MINECRAFT_USER" "$SERVER_DIR"
+    chown "${MINECRAFT_USER}:${MINECRAFT_USER}" "$SERVER_DIR"
 }
 
 install_mrpack_install() {
     print_step "Instalando mrpack-install..."
     
-    MRPACK_URL="https://github.com/nothub/mrpack-install/releases/download/v0.16.10/mrpack-install-linux"
+    local mrpack_url
+    mrpack_url=$(curl -s https://api.github.com/repos/nothub/mrpack-install/releases/latest | jq -r '.assets[] | select(.name=="mrpack-install-linux") | .browser_download_url')
     
-    curl -fsSL -o "/tmp/mrpack-install" "$MRPACK_URL"
+    if [ -z "$mrpack_url" ] || [ "$mrpack_url" == "null" ]; then
+        mrpack_url="https://github.com/nothub/mrpack-install/releases/latest/download/mrpack-install-linux"
+    fi
+    
+    curl -fsSL -o "/tmp/mrpack-install" "$mrpack_url"
     install -m 755 "/tmp/mrpack-install" "/usr/local/bin/mrpack-install"
     
     print_success "mrpack-install instalado"
 }
 
-install_adrenaline() {
-    print_step "Instalando Adrenaline Modpack..."
+install_server_base() {
+    cd "$SERVER_DIR" || exit 1
     
-    cd "$SERVER_DIR"
-    
-    if [ -z "$ADRENALINE_VERSION" ]; then
-        # Instalar última versão
-        mrpack-install adrenaline --server-dir "$SERVER_DIR" --server-file server.jar
+    if [ "$INSTALL_MODPACK" == "true" ]; then
+        print_step "Instalando Modpack Adrenaline..."
+        if [ -z "$ADRENALINE_VERSION" ]; then
+            mrpack-install adrenaline --server-dir "$SERVER_DIR" --server-file server.jar
+        else
+            mrpack-install adrenaline "$ADRENALINE_VERSION" --server-dir "$SERVER_DIR" --server-file server.jar
+        fi
+        print_success "Adrenaline instalado"
     else
-        # Instalar versão específica
-        mrpack-install adrenaline "$ADRENALINE_VERSION" --server-dir "$SERVER_DIR" --server-file server.jar
+        print_step "Instalando $LOADER_TYPE versão $MINECRAFT_VERSION..."
+        mrpack-install "$LOADER_TYPE" "$MINECRAFT_VERSION" --server-dir "$SERVER_DIR" --server-file server.jar
+        print_success "$LOADER_TYPE $MINECRAFT_VERSION instalado"
     fi
     
-    # Aceitar EULA
     echo "eula=true" > "$SERVER_DIR/eula.txt"
-    
-    print_success "Adrenaline instalado"
 }
 
 install_mods_qol() {
-    print_step "Instalando mods de Qualidade de Vida..."
+    print_step "Instalando mods de Qualidade de Vida para MC $MINECRAFT_VERSION..."
     
-    cd "$SERVER_DIR"
+    cd "$SERVER_DIR" || exit 1
     mkdir -p mods
-    
-    print_step "Baixando mods de QoL (versões atualizadas para 1.21.11)..."
-    
-    # Resolvendo links diretos na API do Modrinth para evitar qualquer erro 404
-    print_step "Consultando API do Modrinth para baixar as versões exatas..."
     
     download_mod() {
         local name=$1
-        local version_id=$2
-        print_step "Baixando $name..."
+        local slug=$2
+        print_step "Buscando $name..."
         
-        # Pega a URL real a partir da API do Modrinth dinamicamente!
-        local modrinth_url=$(curl -s "https://api.modrinth.com/v2/version/$version_id" | grep -o 'https://cdn.modrinth.com/[^"]*' | head -n 1)
+        local api_url="https://api.modrinth.com/v2/project/$slug/version?loaders=%5B%22$LOADER_TYPE%22%5D&game_versions=%5B%22$MINECRAFT_VERSION%22%5D"
+        local modrinth_url
+        modrinth_url=$(curl -s "$api_url" | jq -r '.[0].files[0].url // empty')
         
-        if [ -n "$modrinth_url" ]; then
+        if [ -n "$modrinth_url" ] && [ "$modrinth_url" != "null" ]; then
             curl -fsSL -o "$SERVER_DIR/mods/${name}.jar" "$modrinth_url"
+            print_success "${name}.jar instalado."
         else
-            print_warning "A URL da versão $version_id do $name não resolveu."
+            print_warning "Nenhuma versão exata do $name para MC $MINECRAFT_VERSION ($LOADER_TYPE). Instalando latest..."
+            local fallback_url
+            fallback_url=$(curl -s "https://api.modrinth.com/v2/project/$slug/version?loaders=%5B%22$LOADER_TYPE%22%5D" | jq -r '.[0].files[0].url // empty')
+            if [ -n "$fallback_url" ]; then
+                curl -fsSL -o "$SERVER_DIR/mods/${name}.jar" "$fallback_url"
+                print_success "${name}.jar (latest) instalado."
+            else
+                print_error "Falha ao baixar $name. Mod pode não existir para $LOADER_TYPE."
+            fi
         fi
     }
 
-    # Baixando todos usando os IDs exatos fornecidos
-    download_mod "chunky" "1CpEkmcD"
-    download_mod "essential-commands" "3s9XXmZa"
-    download_mod "universal-graves" "rZeFZ5ip"
-    download_mod "tabtps" "hTiqRp4H"
-    download_mod "styled-chat" "nW0Cfq7D"
-    download_mod "polymer" "wugBT1fU"
-    download_mod "placeholder-api" "qxjzQ9xY"
+    # Baixando slugs padronizados do Modrinth
+    download_mod "chunky" "chunky"
     
-    # Verificar downloads
-    print_step "Verificando downloads..."
-    for mod in chunky essential-commands universal-graves tabtps styled-chat polymer placeholder-api; do
-        if [ -f "$SERVER_DIR/mods/${mod}.jar" ]; then
-            size=$(du -h "$SERVER_DIR/mods/${mod}.jar" | cut -f1)
-            print_success "${mod}.jar baixado (${size})"
-        else
-            print_warning "${mod}.jar não encontrado, tentando mirror alternativo..."
-        fi
-    done
+    # Alguns mods QoL são exclusivos do Fabric.
+    if [ "$LOADER_TYPE" == "fabric" ] || [ "$LOADER_TYPE" == "quilt" ]; then
+        download_mod "essential-commands" "essential-commands"
+        download_mod "universal-graves" "universal-graves"
+        download_mod "tabtps" "tabtps"
+        download_mod "styled-chat" "styled-chat"
+        download_mod "polymer" "polymer"
+        download_mod "placeholder-api" "placeholder-api"
+    else
+        print_warning "Mods QoL focados em Fabric/Quilt pulados pois o loader escolhido é $LOADER_TYPE."
+    fi
     
-    # Ajustar permissões
-    chown -R "$MINECRAFT_USER:$MINECRAFT_USER" "$SERVER_DIR/mods"
-    
-    print_success "Mods de QoL instalados"
+    chown -R "${MINECRAFT_USER}:${MINECRAFT_USER}" "$SERVER_DIR/mods"
+    print_success "Mods instalados!"
 }
 
 install_tailscale() {
     print_step "Instalando Tailscale..."
     
-    # Verificar se já está instalado
     if command -v tailscale &> /dev/null; then
         print_warning "Tailscale já está instalado"
         tailscale version
         return 0
     fi
     
-    # Instalar Tailscale no Arch
     pacman -S --needed --noconfirm tailscale
     
-    # Habilitar e iniciar serviço
     systemctl enable tailscaled
     systemctl start tailscaled
     
     print_success "Tailscale instalado e iniciado"
-    print_step "Para conectar: sudo tailscale up"
-    print_step "Para ver status: sudo tailscale status"
 }
 
 configure_server() {
     print_step "Configurando servidor..."
     
-    # Configurar server.properties
-    cat > "$SERVER_DIR/server.properties" << 'EOF'
+    cat > "$SERVER_DIR/server.properties" << EOF
 # Minecraft server properties
-# Otimizado para hardware limitado + QoL
-# Versão: 1.21.11
-
-# Rede
-server-port=25565
+server-port=$SERVER_PORT
 server-ip=
-online-mode=false
+online-mode=$ONLINE_MODE
 max-players=10
 network-compression-threshold=256
 prevent-proxy-connections=false
 
-# Distâncias (CRÍTICO PARA PERFORMANCE)
-view-distance=6
-simulation-distance=4
+view-distance=$VIEW_DISTANCE
+simulation-distance=$SIMULATION_DISTANCE
 
-# Performance
 max-tick-time=60000
 max-world-size=29999984
 sync-chunk-writes=false
 enable-jmx-monitoring=false
 enable-status=true
 
-# Entidades
 entity-broadcast-range-percentage=75
 max-build-height=256
 spawn-animals=true
 spawn-monsters=true
 spawn-npcs=true
 spawn-protection=0
-
-# Geração
-generate-structures=true
-level-type=minecraft:normal
-level-name=world
-
-# Outros
-motd=§6§l🏰 REINO DOS CRIAS 🏰\n§eAdrenaline + QoL §7| §aA resenha nunca morre...§r
-pvp=true
-gamemode=survival
-difficulty=normal
-allow-flight=false
-allow-nether=true
-force-gamemode=false
-hardcore=false
-white-list=false
-enforce-whitelist=false
 EOF
 
-    # Configurar Essential Commands
-    mkdir -p "$SERVER_DIR/config/essentialcommands"
-    cat > "$SERVER_DIR/config/essentialcommands/config.toml" << 'EOF'
-# Essential Commands Config
-# Configuração otimizada para servidor com pouca RAM
-
+    mkdir -p "$SERVER_DIR/config/essentialcommands" "$SERVER_DIR/config/universal_graves"
+    
+    if [ ! -f "$SERVER_DIR/config/essentialcommands/config.toml" ]; then
+        cat > "$SERVER_DIR/config/essentialcommands/config.toml" << 'EOF'
 [teleportation]
-# Permitir teleporte entre dimensões
 allow_teleport_between_dimensions = true
-# Tempo de espera para teleporte (segundos)
 teleport_request_timeout_seconds = 120
-# Custo de experiência para teleporte (0 = gratuito)
 teleport_cost = 0
 
 [home]
-# Máximo de homes por jogador
 max_homes = 3
-# Permitir home em qualquer dimensão
 allow_home_in_any_dimension = true
 
 [spawn]
-# Permitir spawn em qualquer dimensão
 allow_spawn_in_any_dimension = true
 
 [back]
-# Habilitar comando /back
 enable_back = true
-# Salvar localização ao morrer
 save_back_on_death = true
 
 [rtp]
-# Habilitar teleporte aleatório
 enable_rtp = true
-# Raio máximo
 rtp_radius = 10000
-# Raio mínimo
 rtp_min_radius = 1000
 
 [nicknames]
-# Permitir apelidos
 enable_nicknames = true
-# Prefixo de apelido
 nickname_prefix = "~"
 EOF
+    fi
 
-    # Configurar Universal Graves
-    mkdir -p "$SERVER_DIR/config/universal_graves"
-    cat > "$SERVER_DIR/config/universal_graves/config.json" << 'EOF'
+    if [ ! -f "$SERVER_DIR/config/universal_graves/config.json" ]; then
+        cat > "$SERVER_DIR/config/universal_graves/config.json" << 'EOF'
 {
   "protection_time": 300,
   "breaking_time": 1800,
@@ -333,86 +354,60 @@ EOF
   "gui": true
 }
 EOF
+    fi
 
-    # Configurar Styled Chat
-    cat > "$SERVER_DIR/config/styled-chat.json" << 'EOF'
-{
-  "CONFIG_VERSION_DONT_TOUCH_THIS": 2,
-  "defaultStyle": {
-    "chat": "<yellow>${player}</yellow> <dark_gray>»</dark_gray> <white>${message}</white>",
-    "join": "<gold>🔔</gold> <yellow>${player} chegou no Reino!</yellow>",
-    "left": "<red>🚪</red> <yellow>${player} partiu em viagem...</yellow>",
-    "death": "<dark_red>☠</dark_red> <red>${player}</red> <gray>${default_message}</gray>"
-  }
-}
-EOF
-
-    # Copiar scripts e ícone
-    cp /tmp/minecraft-server-scripts/start-server.sh "$SERVER_DIR/"
-    cp /tmp/minecraft-server-scripts/mc-manager.sh "$SERVER_DIR/"
-    cp /tmp/minecraft-server-scripts/backup-cron.sh "$SERVER_DIR/"
-    cp /tmp/minecraft-server-scripts/setup-cron.sh "$SERVER_DIR/"
+    # Copiar e atualizar scripts
+    for script in start-server.sh mc-manager.sh backup-cron.sh setup-cron.sh; do
+        if [ -f "/tmp/minecraft-server-scripts/$script" ]; then
+            cp "/tmp/minecraft-server-scripts/$script" "$SERVER_DIR/"
+        fi
+    done
     
-    # Ícone do servidor (opcional)
-    if [ -f "/tmp/minecraft-server-scripts/server-icon.png" ]; then
-        cp /tmp/minecraft-server-scripts/server-icon.png "$SERVER_DIR/"
-        print_success "Ícone do servidor (server-icon.png) instalado"
+    if [ -f "$SERVER_DIR/start-server.sh" ]; then
+        sed -i "s|SERVER_DIR=.*|SERVER_DIR=\"$SERVER_DIR\"|g" "$SERVER_DIR/start-server.sh"
+        sed -i "s|MIN_RAM=.*|MIN_RAM=\"$SERVER_RAM\"|g" "$SERVER_DIR/start-server.sh"
+        sed -i "s|MAX_RAM=.*|MAX_RAM=\"$SERVER_RAM\"|g" "$SERVER_DIR/start-server.sh"
+    fi
+
+    for script in mc-manager.sh backup-cron.sh setup-cron.sh; do
+        if [ -f "$SERVER_DIR/$script" ]; then
+            sed -i "s|/opt/minecraft-server|$SERVER_DIR|g" "$SERVER_DIR/$script"
+        fi
+    done
+    if [ -f "$SERVER_DIR/mc-manager.sh" ]; then
+        sed -i "s|^SERVER_USER=.*|SERVER_USER=\"$MINECRAFT_USER\"|g" "$SERVER_DIR/mc-manager.sh"
     fi
     
-    chmod +x "$SERVER_DIR/start-server.sh"
-    chmod +x "$SERVER_DIR/mc-manager.sh"
-    chmod +x "$SERVER_DIR/backup-cron.sh"
-    chmod +x "$SERVER_DIR/setup-cron.sh"
+    if [ -f "/tmp/minecraft-server-scripts/server-icon.png" ]; then
+        cp /tmp/minecraft-server-scripts/server-icon.png "$SERVER_DIR/"
+    fi
     
-    # Criar aliases/atalhos
-    cat > "$SERVER_DIR/comandos.sh" << 'EOF'
+    chmod +x "$SERVER_DIR"/*.sh 2>/dev/null || true
+    
+    cat > "$SERVER_DIR/comandos.sh" << EOF
 #!/bin/bash
-# Atalhos rápidos para comandos do servidor
-# Uso: source ./comandos.sh
-
 alias mcstart='sudo systemctl start minecraft'
 alias mcstop='sudo systemctl stop minecraft'
 alias mcrestart='sudo systemctl restart minecraft'
 alias mcstatus='sudo systemctl status minecraft'
 alias mclogs='sudo journalctl -u minecraft -f'
-alias mcconsole='sudo /opt/minecraft-server/mc-manager.sh console'
-alias mcbackup='sudo /opt/minecraft-server/mc-manager.sh backup'
-alias mcinfo='sudo /opt/minecraft-server/mc-manager.sh status'
-alias mcchunky='sudo /opt/minecraft-server/mc-manager.sh chunky'
-alias mctps='sudo /opt/minecraft-server/mc-manager.sh tps'
+alias mcconsole='sudo $SERVER_DIR/mc-manager.sh console'
+alias mcbackup='sudo $SERVER_DIR/mc-manager.sh backup'
+alias mcchunky='sudo $SERVER_DIR/mc-manager.sh chunky'
 alias mctailscale='sudo tailscale status'
 
-echo "=========================================="
-echo "   Atalhos Minecraft Server Carregados"
-echo "=========================================="
-echo ""
-echo "  mcstart    - Iniciar servidor"
-echo "  mcstop     - Parar servidor"
-echo "  mcrestart  - Reiniciar servidor"
-echo "  mcstatus   - Status do serviço"
-echo "  mclogs     - Ver logs"
-echo "  mcconsole  - Acessar console"
-echo "  mcbackup   - Fazer backup"
-echo "  mcinfo     - Informações detalhadas"
-echo "  mcchunky   - Menu do Chunky"
-echo "  mctps      - Ver TPS"
-echo "  mctailscale- Status do Tailscale"
-echo ""
-echo "=========================================="
+alias mcdir='cd $SERVER_DIR'
+alias mcprops='sudo nano $SERVER_DIR/server.properties'
+alias mcmod='sudo $SERVER_DIR/mc-manager.sh mod'
 EOF
-
     chmod +x "$SERVER_DIR/comandos.sh"
-    
-    # Ajustar permissões
-    chown -R "$MINECRAFT_USER:$MINECRAFT_USER" "$SERVER_DIR"
-    
+    chown -R "${MINECRAFT_USER}:${MINECRAFT_USER}" "$SERVER_DIR"
     print_success "Servidor configurado"
 }
 
 configure_system() {
     print_step "Configurando otimizações do sistema..."
     
-    # ZRAM Config
     cat > /etc/systemd/zram-generator.conf << 'EOF'
 [zram0]
 zram-size = min(ram, 4096)
@@ -423,164 +418,145 @@ EOF
     systemctl daemon-reload
     systemctl start systemd-zram-setup@zram0.service || true
 
-    # Swappiness para ZRAM
     echo "vm.swappiness=180" > /etc/sysctl.d/99-zram.conf
     echo "vm.vfs_cache_pressure=50" >> /etc/sysctl.d/99-zram.conf
     
-    # I/O Scheduler HDD
     echo 'ACTION=="add|change", KERNEL=="sd[a-z]*", ATTR{queue/scheduler}="bfq"' > /etc/udev/rules.d/60-scheduler.rules
     echo 'ACTION=="add|change", KERNEL=="sda", ATTR{queue/read_ahead_kb}="4096"' > /etc/udev/rules.d/61-hdd-readahead.rules
     udevadm control --reload-rules || true
     udevadm trigger || true
 
-    # CPU Governor
     systemctl enable cpupower || true
     if [ -f /etc/default/cpupower ]; then
         sed -i "s/governor='ondemand'/governor='performance'/g" /etc/default/cpupower
     fi
     cpupower frequency-set -g performance || true
 
-    # Desabilitar/Remover serviços inúteis para esse servidor (Headless)
-    print_step "Removendo e desabilitando pacotes não utilizados (Bluetooth, Áudio)..."
-    
-    # 1. Parar serviços que possam estar rodando antes de remover
-    systemctl disable --now bluetooth.service 2>/dev/null || true
     systemctl --user mask pipewire wireplumber pulseaudio 2>/dev/null || true
-    
-    # 2. Desinstalar (se existirem) para economizar RAM máxima
-    # Usando --noconfirm para não travar o script se não existir
     pacman -Rns --noconfirm bluez bluez-utils 2>/dev/null || true
-    pacman -Rns --noconfirm pipewire pipewire-pulse pipewire-alsa pipewire-jack wireplumber pulseaudio 2>/dev/null || true
 
-    # Limites de arquivos
-    if ! grep -q "minecraft soft nofile" /etc/security/limits.conf; then
-        echo "minecraft soft nofile 65536" >> /etc/security/limits.conf
-        echo "minecraft hard nofile 65536" >> /etc/security/limits.conf
+    if ! grep -q "^${MINECRAFT_USER} soft nofile" /etc/security/limits.conf; then
+        echo "${MINECRAFT_USER} soft nofile 65536" >> /etc/security/limits.conf
+        echo "${MINECRAFT_USER} hard nofile 65536" >> /etc/security/limits.conf
     fi
     
-    # Aplicar sysctl
     sysctl -p 2>/dev/null || true
-    
     print_success "Sistema configurado"
 }
 
 install_service() {
     print_step "Instalando serviço systemd..."
     
-    cp /tmp/minecraft-server-scripts/minecraft.service /etc/systemd/system/
-    systemctl daemon-reload
-    systemctl enable minecraft
-    
-    print_success "Serviço instalado"
-}
+    if [ -f "/tmp/minecraft-server-scripts/minecraft.service" ]; then
+        cp /tmp/minecraft-server-scripts/minecraft.service /etc/systemd/system/minecraft.service
+        sed -i "s|^User=.*|User=$MINECRAFT_USER|g" /etc/systemd/system/minecraft.service
+        sed -i "s|^Group=.*|Group=$MINECRAFT_USER|g" /etc/systemd/system/minecraft.service
+        sed -i "s|/opt/minecraft-server|$SERVER_DIR|g" /etc/systemd/system/minecraft.service
 
-print_summary() {
-    echo ""
-    echo "=========================================="
-    echo "   INSTALAÇÃO CONCLUÍDA!"
-    echo "=========================================="
-    echo ""
-    echo -e "${GREEN}Servidor instalado em:${NC} $SERVER_DIR"
-    echo ""
-    echo "Comandos rápidos (atalhos):"
-    echo "  source /opt/minecraft-server/comandos.sh  # Carregar atalhos"
-    echo "  mcstart    - Iniciar servidor"
-    echo "  mcstop     - Parar servidor"
-    echo "  mcrestart  - Reiniciar servidor"
-    echo "  mcstatus   - Ver status"
-    echo "  mclogs     - Ver logs"
-    echo "  mcconsole  - Acessar console"
-    echo "  mcbackup   - Fazer backup"
-    echo "  mcinfo     - Informações detalhadas"
-    echo ""
-    echo "Comandos do mc-manager:"
-    echo "  /opt/minecraft-server/mc-manager.sh start|stop|restart|status|console|backup|update"
-    echo ""
-    echo "Tailscale (VPN):"
-    echo "  sudo tailscale up     # Conectar à VPN"
-    echo "  sudo tailscale status # Ver status"
-    echo "  sudo tailscale ip -4  # Ver IP do Tailscale"
-    echo ""
-    echo "Mods instalados (versões atualizadas):"
-    echo "  - Adrenaline (performance)"
-    echo "  - Chunky ${CHUNKY_VERSION} (pré-geração de chunks)"
-    echo "  - Essential Commands ${ESSENTIAL_COMMANDS_VERSION} (/home, /spawn, /tpa, /back)"
-    echo "  - Universal Graves ${UNIVERSAL_GRAVES_VERSION} (túmulos ao morrer)"
-    echo "  - TabTPS ${TABTPS_VERSION} (TPS no TAB)"
-    echo "  - Styled Chat ${STYLED_CHAT_VERSION} (chat formatado)"
-    echo ""
-    echo "Comandos novos disponíveis no jogo:"
-    echo "  /home, /sethome, /delhome - Gerenciar homes"
-    echo "  /spawn - Ir para spawn"
-    echo "  /tpa <jogador> - Pedir teleporte"
-    echo "  /tpaccept, /tpadeny - Aceitar/recusar teleporte"
-    echo "  /back - Voltar ao local anterior"
-    echo "  /chunky start - Iniciar pré-geração"
-    echo "  /chunky pause - Pausar pré-geração"
-    echo "  /chunky status - Ver progresso"
-    echo ""
-    echo "Para iniciar agora:"
-    echo "  sudo systemctl start minecraft"
-    echo ""
-    echo "Para ver logs:"
-    echo "  sudo journalctl -u minecraft -f"
-    echo ""
-    echo "Para configurar backup automático:"
-    echo "  sudo /opt/minecraft-server/setup-cron.sh"
-    echo ""
-    echo -e "${YELLOW}IMPORTANTE:${NC}"
-    echo "- O servidor está configurado para usar 2.5GB de RAM"
-    echo "- View distance: 6 chunks"
-    echo "- Max players: 10 (recomendado: 5-8 para este hardware)"
-    echo "- Bluetooth, Áudio e Wi-Fi totalmente removidos do sistema"
-    echo "- ZRAM configurado para economizar RAM"
-    echo ""
-    echo -e "${GREEN}Divirta-se!${NC}"
-    echo "=========================================="
+        systemctl daemon-reload
+        systemctl enable minecraft
+        print_success "Serviço instalado"
+    else
+        print_warning "Arquivo minecraft.service não encontrado para instalar."
+    fi
 }
-
-# ============================================
-# EXECUÇÃO PRINCIPAL
-# ============================================
 
 main() {
     print_header
     check_root
     check_arch
     
-    # Criar diretório temporário para scripts e copiar os arquivos
-    mkdir -p /tmp/minecraft-server-scripts
-    cp start-server.sh mc-manager.sh minecraft.service backup-cron.sh setup-cron.sh server-icon.png /tmp/minecraft-server-scripts/ 2>/dev/null || true
+    echo -e "${CYAN}--- Configuração Básica ---${NC}"
+    ask_value "Usuário do servidor" "$MINECRAFT_USER" MINECRAFT_USER
+    ask_value "Diretório de instalação" "$SERVER_DIR" SERVER_DIR
+    ask_value "Porta do Servidor" "$SERVER_PORT" SERVER_PORT
     
-    # Extrair scripts embutidos (serão criados pelo usuário)
-    print_step "Preparando arquivos..."
+    ask_value "Versão do Minecraft (Ex: 1.21.11, 1.20.4)" "$MINECRAFT_VERSION" MINECRAFT_VERSION
+    
+    echo -e "${CYAN}Escolha o Loader do Servidor:${NC}"
+    echo "  1) Fabric (Recomendado, aceita mods QoL)"
+    echo "  2) Paper  (Plugins tradicionais)"
+    echo "  3) Vanilla"
+    echo "  4) Forge"
+    echo "  5) NeoForge"
+    read -r -p "Sua escolha (1-5) [1]: " loader_choice
+    case "$loader_choice" in
+        2) LOADER_TYPE="paper" ;;
+        3) LOADER_TYPE="vanilla" ;;
+        4) LOADER_TYPE="forge" ;;
+        5) LOADER_TYPE="neoforge" ;;
+        *) LOADER_TYPE="fabric" ;;
+    esac
+
+    ask_value "Memória RAM do Servidor (ex: 2560M)" "$SERVER_RAM" SERVER_RAM
+    SERVER_RAM="${SERVER_RAM^^}"
+
+    while ! validate_java_ram_value "$SERVER_RAM"; do
+        print_warning "Formato inválido. Use inteiro + unidade (ex: 2560M, 2G)."
+        ask_value "Memória RAM do Servidor" "2560M" SERVER_RAM
+        SERVER_RAM="${SERVER_RAM^^}"
+    done
+    
+    if ask_confirm "Habilitar modo Pirata (online-mode=false)?" "Y"; then
+        ONLINE_MODE="false"
+    else
+        ONLINE_MODE="true"
+    fi
+    
+    if [ "$LOADER_TYPE" == "fabric" ]; then
+        if ask_confirm "Instalar Modpack Adrenaline (Performance) limitando a versão?" "Y"; then
+            INSTALL_MODPACK="true"
+        else
+            INSTALL_MODPACK="false"
+        fi
+        
+        if ask_confirm "Instalar Mods QoL (Chunky, Graves, etc)?" "Y"; then
+            INSTALL_QOL_MODS="true"
+        else
+            INSTALL_QOL_MODS="false"
+        fi
+    else
+        INSTALL_MODPACK="false"
+        INSTALL_QOL_MODS="false"
+        print_warning "Modpack e Mods QoL nativos foram pulados (loader=$LOADER_TYPE não compatível primariamente)."
+    fi
+    
+    if ask_confirm "Instalar e configurar VPN Tailscale?" "Y"; then
+        INSTALL_TAILSCALE="true"
+    else
+        INSTALL_TAILSCALE="false"
+    fi
+    echo ""
+
+    mkdir -p /tmp/minecraft-server-scripts
+    # Oculta erros se os scripts não estiverem localmente (podem já estar resolvidos)
+    cp -r "./"* /tmp/minecraft-server-scripts/ 2>/dev/null || true
+    
+    print_step "Preparando instalação..."
     
     install_dependencies
     create_user
     install_mrpack_install
-    install_adrenaline
-    install_mods_qol
-    install_tailscale
+    
+    install_server_base
+    
+    if [ "$INSTALL_QOL_MODS" == "true" ]; then
+        install_mods_qol
+    fi
+    
+    if [ "$INSTALL_TAILSCALE" == "true" ]; then
+        install_tailscale
+    fi
+    
     configure_server
     configure_system
     install_service
     
-    print_summary
+    echo -e "${GREEN}Instalação concluída no diretório: $SERVER_DIR${NC}"
 }
 
-# === INÍCIO DAS CORREÇÕES ===
-# Verificar se scripts existem
-if [ ! -f "start-server.sh" ] || [ ! -f "mc-manager.sh" ] || [ ! -f "minecraft.service" ]; then
-    print_error "Arquivos necessários não encontrados!"
-    echo "Certifique-se de que os seguintes arquivos estão no mesmo diretório:"
-    echo "  - start-server.sh"
-    echo "  - mc-manager.sh"
-    echo "  - minecraft.service"
-    echo "  - backup-cron.sh"
-    echo "  - setup-cron.sh"
-    exit 1
+if [ ! -f "start-server.sh" ]; then
+    print_warning "Arquivos complementares (start-server, mc-manager) não achados na pasta atual. Prosseguindo..."
 fi
 
-# Executar instalação
 main
-

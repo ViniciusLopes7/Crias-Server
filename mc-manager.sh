@@ -7,16 +7,17 @@
 # ============================================
 
 SERVER_DIR="/opt/minecraft-server"
+SERVER_USER="minecraft"
 SERVER_JAR="server.jar"
 SCREEN_NAME="minecraft"
 # Inicialização delegada ao start-server.sh para manter as flags JVM em um único lugar
 
-export SCREENDIR="/opt/minecraft-server/.screen"
+export SCREENDIR="$SERVER_DIR/.screen"
 
-# Garante que este script sempre rode como o usuário 'minecraft'
-if [ "$(id -nu)" != "minecraft" ]; then
+# Garante que este script sempre rode como o usuário configurado
+if [ "$(id -nu)" != "$SERVER_USER" ]; then
     if [ "$(id -u)" -eq 0 ]; then
-        exec sudo -u minecraft SCREENDIR="$SCREENDIR" "$0" "$@"
+        exec sudo -u "$SERVER_USER" SCREENDIR="$SCREENDIR" "$0" "$@"
     else
         echo -e "\033[0;31m[ERRO]\033[0m Este script deve ser acionado com permissões de administrador (sudo)."
         echo "Tente rodar: sudo $0 $@"
@@ -492,6 +493,61 @@ update_modpack() {
     echo "Inicie o servidor com: $0 start"
 }
 
+mod_manager() {
+    local action=$1
+    local mod_name_or_id=$2
+
+    if [ -z "$action" ]; then
+        echo "Uso: mcmod <add|remove|list> [slug/nome]"
+        echo "Exemplo: mcmod add chunky"
+        return 1
+    fi
+
+    mkdir -p "$SERVER_DIR/mods"
+    cd "$SERVER_DIR/mods" || return 1
+
+    case "$action" in
+        list)
+            log "Mods instalados em $SERVER_DIR/mods:"
+            ls -1 *.jar 2>/dev/null || echo "Nenhum mod .jar encontrado."
+            ;;
+        add)
+            if [ -z "$mod_name_or_id" ]; then
+                log_error "Forneça o slug do mod no Modrinth. Ex: mcmod add chunky"
+                return 1
+            fi
+            log "Buscando versão mais recente de '$mod_name_or_id' (Fabric 1.21.11) no Modrinth..."
+            
+            local api_url="https://api.modrinth.com/v2/project/$mod_name_or_id/version?loaders=%5B%22fabric%22%5D"
+            local modrinth_url=$(curl -s "$api_url" | jq -r '.[0].files[0].url // empty')
+            
+            if [ -n "$modrinth_url" ]; then
+                log "Baixando $modrinth_url ..."
+                curl -fsSL -O "$modrinth_url"
+                log "Mod '$mod_name_or_id' baixado com sucesso!"
+            else
+                log_error "Falha ao encontrar o mod '$mod_name_or_id' para Fabric 1.21.11. Verifique se o slug (nome na URL do Modrinth) está correto."
+            fi
+            ;;
+        remove)
+            if [ -z "$mod_name_or_id" ]; then
+                log_error "Forneça parte do nome do mod para remover. Ex: mcmod remove chunky"
+                return 1
+            fi
+            local target=$(ls -1 | grep -i "$mod_name_or_id" | head -n 1)
+            if [ -n "$target" ]; then
+                rm "$target"
+                log "Mod '$target' removido com sucesso!"
+            else
+                log_error "Mod contendo '$mod_name_or_id' não encontrado."
+            fi
+            ;;
+        *)
+            echo "Ação desconhecida. Use add, remove ou list."
+            ;;
+    esac
+}
+
 # ============================================
 # MENU PRINCIPAL
 # ============================================
@@ -537,6 +593,9 @@ case "$1" in
     update)
         update_modpack
         ;;
+    mod)
+        mod_manager "$2" "$3"
+        ;;
     *)
         echo "=========================================="
         echo "   Minecraft Server Manager"
@@ -557,6 +616,7 @@ case "$1" in
         echo "  players    - Listar jogadores online"
         echo "  say        - Enviar mensagem aos jogadores"
         echo "  whitelist  - Gerenciar whitelist"
+        echo "  mod        - Gerenciar mods (add/remove/list)"
         echo ""
         echo "MANUTENÇÃO:"
         echo "  backup     - Criar backup dos mundos"
@@ -564,6 +624,7 @@ case "$1" in
         echo ""
         echo "Exemplos:"
         echo "  $0 start"
+        echo "  $0 mod add fabric-tailor"
         echo "  $0 chunky     # Menu interativo do Chunky"
         echo "  $0 say Olá jogadores!"
         echo "  $0 cmd gamemode creative Steve"

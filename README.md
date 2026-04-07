@@ -45,8 +45,9 @@ Este pacote contém tudo necessário para configurar um servidor Minecraft 1.21.
 |---------|---------|-----------|
 | `README.md` | - | Este arquivo |
 | `TUTORIAL.md` | ~15KB | Tutorial completo explicativo |
-| `GUIA_CONEXAO_LINUX.md` | ~8KB | Guia de conexão para Linux |
-| `minecraft-server-setup.md` | ~17KB | Documentação técnica |
+| `docs/Tailscale.md` | ~8KB | Guia de conexão para Linux/Windows |
+| `docs/InstalacaoManual.md` | ~17KB | Documentação técnica completa |
+| `docs/` | - | Guias modulares (Chunky, Styled Chat, comandos) |
 | `install.sh` | ~16KB | **Instalador automatizado** |
 | `start-server.sh` | ~3KB | Script de inicialização |
 | `mc-manager.sh` | ~16KB | Gerenciamento + comandos facilitados |
@@ -74,11 +75,12 @@ ls -la
 ### 2. Executar Instalador
 
 ```bash
-  # Dar permissão de execução aos scripts
-  chmod +x *.sh
-  
-  # Executar instalação principal
-  sudo ./install.sh
+chmod +x *.sh
+sudo ./install.sh
+```
+
+O instalador vai:
+
 - ✅ Atualizar o sistema
 - ✅ Instalar Java 21, Screen, ferramentas
 - ✅ Criar usuário "minecraft"
@@ -130,10 +132,11 @@ mcstatus     # Status do serviço
 mclogs       # Ver logs
 mcconsole    # Acessar console
 mcbackup     # Fazer backup
-mcinfo       # Informações detalhadas
 mcchunky     # Menu do Chunky
-mctps        # Ver TPS
 mctailscale  # Status do Tailscale
+mcdir        # Ir para a pasta do servidor
+mcprops      # Editar server.properties
+mcmod        # Gerenciar mods (add/remove/list)
 ```
 
 ### Gerenciamento Completo
@@ -148,10 +151,11 @@ mctailscale  # Status do Tailscale
 
 # Comandos facilitados
 /opt/minecraft-server/mc-manager.sh chunky     # Menu do Chunky
-/opt/minecraft-server/mc-manager.sh tps        # Ver TPS
 /opt/minecraft-server/mc-manager.sh players    # Listar jogadores
 /opt/minecraft-server/mc-manager.sh say "Oi!"  # Enviar mensagem
 /opt/minecraft-server/mc-manager.sh whitelist  # Gerenciar whitelist
+/opt/minecraft-server/mc-manager.sh mod add chunky   # Instalar mod
+/opt/minecraft-server/mc-manager.sh mod remove chunky # Remover mod
 
 # Manutenção
 /opt/minecraft-server/mc-manager.sh backup     # Backup
@@ -205,7 +209,7 @@ ip addr show | grep "inet " | head -1
 **No Minecraft:**
 - Server Address: `192.168.1.50:25565`
 
-📖 **Guia completo:** `GUIA_CONEXAO_LINUX.md`
+📖 **Guia completo:** `docs/Tailscale.md`
 
 ---
 
@@ -221,7 +225,7 @@ ip addr show | grep "inet " | head -1
 /tpaccept / tpadeny      - Aceitar/recusar
 /back                    - Voltar ao local anterior
 /rtp                     - Teletransporte aleatório
-/nick <apelido>          - Definir apelido
+/nickname set <jogador> <apelido> - Definir apelido
 ```
 
 ### Chunky
@@ -244,8 +248,9 @@ ip addr show | grep "inet " | head -1
 ## ⚡ Configurações de Performance
 
 ### Alocação de RAM
-- **Mínima e Máxima**: 2.5GB (Xms e Xmx iguais para evitar re-alocação)
-- **Recomendada**: 2.5GB (deixa espaço para SO, Tailscale e ZRAM rodarem com a RAM economizada dos serviços removidos)
+- **Mínima e Máxima**: 2560M (Xms e Xmx iguais para evitar re-alocação)
+- **Recomendada**: 2560M (~2.5GB), deixando espaço para SO, Tailscale e ZRAM
+- **Importante**: Java não aceita valor fracionário como `2.5G`; use `2560M` ou valores inteiros como `2G`/`3G`
 
 ### Configurações do Servidor
 - **View Distance**: 6 chunks
@@ -255,7 +260,7 @@ ip addr show | grep "inet " | head -1
 
 ### Flags JVM
 ```bash
--Xms2.5G -Xmx2.5G
+-Xms2560M -Xmx2560M
 -XX:+UseG1GC
 -XX:+ParallelRefProcEnabled
 -XX:MaxGCPauseMillis=200
@@ -295,7 +300,7 @@ htop                    # Uso de RAM e CPU
 sudo iotop             # I/O do disco
 tail -f /opt/minecraft-server/logs/latest.log  # Logs
 mclogs                 # Logs do systemd
-mcinfo                 # Status detalhado
+mcstatus               # Status detalhado
 ```
 
 ---
@@ -343,8 +348,8 @@ sudo systemctl status minecraft
 ```bash
 # Reduzir MAX_RAM no start-server.sh
 nano /opt/minecraft-server/start-server.sh
-# Alterar: MAX_RAM="2.5G"
-# Para: MAX_RAM="2.5G" (já está no mínimo recomendado, otimize o SO)
+# Alterar: MAX_RAM="3072M"
+# Para: MAX_RAM="2560M" (valor recomendado para este hardware)
 ```
 
 ### Não consegue conectar
@@ -361,8 +366,11 @@ sudo ss -tulpn | grep 25565
 ## 📖 Documentação
 
 - **Tutorial completo:** `TUTORIAL.md`
-- **Guia de conexão Linux:** `GUIA_CONEXAO_LINUX.md`
-- **Documentação técnica:** `minecraft-server-setup.md`
+- **Instalação manual detalhada:** `docs/InstalacaoManual.md`
+- **Guia de conexão (Linux/Windows):** `docs/Tailscale.md`
+- **Guia do Chunky:** `docs/Chunky.md`
+- **Comandos do Essential Commands:** `docs/EssentialCommands.md`
+- **Guia de títulos/chat:** `docs/StyledChat.md`
 
 ---
 

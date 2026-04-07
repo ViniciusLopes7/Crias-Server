@@ -1,0 +1,31 @@
+# Basic system
+base
+linux
+linux-firmware
+mkinitcpio
+
+# Networking
+networkmanager
+tailscale
+openssh
+curl
+wget
+
+# Minecraft Dependencies
+jdk21-openjdk
+screen
+tar
+gzip
+
+# System utilities
+nano
+vim
+htop
+iotop
+sudo
+zram-generator
+cpupower
+lm_sensors
+git
+bash-completion
+jq

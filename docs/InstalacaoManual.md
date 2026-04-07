@@ -15,6 +15,9 @@
 9. [Serviço Systemd](#9-serviço-systemd)
 10. [Comandos Facilitados](#10-comandos-facilitados)
 11. [Chunky - Pré-Geração](#11-chunky---pré-geração)
+12. [Backup Automático](#12-backup-automático)
+13. [Troubleshooting](#13-troubleshooting)
+14. [Recomendações Finais](#14-recomendações-finais)
 
 ---
 
@@ -102,7 +105,7 @@ mkdir -p mods
 ```bash
 # Download do Chunky
 curl -sSL -o "mods/chunky.jar" \
-  "https://github.com/pop4959/Chunky/releases/download/1.4.27/Chunky-1.4.27.jar"
+  "https://github.com/pop4959/Chunky/releases/download/1.4.55/Chunky-1.4.55.jar"
 ```
 
 **Comandos do Chunky:**
@@ -138,15 +141,15 @@ curl -sSL -o "mods/essential-commands.jar" \
 /tpadeny                 - Recusar pedido de teleporte
 /back                    - Voltar ao local anterior (morte/teleporte)
 /rtp                     - Teletransporte aleatório
-/nick <apelido>          - Definir apelido
-/nick clear              - Remover apelido
+/nickname set <jogador> <apelido>  - Definir apelido
+/nickname clear <jogador>          - Remover apelido
 ```
 
 #### Universal Graves
 ```bash
 # Download do Universal Graves
 curl -sSL -o "mods/universal-graves.jar" \
-  "https://github.com/Patbox/UniversalGraves/releases/download/3.10.1+1.21.11/graves-3.10.1+1.21.11.jar"
+  "https://github.com/Patbox/UniversalGraves/releases/download/3.10.2+1.21.11/graves-3.10.2+1.21.11.jar"
 ```
 
 **Funcionalidade:**
@@ -160,7 +163,7 @@ curl -sSL -o "mods/universal-graves.jar" \
 ```bash
 # Download do TabTPS
 curl -sSL -o "mods/tabtps.jar" \
-  "https://github.com/jpenilla/TabTPS/releases/download/v1.3.28/tabtps-fabric-mc1.21.11-1.3.28.jar"
+  "https://github.com/jpenilla/TabTPS/releases/download/v1.3.30/tabtps-fabric-mc1.21.11-1.3.30.jar"
 ```
 
 **Funcionalidade:**
@@ -236,17 +239,18 @@ Criar arquivo `config/universal_graves/config.json`:
 
 #### Configuração do Styled Chat
 ```bash
-mkdir -p /opt/minecraft-server/config/styledchat
+mkdir -p /opt/minecraft-server/config
 ```
 
-Criar arquivo `config/styledchat/config.json`:
+Criar arquivo `config/styled-chat.json`:
 ```json
 {
-  "formats": {
-    "chat": "<dark_gray>[<gray>%server:tabtps_tps%<dark_gray>] <white>%player:displayname% <dark_gray>» <white>${message}",
-    "joined": "<green>+ <white>%player:displayname% <gray>entrou no servidor",
-    "left": "<red>- <white>%player:displayname% <gray>saiu do servidor",
-    "death": "<dark_gray>☠ <white>%player:displayname% <gray>%message%"
+  "CONFIG_VERSION_DONT_TOUCH_THIS": 2,
+  "defaultStyle": {
+    "chat": "<yellow>${player}</yellow> <dark_gray>»</dark_gray> <white>${message}</white>",
+    "join": "<gold>🔔</gold> <yellow>${player} chegou no Reino!</yellow>",
+    "left": "<red>🚪</red> <yellow>${player} partiu em viagem...</yellow>",
+    "death": "<dark_red>☠</dark_red> <red>${player}</red> <gray>${default_message}</gray>"
   }
 }
 ```
@@ -362,7 +366,8 @@ enforce-whitelist=false
 ### 6.1 Análise do Hardware
 - **CPU**: i3-6006U (2C/4T @ 2.0GHz) - Skylake
 - **RAM**: 4GB total
-- **Alocação recomendada**: 2.5GB para Minecraft
+- **Alocação recomendada**: 2560M (~2.5GB) para Minecraft
+- **Formato válido no Java**: use `2560M` ou valores inteiros em G (ex: `2G`, `3G`), nunca `2.5G`
 - **Reserva para SO/ZRAM**: ~1.5GB (suficiente após remover bluetooth/áudio/wifi)
 
 ### 6.2 Flags JVM Otimizadas (G1GC - Recomendado para <4GB)
@@ -374,8 +379,8 @@ enforce-whitelist=false
 # === CONFIGURAÇÕES ===
 SERVER_DIR="/opt/minecraft-server"
 SERVER_JAR="server.jar"
-MIN_RAM="2.5G"
-MAX_RAM="2.5G"
+MIN_RAM="2560M"
+MAX_RAM="2560M"
 
 # === FLAGS JVM OTIMIZADAS PARA i3-6006U + 4GB RAM ===
 JAVA_OPTS=""
@@ -566,12 +571,13 @@ alias mcstop='sudo systemctl stop minecraft'
 alias mcrestart='sudo systemctl restart minecraft'
 alias mcstatus='sudo systemctl status minecraft'
 alias mclogs='sudo journalctl -u minecraft -f'
-alias mcconsole='/opt/minecraft-server/mc-manager.sh console'
-alias mcbackup='/opt/minecraft-server/mc-manager.sh backup'
-alias mcinfo='/opt/minecraft-server/mc-manager.sh status'
-alias mcchunky='/opt/minecraft-server/mc-manager.sh chunky'
-alias mctps='/opt/minecraft-server/mc-manager.sh tps'
+alias mcconsole='sudo /opt/minecraft-server/mc-manager.sh console'
+alias mcbackup='sudo /opt/minecraft-server/mc-manager.sh backup'
+alias mcchunky='sudo /opt/minecraft-server/mc-manager.sh chunky'
 alias mctailscale='sudo tailscale status'
+alias mcdir='cd /opt/minecraft-server'
+alias mcprops='sudo nano /opt/minecraft-server/server.properties'
+alias mcmod='sudo /opt/minecraft-server/mc-manager.sh mod'
 
 echo "Atalhos carregados:"
 echo "  mcstart    - Iniciar servidor"
@@ -581,10 +587,11 @@ echo "  mcstatus   - Status do serviço"
 echo "  mclogs     - Ver logs"
 echo "  mcconsole  - Acessar console"
 echo "  mcbackup   - Fazer backup"
-echo "  mcinfo     - Informações detalhadas"
 echo "  mcchunky   - Menu do Chunky"
-echo "  mctps      - Ver TPS"
 echo "  mctailscale- Status do Tailscale"
+echo "  mcdir      - Ir para a pasta do servidor"
+echo "  mcprops    - Editar server.properties"
+echo "  mcmod      - Gerenciar mods (add/remove/list)"
 ```
 
 ### 10.2 Uso dos Atalhos
@@ -669,7 +676,7 @@ sudo crontab -e
 
 ### Problema: OutOfMemoryError
 ```bash
-# Reduzir MAX_RAM para 2.5G no script (já otimizado, considere fechar processos do SO)
+# Reduzir MAX_RAM para 2560M no script (já otimizado, considere fechar processos do SO)
 nano /opt/minecraft-server/start-server.sh
 ```
 
