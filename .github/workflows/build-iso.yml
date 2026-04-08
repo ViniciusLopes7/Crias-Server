@@ -4,20 +4,14 @@ on:
   push:
     branches:
       - main
-    tags:
-      - 'v*.*.*'
-    paths:
-      - '**/*.sh'
-      - '.github/workflows/**'
-      - 'archiso-profile/**'
   pull_request:
     branches:
       - main
-    paths:
-      - '**/*.sh'
-      - '.github/workflows/**'
-      - 'archiso-profile/**'
   workflow_dispatch:
+
+concurrency:
+  group: build-iso-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -44,7 +38,7 @@ jobs:
       options: --privileged
     steps:
       - name: Install dependencies
-        run: pacman -Syu --noconfirm archiso git github-cli grub
+        run: pacman -Syu --noconfirm archiso git grub
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -61,12 +55,74 @@ jobs:
           path: out/*.iso
           retention-days: 7
 
-      - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  release:
+    name: Create Tag and Release
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download ISO artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: minecraft-server-iso
+          path: release-assets/iso
+
+      - name: Compute release tag
+        id: release_tag
         run: |
-          ISO_FILE=$(ls out/*.iso)
-          gh release create "${{ github.ref_name }}" "$ISO_FILE" \
-            --title "Release ${{ github.ref_name }}" \
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          BASE_TAG="v$(date -u +%Y.%m.%d)-${SHORT_SHA}"
+          TAG="${BASE_TAG}"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            TAG="${BASE_TAG}-r${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            TAG="${BASE_TAG}-r${GITHUB_RUN_ID}"
+          fi
+
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create release archives
+        run: |
+          mkdir -p release-assets/_pkg/full release-assets/_pkg/slim
+          git archive --format=tar HEAD | tar -xf - -C release-assets/_pkg/full
+
+          cp -a release-assets/_pkg/full/. release-assets/_pkg/slim/
+          rm -rf release-assets/_pkg/slim/archiso-profile
+          rm -rf release-assets/_pkg/slim/docs
+          rm -rf release-assets/_pkg/slim/.github/workflows
+
+          (cd release-assets/_pkg/full && zip -qr ../../server-mine-full.zip .)
+          (cd release-assets/_pkg/slim && zip -qr ../../server-mine-slim.zip .)
+
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.release_tag.outputs.tag }}"
+          git push origin "${{ steps.release_tag.outputs.tag }}"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISO_FILE="$(ls release-assets/iso/*.iso | head -n 1)"
+
+          if [ -z "${ISO_FILE}" ]; then
+            echo "::error::ISO artifact not found."
+            exit 1
+          fi
+
+          gh release create "${{ steps.release_tag.outputs.tag }}" \
+            "${ISO_FILE}" \
+            release-assets/server-mine-full.zip \
+            release-assets/server-mine-slim.zip \
+            --title "Release ${{ steps.release_tag.outputs.tag }}" \
             --generate-notes
