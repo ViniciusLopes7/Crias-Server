@@ -20,6 +20,33 @@ sudo /opt/terraria-server/tt-manager.sh backup
 sudo /opt/terraria-server/tt-manager.sh reconfigure-hardware
 ```
 
+## Aliases de comandos
+
+O instalador gera o arquivo abaixo com aliases prontos para operacao diaria e configura autoload automaticamente no ~/.bashrc do usuario operador:
+
+- /opt/terraria-server/comandos.sh
+
+As entradas sao idempotentes (nao duplicam em reinstalacoes).
+
+Para usar imediatamente na sessao atual:
+
+```bash
+source ~/.bashrc
+```
+
+Aliases disponiveis:
+
+- ttstart
+- ttstop
+- ttrestart
+- ttstatus
+- ttlogs
+- ttconsole
+- ttbackup
+- ttdir
+- tthw
+- ttreconfig
+
 ## Arquivos relevantes em runtime
 
 - /opt/terraria-server/runtime.env

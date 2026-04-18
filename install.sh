@@ -233,6 +233,123 @@ install_tailscale_if_enabled() {
     print_success "Tailscale pronto. Execute 'sudo tailscale up' para autenticar."
 }
 
+resolve_operator_user() {
+    if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+        echo "$SUDO_USER"
+    else
+        id -un
+    fi
+}
+
+resolve_operator_home() {
+    local user_name="$1"
+    local home_dir
+
+    home_dir=$(getent passwd "$user_name" | cut -d: -f6)
+
+    if [ -n "$home_dir" ]; then
+        echo "$home_dir"
+    else
+        echo "$HOME"
+    fi
+}
+
+stack_alias_script() {
+    local stack_type="$1"
+
+    if [ "$stack_type" = "minecraft" ]; then
+        echo "$MINECRAFT_SERVER_DIR/comandos.sh"
+    else
+        echo "$TERRARIA_SERVER_DIR/comandos.sh"
+    fi
+}
+
+ensure_alias_autoload_entry() {
+    local alias_script="$1"
+    local operator_user
+    local operator_home
+    local bashrc_path
+    local source_line
+
+    if is_true "$DRY_RUN"; then
+        print_step "[DRY_RUN] Pulando configuracao automatica de aliases no shell."
+        return 0
+    fi
+
+    operator_user="$(resolve_operator_user)"
+    operator_home="$(resolve_operator_home "$operator_user")"
+
+    if [ -z "$operator_home" ] || [ ! -d "$operator_home" ]; then
+        print_warning "Nao foi possivel localizar home de $operator_user para configurar aliases automaticamente."
+        return 0
+    fi
+
+    bashrc_path="$operator_home/.bashrc"
+    touch "$bashrc_path"
+    chown "${operator_user}:${operator_user}" "$bashrc_path" >/dev/null 2>&1 || true
+
+    if awk -v script="$alias_script" '
+        $0 ~ /^[[:space:]]*#/ { next }
+        index($0, script) && $0 ~ /(^|[[:space:]])(source|\.)[[:space:]]+/ { found=1 }
+        END { exit found ? 0 : 1 }
+    ' "$bashrc_path"; then
+        print_step "Aliases ja configurados em $bashrc_path"
+        return 0
+    fi
+
+    source_line="[ -f \"$alias_script\" ] && source \"$alias_script\""
+    printf "\n%s\n" "$source_line" >> "$bashrc_path"
+    chown "${operator_user}:${operator_user}" "$bashrc_path" >/dev/null 2>&1 || true
+
+    print_success "Aliases configurados automaticamente em $bashrc_path"
+    print_step "Abra um novo shell ou rode: source $bashrc_path"
+}
+
+remove_alias_autoload_entry() {
+    local alias_script="$1"
+    local operator_user
+    local operator_home
+    local bashrc_path
+    local tmp_file
+
+    if is_true "$DRY_RUN"; then
+        return 0
+    fi
+
+    operator_user="$(resolve_operator_user)"
+    operator_home="$(resolve_operator_home "$operator_user")"
+    bashrc_path="$operator_home/.bashrc"
+
+    if [ ! -f "$bashrc_path" ]; then
+        return 0
+    fi
+
+    tmp_file="$(mktemp)"
+    awk -v script="$alias_script" '
+        {
+            if ($0 !~ /^[[:space:]]*#/ && index($0, script) && $0 ~ /(^|[[:space:]])(source|\.)[[:space:]]+/) {
+                next
+            }
+            print
+        }
+    ' "$bashrc_path" > "$tmp_file"
+
+    mv "$tmp_file" "$bashrc_path"
+    chown "${operator_user}:${operator_user}" "$bashrc_path" >/dev/null 2>&1 || true
+}
+
+configure_alias_autoload_for_selected_stack() {
+    local alias_script
+
+    alias_script="$(stack_alias_script "$SERVER_TYPE")"
+    if [ ! -f "$alias_script" ]; then
+        print_warning "Arquivo de aliases nao encontrado para autoload: $alias_script"
+        return 0
+    fi
+
+    ensure_alias_autoload_entry "$alias_script"
+}
+
 run_selected_stack_installer() {
     if [ "$SERVER_TYPE" = "minecraft" ]; then
         export MINECRAFT_USER
@@ -309,6 +426,8 @@ cleanup_stack_by_type() {
     if crontab -l >/dev/null 2>&1; then
         (crontab -l 2>/dev/null | grep -v "$stack_dir/backup-cron.sh") | crontab - || true
     fi
+
+    remove_alias_autoload_entry "$stack_dir/comandos.sh"
 
     print_success "Stack $stack_type removido."
 }
@@ -389,6 +508,7 @@ main() {
 
     install_tailscale_if_enabled
     run_selected_stack_installer
+    configure_alias_autoload_for_selected_stack
     cleanup_other_stack_if_needed
 
     print_success "Instalacao concluida para stack: $SERVER_TYPE"

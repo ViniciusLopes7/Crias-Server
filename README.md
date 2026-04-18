@@ -158,6 +158,26 @@ Terraria:
 - sudo /opt/terraria-server/tt-manager.sh status
 - sudo /opt/terraria-server/tt-manager.sh backup
 
+## Aliases de comandos
+
+Durante a instalacao, cada stack gera um arquivo de aliases e o instalador configura o autoload automaticamente no ~/.bashrc do usuario operador:
+
+- /opt/minecraft-server/comandos.sh
+- /opt/terraria-server/comandos.sh
+
+As entradas sao idempotentes (nao duplicam linhas em reinstalacoes).
+
+Para usar imediatamente na sessao atual:
+
+```bash
+source ~/.bashrc
+```
+
+Exemplos rapidos:
+
+- mcstart, mcstatus, mclogs, mcbackup, mcreconfig
+- ttstart, ttstatus, ttlogs, ttbackup, ttreconfig
+
 ## Documentacao
 
 - docs/README.md

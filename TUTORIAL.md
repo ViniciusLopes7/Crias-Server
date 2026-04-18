@@ -78,6 +78,23 @@ sudo /opt/terraria-server/tt-manager.sh console
 sudo /opt/terraria-server/tt-manager.sh backup
 ```
 
+### Aliases (opcional, recomendado)
+
+O instalador cria os arquivos de aliases e adiciona autoload no ~/.bashrc automaticamente.
+
+As entradas sao idempotentes (nao duplicam em reinstalacoes).
+
+Para usar imediatamente na sessao atual:
+
+```bash
+source ~/.bashrc
+```
+
+Atalhos mais usados:
+
+- mcstart, mcstatus, mclogs, mcconsole, mcbackup, mcreconfig
+- ttstart, ttstatus, ttlogs, ttconsole, ttbackup, ttreconfig
+
 ## 5. Backups
 
 Cada stack possui:
