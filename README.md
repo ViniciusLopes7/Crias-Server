@@ -1,400 +1,176 @@
-# Minecraft Server 1.21.11 + Adrenaline + QoL + Tailscale
-## Setup Otimizado para Arch Linux | i3-6006U | 4GB RAM | HDD
+# Crias-Server
 
----
+<p align="center">
+    <img src="assets/images/branding/EscudoCrias.png" alt="Escudo Crias" width="220" />
+</p>
 
-## ✅ Status da Revisão
+Instalador modular para servidor de jogos em Arch Linux, com escolha inicial entre Minecraft e Terraria, tuning automatico por hardware e limpeza segura do stack nao selecionado.
 
-| Componente | Versão | Status |
-|------------|--------|--------|
-| Minecraft | 1.21.11 | ✅ Atualizado |
-| Java | 21 (OpenJDK) | ✅ Atualizado |
-| Adrenaline | Latest | ✅ Atualizado |
-| Essential Commands | 0.38.6 | ✅ Atualizado |
-| Universal Graves | 3.10.2 | ✅ Atualizado |
-| TabTPS | 1.3.30 | ✅ Atualizado |
-| Styled Chat | 2.11.0 | ✅ Atualizado |
-| Chunky | 1.4.55 | ✅ Atualizado |
-| Tailscale | Latest | ✅ Atualizado |
+## Principais recursos
 
----
+- Escolha inicial de stack: Minecraft ou Terraria.
+- Estrutura modular por pasta: cada stack isolado.
+- Camada compartilhada com deteccao de hardware (CPU/RAM/disco).
+- Tuning automatico por tier (LOW/MID/HIGH) com override manual opcional.
+- Comando de recalibracao de hardware apos instalacao.
+- Limpeza agressiva do stack oposto com confirmacao explicita.
+- Modo nao interativo e DRY_RUN para testes de instalacao em CI.
 
-## 📦 Visão Geral
+## Estrutura do projeto
 
-Este pacote contém tudo necessário para configurar um servidor Minecraft 1.21.11 otimizado para hardware limitado:
-
-- **Adrenaline Modpack** - Otimizações de performance
-- **Chunky** - Pré-geração de chunks
-- **Essential Commands** - /home, /spawn, /tpa, /back
-- **Universal Graves** - Túmulos ao morrer
-- **TabTPS** - TPS no TAB
-- **Styled Chat** - Chat formatado
-- **Tailscale** - VPN mesh (acesso remoto seguro)
-
-### Hardware Alvo
-- **CPU**: Intel i3-6006U (2C/4T @ 2.0GHz)
-- **RAM**: 4GB DDR3
-- **Armazenamento**: HDD 1TB
-- **SO**: Arch Linux Minimal
-
----
-
-## 📁 Arquivos do Pacote
-
-| Arquivo | Tamanho | Descrição |
-|---------|---------|-----------|
-| `README.md` | - | Este arquivo |
-| `TUTORIAL.md` | ~15KB | Tutorial completo explicativo |
-| `docs/Tailscale.md` | ~8KB | Guia de conexão para Linux/Windows |
-| `docs/InstalacaoManual.md` | ~17KB | Documentação técnica completa |
-| `docs/` | - | Guias modulares (Chunky, Styled Chat, comandos) |
-| `install.sh` | ~16KB | **Instalador automatizado** |
-| `start-server.sh` | ~3KB | Script de inicialização |
-| `mc-manager.sh` | ~16KB | Gerenciamento + comandos facilitados |
-| `minecraft.service` | ~1KB | Serviço systemd |
-| `backup-cron.sh` | ~5KB | Backup automático |
-| `setup-cron.sh` | ~4KB | Configurador de cron |
-
----
-
-## 🚀 Instalação Rápida
-
-### 1. Preparar Arquivos
-
-```bash
-# Criar pasta e entrar
-mkdir ~/minecraft-setup && cd ~/minecraft-setup
-
-# Copiar todos os arquivos do pacote para cá
-# (use scp, pendrive, ou qualquer método)
-
-# Verificar arquivos
-ls -la
+```text
+.
+|-- install.sh
+|-- config.env
+|-- assets/
+|   `-- images/
+|       `-- branding/
+|           |-- EscudoCrias.png
+|           |-- TronoCrias.png
+|           `-- server-icon.png
+|-- shared/
+|   `-- lib/
+|       |-- common.sh
+|       |-- hardware-profile.sh
+|       |-- system-tuning.sh
+|       |-- minecraft-tuning.sh
+|       `-- terraria-tuning.sh
+|-- minecraft/
+|   |-- install.sh
+|   |-- start-server.sh
+|   |-- mc-manager.sh
+|   |-- backup-cron.sh
+|   |-- setup-cron.sh
+|   `-- minecraft.service
+|-- terraria/
+|   |-- install.sh
+|   |-- start-terraria.sh
+|   |-- tt-manager.sh
+|   |-- backup-cron.sh
+|   |-- setup-cron.sh
+|   `-- terraria.service
+`-- docs/
+    |-- README.md
+    |-- minecraft/
+    |-- terraria/
+    `-- shared/
 ```
 
-### 2. Executar Instalador
+## Quick Start
+
+1. Ajuste configuracoes iniciais em config.env (opcional).
+2. Execute o instalador:
 
 ```bash
-chmod +x *.sh
+chmod +x install.sh
 sudo ./install.sh
 ```
 
-O instalador vai:
+3. No passo 1 do instalador, escolha:
+   - Minecraft
+   - Terraria
 
-- ✅ Atualizar o sistema
-- ✅ Instalar Java 21, Screen, ferramentas
-- ✅ Criar usuário "minecraft"
-- ✅ Instalar Adrenaline Modpack
-- ✅ Baixar mods de QoL (versões atualizadas)
-- ✅ Instalar Tailscale
-- ✅ Configurar server.properties
-- ✅ Configurar mods
-- ✅ Criar serviço systemd
-- ✅ Criar atalhos de comandos
+4. Aguarde instalacao de dependencias, stack escolhido e tuning automatico.
 
-**Tempo estimado:** 5-10 minutos
+Observacao: se voce usar diretorio customizado no install, os scripts de runtime seguem esse caminho automaticamente.
 
-### 3. Configurar Tailscale
+## Execucao automatizada (CI / sem prompts)
+
+Para rodar em modo nao interativo:
 
 ```bash
-# Conectar Tailscale
-sudo tailscale up
-
-# Siga as instruções (link no navegador)
-# Faça login e autorize
-
-# Ver IP do Tailscale
-sudo tailscale ip -4
-# ANOTE ESTE IP!
+sudo NON_INTERACTIVE=true SERVER_TYPE=minecraft ./install.sh
 ```
 
-### 4. Iniciar Servidor
+Para validar pipeline sem alterar o host (dry-run):
 
 ```bash
-sudo systemctl start minecraft
+sudo NON_INTERACTIVE=true DRY_RUN=true SERVER_TYPE=terraria ./install.sh
 ```
 
----
+Flags importantes no config.env:
 
-## 🎮 Comandos de Uso
+- NON_INTERACTIVE=true: desativa perguntas interativas.
+- DRY_RUN=true: evita operacoes destrutivas (pacman/useradd/systemd/cleanup).
 
-### Atalhos Rápidos (Recomendado)
+Dica para CI: use CONFIG_FILE apontando para um arquivo temporario, sem precisar alterar o config.env versionado.
+
+## Atencao: limpeza do stack oposto
+
+Durante a instalacao, se existir stack oposto no host, o instalador pode remover:
+
+- Servico systemd do stack oposto
+- Usuario do sistema do stack oposto
+- Diretorio do servidor em /opt
+- Entrada de cron de backup relacionada
+
+A remocao so acontece com confirmacao explicita.
+
+## Tuning por hardware
+
+O sistema detecta automaticamente RAM, CPU e tipo de disco, e aplica um tier.
+
+Esse tuning afeta tanto os parametros de jogo quanto limites de servico systemd (MemoryMax) na instalacao.
+
+| Tier | Perfil alvo | Exemplo de comportamento |
+|------|-------------|--------------------------|
+| LOW  | Maquinas limitadas | Menos players, distancias menores, heap reduzido |
+| MID  | Maquinas intermediarias | Balanceado para estabilidade e desempenho |
+| HIGH | Maquinas fortes | Mais players, distancias maiores, parametros mais agressivos |
+
+### Override manual de tier
+
+No config.env:
 
 ```bash
-# Carregar atalhos (adicione ao ~/.bashrc)
-source /opt/minecraft-server/comandos.sh
-
-# Agora use:
-mcstart      # Iniciar servidor
-mcstop       # Parar servidor
-mcrestart    # Reiniciar servidor
-mcstatus     # Status do serviço
-mclogs       # Ver logs
-mcconsole    # Acessar console
-mcbackup     # Fazer backup
-mcchunky     # Menu do Chunky
-mctailscale  # Status do Tailscale
-mcdir        # Ir para a pasta do servidor
-mcprops      # Editar server.properties
-mcmod        # Gerenciar mods (add/remove/list)
+FORCE_HARDWARE_TIER="HIGH"
 ```
 
-### Gerenciamento Completo
+Valores aceitos: LOW, MID, HIGH ou vazio para auto.
+
+## Recalibracao apos instalacao
+
+Minecraft:
 
 ```bash
-# Básico
-/opt/minecraft-server/mc-manager.sh start      # Iniciar
-/opt/minecraft-server/mc-manager.sh stop       # Parar
-/opt/minecraft-server/mc-manager.sh restart    # Reiniciar
-/opt/minecraft-server/mc-manager.sh status     # Status
-/opt/minecraft-server/mc-manager.sh console    # Console
-
-# Comandos facilitados
-/opt/minecraft-server/mc-manager.sh chunky     # Menu do Chunky
-/opt/minecraft-server/mc-manager.sh players    # Listar jogadores
-/opt/minecraft-server/mc-manager.sh say "Oi!"  # Enviar mensagem
-/opt/minecraft-server/mc-manager.sh whitelist  # Gerenciar whitelist
-/opt/minecraft-server/mc-manager.sh mod add chunky   # Instalar mod
-/opt/minecraft-server/mc-manager.sh mod remove chunky # Remover mod
-
-# Manutenção
-/opt/minecraft-server/mc-manager.sh backup     # Backup
-/opt/minecraft-server/mc-manager.sh update     # Atualizar modpack
+sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware
+sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware HIGH
 ```
 
-### Via Systemd
+Terraria:
 
 ```bash
-sudo systemctl start minecraft     # Iniciar
-sudo systemctl stop minecraft      # Parar
-sudo systemctl restart minecraft   # Reiniciar
-sudo systemctl status minecraft    # Status
-sudo journalctl -u minecraft -f    # Logs
+sudo /opt/terraria-server/tt-manager.sh reconfigure-hardware
+sudo /opt/terraria-server/tt-manager.sh reconfigure-hardware LOW
 ```
 
----
+## Comandos principais
 
-## 🌐 Como Conectar
+Minecraft:
 
-### Método 1: Tailscale (Recomendado)
+- sudo systemctl start minecraft
+- sudo /opt/minecraft-server/mc-manager.sh status
+- sudo /opt/minecraft-server/mc-manager.sh backup
 
-**No servidor:**
-```bash
-sudo tailscale ip -4
-# Exemplo: 100.64.123.45
-```
+Terraria:
 
-**No seu PC:**
-```bash
-# Instalar Tailscale
-curl -fsSL https://tailscale.com/install.sh | sh  # Ubuntu/Debian
-sudo pacman -S tailscale                           # Arch
-sudo dnf install tailscale                         # Fedora
+- sudo systemctl start terraria
+- sudo /opt/terraria-server/tt-manager.sh status
+- sudo /opt/terraria-server/tt-manager.sh backup
 
-# Conectar
-sudo tailscale up
-```
+## Documentacao
 
-**No Minecraft:**
-- Server Address: `100.64.123.45:25565`
+- docs/README.md
+- docs/minecraft/README.md
+- docs/terraria/README.md
+- docs/shared/HardwareTuning.md
+- docs/shared/Cleanup.md
 
-### Método 2: IP Local (mesma rede)
+## CI no GitHub Actions
 
-```bash
-# No servidor
-ip addr show | grep "inet " | head -1
-# Exemplo: 192.168.1.50
-```
+O workflow em .github/workflows/build-iso.yml agora roda:
 
-**No Minecraft:**
-- Server Address: `192.168.1.50:25565`
-
-📖 **Guia completo:** `docs/Tailscale.md`
-
----
-
-## 📝 Comandos no Jogo
-
-### Essential Commands
-```
-/home                    - Ir para home
-/sethome <nome>          - Definir home (máx: 3)
-/delhome <nome>          - Deletar home
-/spawn                   - Ir para spawn
-/tpa <jogador>           - Pedir teleporte
-/tpaccept / tpadeny      - Aceitar/recusar
-/back                    - Voltar ao local anterior
-/rtp                     - Teletransporte aleatório
-/nickname set <jogador> <apelido> - Definir apelido
-```
-
-### Chunky
-```
-/chunky start            - Iniciar pré-geração
-/chunky pause            - Pausar
-/chunky continue         - Continuar
-/chunky status           - Ver progresso
-/chunky radius 1000      - Definir raio
-```
-
-### Spark (Profiler)
-```
-/spark health            - Saúde do servidor
-/spark tps               - Ver TPS
-```
-
----
-
-## ⚡ Configurações de Performance
-
-### Alocação de RAM
-- **Mínima e Máxima**: 2560M (Xms e Xmx iguais para evitar re-alocação)
-- **Recomendada**: 2560M (~2.5GB), deixando espaço para SO, Tailscale e ZRAM
-- **Importante**: Java não aceita valor fracionário como `2.5G`; use `2560M` ou valores inteiros como `2G`/`3G`
-
-### Configurações do Servidor
-- **View Distance**: 6 chunks
-- **Simulation Distance**: 4 chunks
-- **Max Players**: 10 (recomendado: 5-8)
-- **Sync Chunk Writes**: Desabilitado (melhora I/O em HDD)
-
-### Flags JVM
-```bash
--Xms2560M -Xmx2560M
--XX:+UseG1GC
--XX:+ParallelRefProcEnabled
--XX:MaxGCPauseMillis=200
--XX:+DisableExplicitGC
--XX:G1NewSizePercent=30
--XX:G1MaxNewSizePercent=40
--XX:G1HeapRegionSize=8M
--XX:G1ReservePercent=20
-```
-
----
-
-## 💾 Backup Automático
-
-### Configurar
-```bash
-sudo /opt/minecraft-server/setup-cron.sh
-```
-
-### Manual
-```bash
-mcbackup
-# ou
-/opt/minecraft-server/mc-manager.sh backup
-```
-
-### Retenção
-- Backups mantidos por **7 dias**
-- Local: `/opt/minecraft-server/backups/`
-
----
-
-## 📊 Monitoramento
-
-```bash
-htop                    # Uso de RAM e CPU
-sudo iotop             # I/O do disco
-tail -f /opt/minecraft-server/logs/latest.log  # Logs
-mclogs                 # Logs do systemd
-mcstatus               # Status detalhado
-```
-
----
-
-## 🛡️ Segurança
-
-### Tailscale (Recomendado)
-- Não precisa abrir portas no roteador
-- Conexão criptografada
-- IP fixo
-
-### Comandos úteis
-```bash
-# Ver quem está conectado
-sudo tailscale status
-
-# Ver logs de acesso
-sudo journalctl -u tailscaled -f
-```
-
----
-
-## ⚠️ Limitações do Hardware
-
-Com **i3-6006U + 4GB RAM + HDD**:
-
-| Aspecto | Recomendação |
-|---------|--------------|
-| Jogadores simultâneos | **5-8 máximo** |
-| View Distance | 6 (não aumente) |
-| Mods extras | Evite |
-| Pré-geração | Execute antes de abrir |
-
----
-
-## 🔧 Troubleshooting
-
-### Servidor não inicia
-```bash
-sudo journalctl -u minecraft -n 50
-sudo systemctl status minecraft
-```
-
-### OutOfMemoryError
-```bash
-# Reduzir MAX_RAM no start-server.sh
-nano /opt/minecraft-server/start-server.sh
-# Alterar: MAX_RAM="3072M"
-# Para: MAX_RAM="2560M" (valor recomendado para este hardware)
-```
-
-### Não consegue conectar
-```bash
-# Verificar Tailscale
-sudo tailscale status
-
-# Verificar porta
-sudo ss -tulpn | grep 25565
-```
-
----
-
-## 📖 Documentação
-
-- **Tutorial completo:** `TUTORIAL.md`
-- **Instalação manual detalhada:** `docs/InstalacaoManual.md`
-- **Guia de conexão (Linux/Windows):** `docs/Tailscale.md`
-- **Guia do Chunky:** `docs/Chunky.md`
-- **Comandos do Essential Commands:** `docs/EssentialCommands.md`
-- **Guia de títulos/chat:** `docs/StyledChat.md`
-
----
-
-## 📞 Recursos
-
-- [Adrenaline Modpack](https://modrinth.com/modpack/adrenaline)
-- [Chunky](https://github.com/pop4959/Chunky)
-- [Essential Commands](https://github.com/John-Paul-R/Essential-Commands)
-- [Tailscale](https://tailscale.com)
-
----
-
-## ✅ Checklist Pós-Instalação
-
-- [ ] Instalação concluída
-- [ ] Tailscale conectado
-- [ ] IP do Tailscale anotado
-- [ ] Servidor iniciado
-- [ ] Pré-geração (Chunky) executada
-- [ ] Backup automático configurado
-- [ ] Atalhos carregados no ~/.bashrc
-- [ ] Teste de conexão realizado
-
----
-
-**Versão do Setup:** 3.0 (Revisado e Atualizado)  
-**Data:** Março 2026
+- lint de shell scripts
+- smoke tests em container Arch Linux
+- dry-run de instalacao completa (Minecraft e Terraria) em container Arch Linux
+- build da ISO apenas se os testes passarem

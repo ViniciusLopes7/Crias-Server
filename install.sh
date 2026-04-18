@@ -1,463 +1,366 @@
 #!/bin/bash
 
-# ============================================
-# Minecraft Server Auto-Installer
-# Adrenaline Modpack + Chunky + QoL + Tailscale
-# Para: Arch Linux Minimal | i3-6006U | 4GB RAM
-# ============================================
-
-set -eo pipefail  # Sair em caso de erro e falhas no pipe
-
-# Cores
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-# Variáveis Default
-MINECRAFT_USER="minecraft"
-SERVER_DIR="/opt/minecraft-server"
-SERVER_PORT=25565
-SERVER_RAM="2560M"
-ONLINE_MODE="false"
-
-MINECRAFT_VERSION="1.21.11"
-LOADER_TYPE="fabric"
-
-INSTALL_MODPACK="true"
-ADRENALINE_VERSION=""
-INSTALL_QOL_MODS="true"
-INSTALL_TAILSCALE="true"
-
-VIEW_DISTANCE=6
-SIMULATION_DISTANCE=4
+set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${CONFIG_FILE:-$SCRIPT_DIR/config.env}"
 
-# Carregar config.env se existir
-if [ -f "$SCRIPT_DIR/config.env" ]; then
-    # shellcheck source=/dev/null
-    source "$SCRIPT_DIR/config.env"
-fi
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/shared/lib/common.sh"
 
-# ============================================
-# PROMPTS INTERATIVOS
-# ============================================
+OVERRIDABLE_VARS=(
+    SERVER_TYPE
+    FORCE_HARDWARE_TIER
+    INSTALL_TAILSCALE
+    APPLY_SYSTEM_TUNING
+    CLEANUP_OTHER_STACK
+    DRY_RUN
+    NON_INTERACTIVE
+    MINECRAFT_USER
+    MINECRAFT_SERVER_DIR
+    MINECRAFT_PORT
+    MINECRAFT_ONLINE_MODE
+    MINECRAFT_VERSION
+    MINECRAFT_LOADER
+    MINECRAFT_INSTALL_MODPACK
+    MINECRAFT_ADRENALINE_VERSION
+    MINECRAFT_INSTALL_QOL_MODS
+    TERRARIA_USER
+    TERRARIA_SERVER_DIR
+    TERRARIA_PORT
+    TERRARIA_WORLD_NAME
+    TERRARIA_MOTD
+    TERRARIA_DOWNLOAD_URL
+)
 
-ask_confirm() {
-    local prompt="$1"
-    local default_ans="${2:-Y}"
-    local ans
-    local prompt_text
+capture_env_overrides() {
+    local var_name
+    local has_name
+    local value_name
 
-    if [ "${default_ans^^}" == "Y" ]; then
-        prompt_text="$prompt [Y/n]: "
-    else
-        prompt_text="$prompt [y/N]: "
+    for var_name in "${OVERRIDABLE_VARS[@]}"; do
+        has_name="ENV_HAS_${var_name}"
+        value_name="ENV_VALUE_${var_name}"
+
+        if [[ -v $var_name ]]; then
+            printf -v "$has_name" '%s' "true"
+            printf -v "$value_name" '%s' "${!var_name}"
+        else
+            printf -v "$has_name" '%s' "false"
+        fi
+    done
+}
+
+restore_env_overrides() {
+    local var_name
+    local has_name
+    local value_name
+
+    for var_name in "${OVERRIDABLE_VARS[@]}"; do
+        has_name="ENV_HAS_${var_name}"
+        value_name="ENV_VALUE_${var_name}"
+
+        if [ "${!has_name}" = "true" ]; then
+            printf -v "$var_name" '%s' "${!value_name}"
+        fi
+    done
+}
+
+capture_env_overrides
+
+# Defaults (precedencia: defaults < config.env < variaveis de ambiente).
+SERVER_TYPE="${SERVER_TYPE:-}"
+FORCE_HARDWARE_TIER="${FORCE_HARDWARE_TIER:-}"
+INSTALL_TAILSCALE="${INSTALL_TAILSCALE:-true}"
+APPLY_SYSTEM_TUNING="${APPLY_SYSTEM_TUNING:-true}"
+CLEANUP_OTHER_STACK="${CLEANUP_OTHER_STACK:-true}"
+DRY_RUN="${DRY_RUN:-false}"
+NON_INTERACTIVE="${NON_INTERACTIVE:-false}"
+
+MINECRAFT_USER="${MINECRAFT_USER:-minecraft}"
+MINECRAFT_SERVER_DIR="${MINECRAFT_SERVER_DIR:-/opt/minecraft-server}"
+MINECRAFT_PORT="${MINECRAFT_PORT:-25565}"
+MINECRAFT_ONLINE_MODE="${MINECRAFT_ONLINE_MODE:-false}"
+MINECRAFT_VERSION="${MINECRAFT_VERSION:-1.21.11}"
+MINECRAFT_LOADER="${MINECRAFT_LOADER:-fabric}"
+MINECRAFT_INSTALL_MODPACK="${MINECRAFT_INSTALL_MODPACK:-true}"
+MINECRAFT_ADRENALINE_VERSION="${MINECRAFT_ADRENALINE_VERSION:-}"
+MINECRAFT_INSTALL_QOL_MODS="${MINECRAFT_INSTALL_QOL_MODS:-true}"
+
+TERRARIA_USER="${TERRARIA_USER:-terraria}"
+TERRARIA_SERVER_DIR="${TERRARIA_SERVER_DIR:-/opt/terraria-server}"
+TERRARIA_PORT="${TERRARIA_PORT:-7777}"
+TERRARIA_WORLD_NAME="${TERRARIA_WORLD_NAME:-world}"
+TERRARIA_MOTD="${TERRARIA_MOTD:-Servidor Terraria gerenciado por Crias-Server}"
+TERRARIA_DOWNLOAD_URL="${TERRARIA_DOWNLOAD_URL:-https://terraria.org/api/download/pc-dedicated-server/terraria-server-1449.zip}"
+
+load_config_file() {
+    if [ -f "$CONFIG_FILE" ]; then
+        # shellcheck source=/dev/null
+        source "$CONFIG_FILE"
     fi
+}
 
-    read -r -p "$prompt_text" ans
-    if [ -z "$ans" ]; then
-        ans="$default_ans"
-    fi
-
-    if [[ "${ans^^}" == "Y" || "${ans^^}" == "YES" || "${ans^^}" == "S" || "${ans^^}" == "SIM" ]]; then
+select_server_type() {
+    if [ "$SERVER_TYPE" = "minecraft" ] || [ "$SERVER_TYPE" = "terraria" ]; then
         return 0
-    else
-        return 1
     fi
-}
 
-ask_value() {
-    local prompt="$1"
-    local default_val="$2"
-    local var_name="$3"
-    local ans
-    
-    read -r -p "$prompt [$default_val]: " ans
-    if [ -z "$ans" ]; then
-        printf -v "$var_name" '%s' "$default_val"
-    else
-        printf -v "$var_name" '%s' "$ans"
-    fi
-}
-
-validate_java_ram_value() {
-    local value="${1^^}"
-    [[ "$value" =~ ^[0-9]+[MG]$ ]]
-}
-
-# ============================================
-# FUNÇÕES
-# ============================================
-
-print_header() {
-    echo "=========================================="
-    echo "  Minecraft Server Auto-Installer"
-    echo "  Adrenaline + Chunky + QoL + Tailscale"
-    echo "=========================================="
-    echo ""
-}
-
-print_step() {
-    echo -e "${BLUE}[PASSO]${NC} $1"
-}
-
-print_success() {
-    echo -e "${GREEN}[SUCESSO]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[AVISO]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ERRO]${NC} $1"
-}
-
-check_root() {
-    if [ "$EUID" -ne 0 ]; then
-        print_error "Este script precisa ser executado como root (sudo)"
+    if is_true "$NON_INTERACTIVE"; then
+        print_error "SERVER_TYPE precisa ser definido como minecraft ou terraria quando NON_INTERACTIVE=true."
         exit 1
     fi
+
+    echo "Selecione qual servidor deseja instalar:"
+    echo ""
+    echo "1) Minecraft"
+    echo "2) Terraria"
+    echo ""
+
+    while true; do
+        read -r -p "Opcao (1-2): " selected
+        case "$selected" in
+            1)
+                SERVER_TYPE="minecraft"
+                return 0
+                ;;
+            2)
+                SERVER_TYPE="terraria"
+                return 0
+                ;;
+            *)
+                print_warning "Opcao invalida. Escolha 1 ou 2."
+                ;;
+        esac
+    done
 }
 
-check_arch() {
-    if [ ! -f "/etc/arch-release" ]; then
-        print_warning "Este script foi projetado para Arch Linux"
-        read -r -p "Deseja continuar mesmo assim? (s/N): " -n 1
-        echo
-        if [[ ! $REPLY =~ ^[Ss]$ ]]; then
-            exit 1
-        fi
-    fi
-}
-
-install_dependencies() {
-    print_step "Atualizando sistema..."
-    pacman -Syu --noconfirm
-    
-    print_step "Instalando dependências..."
-    pacman -S --needed --noconfirm \
-        jdk21-openjdk \
-        screen \
-        htop \
-        iotop \
-        nano \
-        curl \
-        wget \
-        tar \
-        gzip \
-        base-devel \
-        zram-generator \
-        cpupower \
-        lm_sensors \
-        openssh \
-        jq
-    
-    print_step "Habilitando e iniciando OpenSSH (sshd)..."
-    systemctl enable --now sshd
-    
-    print_success "Dependências instaladas"
-}
-
-create_user() {
-    print_step "Criando usuário minecraft..."
-    
-    if id "$MINECRAFT_USER" &>/dev/null; then
-        print_warning "Usuário ${MINECRAFT_USER} já existe"
-    else
-        useradd -m -s /bin/bash "$MINECRAFT_USER"
-        print_success "Usuário ${MINECRAFT_USER} criado"
-    fi
-    
-    # Criar diretório do servidor
-    mkdir -p "$SERVER_DIR"
-    chown "${MINECRAFT_USER}:${MINECRAFT_USER}" "$SERVER_DIR"
-}
-
-install_mrpack_install() {
-    print_step "Instalando mrpack-install..."
-    
-    local mrpack_url
-    mrpack_url=$(curl -s https://api.github.com/repos/nothub/mrpack-install/releases/latest | jq -r '.assets[] | select(.name=="mrpack-install-linux") | .browser_download_url')
-    
-    if [ -z "$mrpack_url" ] || [ "$mrpack_url" == "null" ]; then
-        mrpack_url="https://github.com/nothub/mrpack-install/releases/latest/download/mrpack-install-linux"
-    fi
-    
-    curl -fsSL -o "/tmp/mrpack-install" "$mrpack_url"
-    install -m 755 "/tmp/mrpack-install" "/usr/local/bin/mrpack-install"
-    
-    print_success "mrpack-install instalado"
-}
-
-install_server_base() {
-    cd "$SERVER_DIR" || exit 1
-    
-    if [ "$INSTALL_MODPACK" == "true" ]; then
-        print_step "Instalando Modpack Adrenaline..."
-        if [ -z "$ADRENALINE_VERSION" ]; then
-            mrpack-install adrenaline --server-dir "$SERVER_DIR" --server-file server.jar
-        else
-            mrpack-install adrenaline "$ADRENALINE_VERSION" --server-dir "$SERVER_DIR" --server-file server.jar
-        fi
-        print_success "Adrenaline instalado"
-    else
-        print_step "Instalando $LOADER_TYPE versão $MINECRAFT_VERSION..."
-        mrpack-install "$LOADER_TYPE" "$MINECRAFT_VERSION" --server-dir "$SERVER_DIR" --server-file server.jar
-        print_success "$LOADER_TYPE $MINECRAFT_VERSION instalado"
-    fi
-    
-    echo "eula=true" > "$SERVER_DIR/eula.txt"
-}
-
-install_mods_qol() {
-    print_step "Instalando mods de Qualidade de Vida para MC $MINECRAFT_VERSION..."
-    
-    cd "$SERVER_DIR" || exit 1
-    mkdir -p mods
-    
-    download_mod() {
-        local name=$1
-        local slug=$2
-        print_step "Buscando $name..."
-        
-        local api_url="https://api.modrinth.com/v2/project/$slug/version?loaders=%5B%22$LOADER_TYPE%22%5D&game_versions=%5B%22$MINECRAFT_VERSION%22%5D"
-        local modrinth_url
-        modrinth_url=$(curl -s "$api_url" | jq -r '.[0].files[0].url // empty')
-        
-        if [ -n "$modrinth_url" ] && [ "$modrinth_url" != "null" ]; then
-            curl -fsSL -o "$SERVER_DIR/mods/${name}.jar" "$modrinth_url"
-            print_success "${name}.jar instalado."
-        else
-            print_warning "Nenhuma versão exata do $name para MC $MINECRAFT_VERSION ($LOADER_TYPE). Instalando latest..."
-            local fallback_url
-            fallback_url=$(curl -s "https://api.modrinth.com/v2/project/$slug/version?loaders=%5B%22$LOADER_TYPE%22%5D" | jq -r '.[0].files[0].url // empty')
-            if [ -n "$fallback_url" ]; then
-                curl -fsSL -o "$SERVER_DIR/mods/${name}.jar" "$fallback_url"
-                print_success "${name}.jar (latest) instalado."
-            else
-                print_error "Falha ao baixar $name. Mod pode não existir para $LOADER_TYPE."
-            fi
-        fi
-    }
-
-    # Baixando slugs padronizados do Modrinth
-    download_mod "chunky" "chunky"
-    
-    # Alguns mods QoL são exclusivos do Fabric.
-    if [ "$LOADER_TYPE" == "fabric" ] || [ "$LOADER_TYPE" == "quilt" ]; then
-        download_mod "essential-commands" "essential-commands"
-        download_mod "universal-graves" "universal-graves"
-        download_mod "tabtps" "tabtps"
-        download_mod "styled-chat" "styled-chat"
-        download_mod "polymer" "polymer"
-        download_mod "placeholder-api" "placeholder-api"
-    else
-        print_warning "Mods QoL focados em Fabric/Quilt pulados pois o loader escolhido é $LOADER_TYPE."
-    fi
-    
-    chown -R "${MINECRAFT_USER}:${MINECRAFT_USER}" "$SERVER_DIR/mods"
-    print_success "Mods instalados!"
-}
-
-install_tailscale() {
-    print_step "Instalando Tailscale..."
-    
-    if command -v tailscale &> /dev/null; then
-        print_warning "Tailscale já está instalado"
-        tailscale version
+prompt_global_options() {
+    if is_true "$NON_INTERACTIVE"; then
         return 0
     fi
-    
-    pacman -S --needed --noconfirm tailscale
-    
-    systemctl enable tailscaled
-    systemctl start tailscaled
-    
-    print_success "Tailscale instalado e iniciado"
-}
 
-configure_server() {
-    print_step "Configurando servidor..."
-    
-    cat > "$SERVER_DIR/server.properties" << EOF
-# Minecraft server properties
-server-port=$SERVER_PORT
-server-ip=
-online-mode=$ONLINE_MODE
-max-players=10
-network-compression-threshold=256
-prevent-proxy-connections=false
+    echo ""
+    if ask_confirm "Deseja revisar opcoes globais?" "N"; then
+        ask_value "Forcar tier de hardware (LOW/MID/HIGH ou vazio para auto)" "$FORCE_HARDWARE_TIER" FORCE_HARDWARE_TIER
 
-view-distance=$VIEW_DISTANCE
-simulation-distance=$SIMULATION_DISTANCE
-
-max-tick-time=60000
-max-world-size=29999984
-sync-chunk-writes=false
-enable-jmx-monitoring=false
-enable-status=true
-
-entity-broadcast-range-percentage=75
-max-build-height=256
-spawn-animals=true
-spawn-monsters=true
-spawn-npcs=true
-spawn-protection=0
-EOF
-
-    mkdir -p "$SERVER_DIR/config/essentialcommands" "$SERVER_DIR/config/universal_graves"
-    
-    if [ ! -f "$SERVER_DIR/config/essentialcommands/config.toml" ]; then
-        cat > "$SERVER_DIR/config/essentialcommands/config.toml" << 'EOF'
-[teleportation]
-allow_teleport_between_dimensions = true
-teleport_request_timeout_seconds = 120
-teleport_cost = 0
-
-[home]
-max_homes = 3
-allow_home_in_any_dimension = true
-
-[spawn]
-allow_spawn_in_any_dimension = true
-
-[back]
-enable_back = true
-save_back_on_death = true
-
-[rtp]
-enable_rtp = true
-rtp_radius = 10000
-rtp_min_radius = 1000
-
-[nicknames]
-enable_nicknames = true
-nickname_prefix = "~"
-EOF
-    fi
-
-    if [ ! -f "$SERVER_DIR/config/universal_graves/config.json" ]; then
-        cat > "$SERVER_DIR/config/universal_graves/config.json" << 'EOF'
-{
-  "protection_time": 300,
-  "breaking_time": 1800,
-  "drop_items_on_expiration": true,
-  "message_on_grave_break": true,
-  "message_on_grave_expire": true,
-  "hologram": true,
-  "title": true,
-  "gui": true
-}
-EOF
-    fi
-
-    # Copiar e atualizar scripts
-    for script in start-server.sh mc-manager.sh backup-cron.sh setup-cron.sh; do
-        if [ -f "/tmp/minecraft-server-scripts/$script" ]; then
-            cp "/tmp/minecraft-server-scripts/$script" "$SERVER_DIR/"
+        if ask_confirm "Instalar/configurar Tailscale?" "Y"; then
+            INSTALL_TAILSCALE="true"
+        else
+            INSTALL_TAILSCALE="false"
         fi
-    done
-    
-    if [ -f "$SERVER_DIR/start-server.sh" ]; then
-        sed -i "s|SERVER_DIR=.*|SERVER_DIR=\"$SERVER_DIR\"|g" "$SERVER_DIR/start-server.sh"
-        sed -i "s|MIN_RAM=.*|MIN_RAM=\"$SERVER_RAM\"|g" "$SERVER_DIR/start-server.sh"
-        sed -i "s|MAX_RAM=.*|MAX_RAM=\"$SERVER_RAM\"|g" "$SERVER_DIR/start-server.sh"
-    fi
 
-    for script in mc-manager.sh backup-cron.sh setup-cron.sh; do
-        if [ -f "$SERVER_DIR/$script" ]; then
-            sed -i "s|/opt/minecraft-server|$SERVER_DIR|g" "$SERVER_DIR/$script"
+        if ask_confirm "Aplicar tuning de sistema (zram/scheduler/cpupower)?" "Y"; then
+            APPLY_SYSTEM_TUNING="true"
+        else
+            APPLY_SYSTEM_TUNING="false"
         fi
-    done
-    if [ -f "$SERVER_DIR/mc-manager.sh" ]; then
-        sed -i "s|^SERVER_USER=.*|SERVER_USER=\"$MINECRAFT_USER\"|g" "$SERVER_DIR/mc-manager.sh"
-    fi
-    
-    if [ -f "/tmp/minecraft-server-scripts/server-icon.png" ]; then
-        cp /tmp/minecraft-server-scripts/server-icon.png "$SERVER_DIR/"
-    fi
-    
-    chmod +x "$SERVER_DIR"/*.sh 2>/dev/null || true
-    
-    cat > "$SERVER_DIR/comandos.sh" << EOF
-#!/bin/bash
-alias mcstart='sudo systemctl start minecraft'
-alias mcstop='sudo systemctl stop minecraft'
-alias mcrestart='sudo systemctl restart minecraft'
-alias mcstatus='sudo systemctl status minecraft'
-alias mclogs='sudo journalctl -u minecraft -f'
-alias mcconsole='sudo $SERVER_DIR/mc-manager.sh console'
-alias mcbackup='sudo $SERVER_DIR/mc-manager.sh backup'
-alias mcchunky='sudo $SERVER_DIR/mc-manager.sh chunky'
-alias mctailscale='sudo tailscale status'
 
-alias mcdir='cd $SERVER_DIR'
-alias mcprops='sudo nano $SERVER_DIR/server.properties'
-alias mcmod='sudo $SERVER_DIR/mc-manager.sh mod'
-EOF
-    chmod +x "$SERVER_DIR/comandos.sh"
-    chown -R "${MINECRAFT_USER}:${MINECRAFT_USER}" "$SERVER_DIR"
-    print_success "Servidor configurado"
+        if ask_confirm "Limpar stack nao selecionado apos instalar?" "Y"; then
+            CLEANUP_OTHER_STACK="true"
+        else
+            CLEANUP_OTHER_STACK="false"
+        fi
+    fi
 }
 
-configure_system() {
-    print_step "Configurando otimizações do sistema..."
-    
-    cat > /etc/systemd/zram-generator.conf << 'EOF'
-[zram0]
-zram-size = min(ram, 4096)
-compression-algorithm = zstd
-swap-priority = 100
-fs-type = swap
-EOF
-    systemctl daemon-reload
-    systemctl start systemd-zram-setup@zram0.service || true
-
-    echo "vm.swappiness=180" > /etc/sysctl.d/99-zram.conf
-    echo "vm.vfs_cache_pressure=50" >> /etc/sysctl.d/99-zram.conf
-    
-    echo 'ACTION=="add|change", KERNEL=="sd[a-z]*", ATTR{queue/scheduler}="bfq"' > /etc/udev/rules.d/60-scheduler.rules
-    echo 'ACTION=="add|change", KERNEL=="sda", ATTR{queue/read_ahead_kb}="4096"' > /etc/udev/rules.d/61-hdd-readahead.rules
-    udevadm control --reload-rules || true
-    udevadm trigger || true
-
-    systemctl enable cpupower || true
-    if [ -f /etc/default/cpupower ]; then
-        sed -i "s/governor='ondemand'/governor='performance'/g" /etc/default/cpupower
+prompt_minecraft_options() {
+    if is_true "$NON_INTERACTIVE"; then
+        return 0
     fi
-    cpupower frequency-set -g performance || true
 
-    systemctl --user mask pipewire wireplumber pulseaudio 2>/dev/null || true
-    pacman -Rns --noconfirm bluez bluez-utils 2>/dev/null || true
+    echo ""
+    if ask_confirm "Deseja revisar configuracoes do Minecraft?" "Y"; then
+        ask_value "Usuario do Minecraft" "$MINECRAFT_USER" MINECRAFT_USER
+        ask_value "Diretorio do Minecraft" "$MINECRAFT_SERVER_DIR" MINECRAFT_SERVER_DIR
+        ask_value "Porta do Minecraft" "$MINECRAFT_PORT" MINECRAFT_PORT
+        ask_value "Versao do Minecraft" "$MINECRAFT_VERSION" MINECRAFT_VERSION
+        ask_value "Loader (fabric/quilt/paper/vanilla/forge/neoforge)" "$MINECRAFT_LOADER" MINECRAFT_LOADER
 
-    if ! grep -q "^${MINECRAFT_USER} soft nofile" /etc/security/limits.conf; then
-        echo "${MINECRAFT_USER} soft nofile 65536" >> /etc/security/limits.conf
-        echo "${MINECRAFT_USER} hard nofile 65536" >> /etc/security/limits.conf
+        if ask_confirm "Ativar online-mode=true (premium)?" "N"; then
+            MINECRAFT_ONLINE_MODE="true"
+        else
+            MINECRAFT_ONLINE_MODE="false"
+        fi
+
+        if ask_confirm "Instalar Modpack Adrenaline?" "Y"; then
+            MINECRAFT_INSTALL_MODPACK="true"
+        else
+            MINECRAFT_INSTALL_MODPACK="false"
+        fi
+
+        if ask_confirm "Instalar mods QoL adicionais?" "Y"; then
+            MINECRAFT_INSTALL_QOL_MODS="true"
+        else
+            MINECRAFT_INSTALL_QOL_MODS="false"
+        fi
     fi
-    
-    sysctl -p 2>/dev/null || true
-    print_success "Sistema configurado"
 }
 
-install_service() {
-    print_step "Instalando serviço systemd..."
-    
-    if [ -f "/tmp/minecraft-server-scripts/minecraft.service" ]; then
-        cp /tmp/minecraft-server-scripts/minecraft.service /etc/systemd/system/minecraft.service
-        sed -i "s|^User=.*|User=$MINECRAFT_USER|g" /etc/systemd/system/minecraft.service
-        sed -i "s|^Group=.*|Group=$MINECRAFT_USER|g" /etc/systemd/system/minecraft.service
-        sed -i "s|/opt/minecraft-server|$SERVER_DIR|g" /etc/systemd/system/minecraft.service
+prompt_terraria_options() {
+    if is_true "$NON_INTERACTIVE"; then
+        return 0
+    fi
 
-        systemctl daemon-reload
-        systemctl enable minecraft
-        print_success "Serviço instalado"
+    echo ""
+    if ask_confirm "Deseja revisar configuracoes do Terraria?" "Y"; then
+        ask_value "Usuario do Terraria" "$TERRARIA_USER" TERRARIA_USER
+        ask_value "Diretorio do Terraria" "$TERRARIA_SERVER_DIR" TERRARIA_SERVER_DIR
+        ask_value "Porta do Terraria" "$TERRARIA_PORT" TERRARIA_PORT
+        ask_value "Nome do mundo" "$TERRARIA_WORLD_NAME" TERRARIA_WORLD_NAME
+        ask_value "MOTD" "$TERRARIA_MOTD" TERRARIA_MOTD
+        ask_value "URL de download do pacote Terraria" "$TERRARIA_DOWNLOAD_URL" TERRARIA_DOWNLOAD_URL
+    fi
+}
+
+install_tailscale_if_enabled() {
+    if ! is_true "$INSTALL_TAILSCALE"; then
+        return 0
+    fi
+
+    if is_true "$DRY_RUN"; then
+        print_step "[DRY_RUN] Pulando instalacao do Tailscale."
+        return 0
+    fi
+
+    print_step "Instalando Tailscale..."
+    if ! command_exists tailscale; then
+        pacman -S --needed --noconfirm tailscale
+    fi
+
+    systemctl enable tailscaled >/dev/null 2>&1 || true
+    systemctl start tailscaled >/dev/null 2>&1 || true
+    print_success "Tailscale pronto. Execute 'sudo tailscale up' para autenticar."
+}
+
+run_selected_stack_installer() {
+    if [ "$SERVER_TYPE" = "minecraft" ]; then
+        export MINECRAFT_USER
+        export MINECRAFT_SERVER_DIR
+        export MINECRAFT_PORT
+        export MINECRAFT_ONLINE_MODE
+        export MINECRAFT_VERSION
+        export MINECRAFT_LOADER
+        export MINECRAFT_INSTALL_MODPACK
+        export MINECRAFT_ADRENALINE_VERSION
+        export MINECRAFT_INSTALL_QOL_MODS
+        export FORCE_HARDWARE_TIER
+        export APPLY_SYSTEM_TUNING
+        export DRY_RUN
+        export NON_INTERACTIVE
+
+        bash "$SCRIPT_DIR/minecraft/install.sh"
+        return 0
+    fi
+
+    export TERRARIA_USER
+    export TERRARIA_SERVER_DIR
+    export TERRARIA_PORT
+    export TERRARIA_WORLD_NAME
+    export TERRARIA_MOTD
+    export TERRARIA_DOWNLOAD_URL
+    export FORCE_HARDWARE_TIER
+    export APPLY_SYSTEM_TUNING
+    export DRY_RUN
+    export NON_INTERACTIVE
+
+    bash "$SCRIPT_DIR/terraria/install.sh"
+}
+
+cleanup_stack_by_type() {
+    local stack_type="$1"
+    local service_name
+    local stack_user
+    local stack_dir
+
+    if [ "$stack_type" = "minecraft" ]; then
+        service_name="minecraft"
+        stack_user="$MINECRAFT_USER"
+        stack_dir="$MINECRAFT_SERVER_DIR"
     else
-        print_warning "Arquivo minecraft.service não encontrado para instalar."
+        service_name="terraria"
+        stack_user="$TERRARIA_USER"
+        stack_dir="$TERRARIA_SERVER_DIR"
+    fi
+
+    print_step "Removendo stack $stack_type..."
+
+    if is_true "$DRY_RUN"; then
+        print_warning "[DRY_RUN] Cleanup real pulado para stack $stack_type."
+        return 0
+    fi
+
+    if systemctl list-unit-files | grep -q "^${service_name}.service"; then
+        systemctl stop "$service_name" >/dev/null 2>&1 || true
+        systemctl disable "$service_name" >/dev/null 2>&1 || true
+    fi
+
+    rm -f "/etc/systemd/system/${service_name}.service"
+    systemctl daemon-reload >/dev/null 2>&1 || true
+
+    if [ -d "$stack_dir" ]; then
+        rm -rf "$stack_dir"
+    fi
+
+    if id "$stack_user" >/dev/null 2>&1; then
+        userdel -r "$stack_user" >/dev/null 2>&1 || userdel "$stack_user" >/dev/null 2>&1 || true
+    fi
+
+    if crontab -l >/dev/null 2>&1; then
+        (crontab -l 2>/dev/null | grep -v "$stack_dir/backup-cron.sh") | crontab - || true
+    fi
+
+    print_success "Stack $stack_type removido."
+}
+
+cleanup_other_stack_if_needed() {
+    local other_stack
+    local other_user
+    local other_dir
+    local has_existing_data=false
+
+    if ! is_true "$CLEANUP_OTHER_STACK"; then
+        print_warning "Cleanup do stack oposto desativado."
+        return 0
+    fi
+
+    if is_true "$DRY_RUN"; then
+        print_warning "[DRY_RUN] Cleanup do stack oposto pulado."
+        return 0
+    fi
+
+    if [ "$SERVER_TYPE" = "minecraft" ]; then
+        other_stack="terraria"
+        other_user="$TERRARIA_USER"
+        other_dir="$TERRARIA_SERVER_DIR"
+    else
+        other_stack="minecraft"
+        other_user="$MINECRAFT_USER"
+        other_dir="$MINECRAFT_SERVER_DIR"
+    fi
+
+    if [ -d "$other_dir" ]; then
+        has_existing_data=true
+    fi
+
+    if id "$other_user" >/dev/null 2>&1; then
+        has_existing_data=true
+    fi
+
+    if systemctl list-unit-files | grep -q "^${other_stack}.service"; then
+        has_existing_data=true
+    fi
+
+    if [ "$has_existing_data" = true ]; then
+        print_warning "Foi detectado stack existente de $other_stack no host."
+        print_warning "Essa limpeza remove servico, usuario e diretorio: $other_dir"
+
+        if ! ask_confirm "CONFIRMAR REMOCAO COMPLETA DO STACK $other_stack?" "N"; then
+            print_warning "Cleanup do stack oposto foi cancelado pelo usuario."
+            return 0
+        fi
+
+        cleanup_stack_by_type "$other_stack"
     fi
 }
 
@@ -465,98 +368,30 @@ main() {
     print_header
     check_root
     check_arch
-    
-    echo -e "${CYAN}--- Configuração Básica ---${NC}"
-    ask_value "Usuário do servidor" "$MINECRAFT_USER" MINECRAFT_USER
-    ask_value "Diretório de instalação" "$SERVER_DIR" SERVER_DIR
-    ask_value "Porta do Servidor" "$SERVER_PORT" SERVER_PORT
-    
-    ask_value "Versão do Minecraft (Ex: 1.21.11, 1.20.4)" "$MINECRAFT_VERSION" MINECRAFT_VERSION
-    
-    echo -e "${CYAN}Escolha o Loader do Servidor:${NC}"
-    echo "  1) Fabric (Recomendado, aceita mods QoL)"
-    echo "  2) Paper  (Plugins tradicionais)"
-    echo "  3) Vanilla"
-    echo "  4) Forge"
-    echo "  5) NeoForge"
-    read -r -p "Sua escolha (1-5) [1]: " loader_choice
-    case "$loader_choice" in
-        2) LOADER_TYPE="paper" ;;
-        3) LOADER_TYPE="vanilla" ;;
-        4) LOADER_TYPE="forge" ;;
-        5) LOADER_TYPE="neoforge" ;;
-        *) LOADER_TYPE="fabric" ;;
-    esac
+    load_config_file
+    restore_env_overrides
 
-    ask_value "Memória RAM do Servidor (ex: 2560M)" "$SERVER_RAM" SERVER_RAM
-    SERVER_RAM="${SERVER_RAM^^}"
+    if is_true "$DRY_RUN"; then
+        print_warning "Modo DRY_RUN ativo: nenhuma alteracao destrutiva no host sera aplicada."
+    fi
 
-    while ! validate_java_ram_value "$SERVER_RAM"; do
-        print_warning "Formato inválido. Use inteiro + unidade (ex: 2560M, 2G)."
-        ask_value "Memória RAM do Servidor" "2560M" SERVER_RAM
-        SERVER_RAM="${SERVER_RAM^^}"
-    done
-    
-    if ask_confirm "Habilitar modo Pirata (online-mode=false)?" "Y"; then
-        ONLINE_MODE="false"
-    else
-        ONLINE_MODE="true"
-    fi
-    
-    if [ "$LOADER_TYPE" == "fabric" ]; then
-        if ask_confirm "Instalar Modpack Adrenaline (Performance) limitando a versão?" "Y"; then
-            INSTALL_MODPACK="true"
-        else
-            INSTALL_MODPACK="false"
-        fi
-        
-        if ask_confirm "Instalar Mods QoL (Chunky, Graves, etc)?" "Y"; then
-            INSTALL_QOL_MODS="true"
-        else
-            INSTALL_QOL_MODS="false"
-        fi
-    else
-        INSTALL_MODPACK="false"
-        INSTALL_QOL_MODS="false"
-        print_warning "Modpack e Mods QoL nativos foram pulados (loader=$LOADER_TYPE não compatível primariamente)."
-    fi
-    
-    if ask_confirm "Instalar e configurar VPN Tailscale?" "Y"; then
-        INSTALL_TAILSCALE="true"
-    else
-        INSTALL_TAILSCALE="false"
-    fi
-    echo ""
+    select_server_type
 
-    mkdir -p /tmp/minecraft-server-scripts
-    # Oculta erros se os scripts não estiverem localmente (podem já estar resolvidos)
-    cp -r "./"* /tmp/minecraft-server-scripts/ 2>/dev/null || true
-    
-    print_step "Preparando instalação..."
-    
-    install_dependencies
-    create_user
-    install_mrpack_install
-    
-    install_server_base
-    
-    if [ "$INSTALL_QOL_MODS" == "true" ]; then
-        install_mods_qol
+    print_step "Stack selecionado: $SERVER_TYPE"
+
+    prompt_global_options
+
+    if [ "$SERVER_TYPE" = "minecraft" ]; then
+        prompt_minecraft_options
+    else
+        prompt_terraria_options
     fi
-    
-    if [ "$INSTALL_TAILSCALE" == "true" ]; then
-        install_tailscale
-    fi
-    
-    configure_server
-    configure_system
-    install_service
-    
-    echo -e "${GREEN}Instalação concluída no diretório: $SERVER_DIR${NC}"
+
+    install_tailscale_if_enabled
+    run_selected_stack_installer
+    cleanup_other_stack_if_needed
+
+    print_success "Instalacao concluida para stack: $SERVER_TYPE"
 }
-
-if [ ! -f "start-server.sh" ]; then
-    print_warning "Arquivos complementares (start-server, mc-manager) não achados na pasta atual. Prosseguindo..."
-fi
 
 main

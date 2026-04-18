@@ -1,0 +1,34 @@
+[Unit]
+Description=Minecraft Server
+After=network.target
+StartLimitIntervalSec=60s
+StartLimitBurst=3
+
+[Service]
+Type=forking
+User=__SERVER_USER__
+Group=__SERVER_USER__
+WorkingDirectory=__SERVER_DIR__
+Environment="TERM=xterm"
+Environment="SCREENDIR=__SERVER_DIR__/.screen"
+ExecStartPre=+/usr/bin/mkdir -p __SERVER_DIR__/.screen
+ExecStartPre=+/usr/bin/chown __SERVER_USER__:__SERVER_USER__ __SERVER_DIR__/.screen
+ExecStartPre=+/usr/bin/chmod 700 __SERVER_DIR__/.screen
+ExecStart=/usr/bin/screen -dmS minecraft __SERVER_DIR__/start-server.sh
+ExecStop=__SERVER_DIR__/mc-manager.sh stop
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=15
+LimitNOFILE=65536
+LimitNPROC=4096
+MemoryMax=__MEMORY_MAX_MB__M
+Nice=-5
+IOSchedulingClass=best-effort
+IOSchedulingPriority=0
+OOMScoreAdjust=-800
+ProtectSystem=no
+ProtectHome=read-only
+ReadWritePaths=__SERVER_DIR__
+
+[Install]
+WantedBy=multi-user.target

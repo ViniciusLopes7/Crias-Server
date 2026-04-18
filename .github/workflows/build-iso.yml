@@ -30,8 +30,28 @@ jobs:
         with:
           scandir: './'
 
-  build:
+  arch_smoke:
+    name: Arch Smoke Tests
     needs: lint
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+      options: --privileged
+    steps:
+      - name: Install CI dependencies
+        run: pacman -Syu --noconfirm git bash
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run arch smoke tests
+        run: bash tests/arch-smoke.sh
+
+      - name: Run arch dry install tests
+        run: bash tests/arch-dry-install.sh
+
+  build:
+    needs: [lint, arch_smoke]
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel
@@ -51,7 +71,7 @@ jobs:
       - name: Upload ISO Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: minecraft-server-iso
+          name: crias-server-iso
           path: out/*.iso
           retention-days: 7
 
@@ -69,7 +89,7 @@ jobs:
       - name: Download ISO artifact
         uses: actions/download-artifact@v4
         with:
-          name: minecraft-server-iso
+          name: crias-server-iso
           path: release-assets/iso
 
       - name: Compute release tag
@@ -99,8 +119,8 @@ jobs:
           rm -rf release-assets/_pkg/slim/docs
           rm -rf release-assets/_pkg/slim/.github/workflows
 
-          (cd release-assets/_pkg/full && zip -qr ../../server-mine-full.zip .)
-          (cd release-assets/_pkg/slim && zip -qr ../../server-mine-slim.zip .)
+          (cd release-assets/_pkg/full && zip -qr ../../crias-server-full.zip .)
+          (cd release-assets/_pkg/slim && zip -qr ../../crias-server-slim.zip .)
 
       - name: Create and push tag
         run: |
@@ -122,7 +142,7 @@ jobs:
 
           gh release create "${{ steps.release_tag.outputs.tag }}" \
             "${ISO_FILE}" \
-            release-assets/server-mine-full.zip \
-            release-assets/server-mine-slim.zip \
+            release-assets/crias-server-full.zip \
+            release-assets/crias-server-slim.zip \
             --title "Release ${{ steps.release_tag.outputs.tag }}" \
             --generate-notes

@@ -2,15 +2,15 @@
 # shellcheck disable=SC2034
 
 # =========================================================================
-# Server-Mine ISO Profile Variables
+# Crias-Server ISO Profile Variables
 # All variables here are consumed externally by mkarchiso; they are
 # intentionally "unused" from shellcheck's perspective.
 # =========================================================================
 
-iso_name="minecraft-server-os"
-iso_label="MC_ARCH_$(date +%Y%m)"
-iso_publisher="Reino dos Crias <https://github.com/ViniciusLopes7/Server-Mine>"
-iso_application="Servidor de Minecraft Autogerenciado / LiveCD"
+iso_name="crias-server-os"
+iso_label="CRIAS_ARCH_$(date +%Y%m)"
+iso_publisher="Reino dos Crias <https://github.com/ViniciusLopes7/Crias-Server>"
+iso_application="Servidor de Games Autogerenciado (Minecraft ou Terraria) / LiveCD"
 iso_version="$(date +%Y.%m.%d)"
 
 install_dir="arch"
