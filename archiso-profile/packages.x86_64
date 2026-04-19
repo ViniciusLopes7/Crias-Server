@@ -1,4 +1,5 @@
-# Basic system
+# Core archiso (ESSENCIAL)
+archiso
 base
 linux
 linux-firmware
@@ -6,6 +7,13 @@ mkinitcpio
 syslinux
 grub
 efibootmgr
+dosfstools
+e2fsprogs
+squashfs-tools
+arch-install-scripts
+edk2-shell
+memtest86+
+usbutils
 
 # Networking
 networkmanager

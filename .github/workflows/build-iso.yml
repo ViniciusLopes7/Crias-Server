@@ -30,6 +30,17 @@ jobs:
         with:
           scandir: './'
 
+  validate_profile:
+    name: Validate Archiso Profile
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate archiso profile
+        run: bash tests/archiso-profile-validate.sh
+
   arch_smoke:
     name: Arch Smoke Tests
     needs: lint
@@ -51,7 +62,7 @@ jobs:
         run: bash tests/arch-dry-install.sh
 
   build:
-    needs: [lint, arch_smoke]
+    needs: [lint, validate_profile, arch_smoke]
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel
@@ -75,9 +86,85 @@ jobs:
           path: out/*.iso
           retention-days: 7
 
+  validate_iso_artifact:
+    name: Validate ISO Artifact
+    needs: build
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+      options: --privileged
+    steps:
+      - name: Install validation dependencies
+        run: pacman -Syu --noconfirm git bash mkinitcpio libarchive
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download ISO artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: crias-server-iso
+          path: out
+
+      - name: Validate initramfs hooks and squashfs
+        run: |
+          ISO_FILE="$(ls out/*.iso | head -n 1)"
+          if [ -z "$ISO_FILE" ]; then
+            echo "::error::ISO artifact not found."
+            exit 1
+          fi
+          bash tests/iso-initramfs-validate.sh "$ISO_FILE" | tee iso-initramfs-validate.log
+
+      - name: Upload ISO validation log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iso-validation-log
+          path: iso-initramfs-validate.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  qemu_boot:
+    name: QEMU Boot Smoke
+    needs: [build, validate_iso_artifact]
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download ISO artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: crias-server-iso
+          path: out
+
+      - name: Install QEMU dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils libarchive-tools
+
+      - name: Run QEMU boot smoke
+        run: |
+          ISO_FILE="$(ls out/*.iso | head -n 1)"
+          if [ -z "$ISO_FILE" ]; then
+            echo "::error::ISO artifact not found."
+            exit 1
+          fi
+          bash tests/iso-qemu-boot.sh "$ISO_FILE" 240
+
+      - name: Upload QEMU boot log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-boot-log
+          path: qemu-boot.log
+          if-no-files-found: ignore
+          retention-days: 7
+
   release:
     name: Create Tag and Release
-    needs: build
+    needs: [build, validate_iso_artifact, qemu_boot]
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
