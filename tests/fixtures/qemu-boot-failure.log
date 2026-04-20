@@ -1,0 +1,7 @@
+:: running early hook [udev]
+:: running hook [udev]
+:: Triggering uevents...
+:: mounting '' on real root
+mount: /new_root: wrong fs type, bad option, bad superblock on , missing codepage or helper program, or other error.
+ERROR: Failed to mount '' on real root
+You are now being dropped into an emergency shell.

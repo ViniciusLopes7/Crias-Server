@@ -30,6 +30,17 @@ jobs:
         with:
           scandir: './'
 
+  quick_script_tests:
+    name: Quick Script Tests
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run quick script tests
+        run: bash tests/quick-script-tests.sh
+
   validate_profile:
     name: Validate Archiso Profile
     needs: lint
@@ -43,7 +54,7 @@ jobs:
 
   arch_smoke:
     name: Arch Smoke Tests
-    needs: lint
+    needs: [lint, quick_script_tests]
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel
@@ -55,6 +66,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Run install contract tests
+        run: bash tests/install-contracts.sh
+
       - name: Run arch smoke tests
         run: bash tests/arch-smoke.sh
 
@@ -62,7 +76,7 @@ jobs:
         run: bash tests/arch-dry-install.sh
 
   build:
-    needs: [lint, validate_profile, arch_smoke]
+    needs: [lint, quick_script_tests, validate_profile, arch_smoke]
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel

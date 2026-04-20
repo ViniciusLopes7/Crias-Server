@@ -2,8 +2,70 @@
 
 set -euo pipefail
 
-if [ "$#" -lt 1 ]; then
+usage() {
     echo "Uso: $0 <caminho-da-iso> [timeout-segundos]" >&2
+    echo "Ou:  $0 --analyze-log <arquivo-log>" >&2
+}
+
+sanitize_log_file() {
+    local raw_log_file="$1"
+    local clean_log_file="$2"
+
+    if command -v perl >/dev/null 2>&1; then
+        # Remove sequencias ANSI/OSC para matching deterministico.
+        perl -pe 's/\e\[[0-9;?]*[ -\/]*[@-~]//g; s/\e\][^\a]*(\a|\e\\)//g; s/\eP.*?\e\\//g' "$raw_log_file" > "$clean_log_file" || cp "$raw_log_file" "$clean_log_file"
+    else
+        cp "$raw_log_file" "$clean_log_file"
+    fi
+}
+
+validate_qemu_log() {
+    local raw_log_file="$1"
+    local clean_log_file="$2"
+
+    sanitize_log_file "$raw_log_file" "$clean_log_file"
+
+    if grep -Eqi 'Failed to start Switch Root|You are in emergency mode|dropped into an emergency shell|Failed to mount .* on real root|ERROR: Failed to mount|Cannot open access to console|Kernel panic|Unable to find device with label|Timed out waiting for device' "$clean_log_file"; then
+        echo "Falha de boot detectada no log do QEMU." >&2
+        return 1
+    fi
+
+    if ! grep -Eqi 'archiso login:|Welcome to .*Arch Linux|Reached target .*Multi-User|Reached target .*Login Prompts|Please configure the system|Please enter the new timezone|root@archiso' "$clean_log_file"; then
+        echo "Sem marcador de boot completo detectado no log do QEMU." >&2
+        return 1
+    fi
+
+    return 0
+}
+
+if [ "${1:-}" = "--analyze-log" ]; then
+    if [ "$#" -ne 2 ]; then
+        usage
+        exit 1
+    fi
+
+    ANALYZE_LOG_FILE="$2"
+
+    if [ ! -f "$ANALYZE_LOG_FILE" ]; then
+        echo "Arquivo de log nao encontrado: $ANALYZE_LOG_FILE" >&2
+        exit 1
+    fi
+
+    WORK_DIR="$(mktemp -d)"
+    CLEAN_LOG_FILE="$WORK_DIR/qemu-boot.clean.log"
+    trap 'rm -rf "$WORK_DIR"' EXIT
+
+    if ! validate_qemu_log "$ANALYZE_LOG_FILE" "$CLEAN_LOG_FILE"; then
+        tail -n 120 "$ANALYZE_LOG_FILE" >&2
+        exit 1
+    fi
+
+    echo "[iso-qemu-boot] OK (analise de log)"
+    exit 0
+fi
+
+if [ "$#" -lt 1 ]; then
+    usage
     exit 1
 fi
 
@@ -139,21 +201,7 @@ set -e
 cp "$LOG_FILE" "$ROOT_DIR/qemu-boot.log" || true
 
 CLEAN_LOG_FILE="$WORK_DIR/qemu-boot.clean.log"
-if command -v perl >/dev/null 2>&1; then
-    # Remove common ANSI/OSC sequences so marker matching is deterministic.
-    perl -pe 's/\e\[[0-9;?]*[ -\/]*[@-~]//g; s/\e\][^\a]*(\a|\e\\)//g; s/\eP.*?\e\\//g' "$LOG_FILE" > "$CLEAN_LOG_FILE" || cp "$LOG_FILE" "$CLEAN_LOG_FILE"
-else
-    cp "$LOG_FILE" "$CLEAN_LOG_FILE"
-fi
-
-if grep -Eqi 'Failed to start Switch Root|You are in emergency mode|dropped into an emergency shell|Failed to mount .* on real root|ERROR: Failed to mount|Cannot open access to console|Kernel panic|Unable to find device with label|Timed out waiting for device' "$CLEAN_LOG_FILE"; then
-    echo "Falha de boot detectada no log do QEMU." >&2
-    tail -n 120 "$LOG_FILE" >&2
-    exit 1
-fi
-
-if ! grep -Eqi 'archiso login:|Welcome to .*Arch Linux|Reached target .*Multi-User|Reached target .*Login Prompts|Please configure the system|Please enter the new timezone|root@archiso' "$CLEAN_LOG_FILE"; then
-    echo "Sem marcador de boot completo detectado no log do QEMU." >&2
+if ! validate_qemu_log "$LOG_FILE" "$CLEAN_LOG_FILE"; then
     tail -n 120 "$LOG_FILE" >&2
     exit 1
 fi

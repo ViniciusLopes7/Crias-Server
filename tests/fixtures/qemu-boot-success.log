@@ -1,0 +1,12 @@
+:: running hook [archiso]
+:: running hook [archiso_loop_mnt]
+:: Mounting '/dev/disk/by-label/CRIAS_ARCH_202604' to '/run/archiso/bootmnt'
+:: Device '/dev/disk/by-label/CRIAS_ARCH_202604' mounted successfully.
+:: Mounting '/dev/loop0' to '/run/archiso/airootfs'
+:: Device '/dev/loop0' mounted successfully.
+
+Welcome to Arch Linux!
+
+Please configure the system!
+
+Please enter the new timezone name or number ("list" to list options, empty to skip):

@@ -191,6 +191,23 @@ Exemplos rapidos:
 O workflow em .github/workflows/build-iso.yml agora roda:
 
 - lint de shell scripts
+- testes rapidos de scripts (sintaxe + parser de log QEMU com fixtures)
+- testes de contrato do instalador (falha esperada para config invalida e precedencia de variaveis)
 - smoke tests em container Arch Linux
 - dry-run de instalacao completa (Minecraft e Terraria) em container Arch Linux
 - build da ISO apenas se os testes passarem
+
+## Testes locais rapidos
+
+Para validar regressao de scripts sem buildar ISO:
+
+```bash
+bash tests/quick-script-tests.sh
+```
+
+Para validar contratos do instalador no ambiente Arch:
+
+```bash
+sudo bash tests/install-contracts.sh
+sudo bash tests/arch-dry-install.sh
+```
