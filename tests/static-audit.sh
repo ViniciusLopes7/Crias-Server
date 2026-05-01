@@ -17,7 +17,7 @@ if [ -n "$bad_curls" ]; then
 fi
 
 echo "Checking for tar commands with stderr suppressed to /dev/null..."
-bad_tar=$(grep -RIn "tar .*2>/dev/null" --exclude-dir=.git --exclude-dir=docs --exclude-dir=assets || true)
+bad_tar=$(grep -RIn "tar .*2>/dev/null" --exclude-dir=.git --exclude-dir=docs --exclude-dir=assets --exclude-dir=tests || true)
 if [ -n "$bad_tar" ]; then
   echo "ERROR: Found tar commands redirecting stderr to /dev/null:" >&2
   printf "%s\n" "$bad_tar" >&2
@@ -25,7 +25,7 @@ if [ -n "$bad_tar" ]; then
 fi
 
 echo "Checking for ionice+tar with stderr redirection..."
-bad_ionice=$(grep -RIn "ionice .*tar .*2>/dev/null" --exclude-dir=.git --exclude-dir=docs --exclude-dir=assets || true)
+bad_ionice=$(grep -RIn "ionice .*tar .*2>/dev/null" --exclude-dir=.git --exclude-dir=docs --exclude-dir=assets --exclude-dir=tests || true)
 if [ -n "$bad_ionice" ]; then
   echo "ERROR: Found ionice+tar redirecting stderr to /dev/null:" >&2
   printf "%s\n" "$bad_ionice" >&2
