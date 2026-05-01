@@ -85,6 +85,7 @@ EOF
     assert_file "$server_dir/backup-cron.sh"
     assert_file "$server_dir/setup-cron.sh"
     assert_file "$server_dir/.shared/minecraft-tuning.sh"
+    assert_grep 'screen -S "' "$server_dir/backup-cron.sh"
     assert_file "$server_dir/minecraft.service.rendered"
     assert_file "$server_dir/comandos.sh"
 
@@ -93,6 +94,8 @@ EOF
     assert_executable "$server_dir/backup-cron.sh"
     assert_executable "$server_dir/setup-cron.sh"
     assert_executable "$server_dir/comandos.sh"
+
+    assert_grep "stat -c '%U'" "$server_dir/mc-manager.sh"
 
     assert_bash_syntax "$server_dir/start-server.sh"
     assert_bash_syntax "$server_dir/mc-manager.sh"
@@ -109,6 +112,9 @@ EOF
     assert_grep '^GC_MAX_PAUSE="[0-9]+"$' "$server_dir/runtime.env"
     assert_grep '^HW_TIER="(LOW|MID|HIGH)"$' "$server_dir/hardware-profile.env"
     assert_grep '^MC_SERVICE_MEMORY_MAX_MB="[0-9]+"$' "$server_dir/hardware-profile.env"
+    assert_grep '^MIN_RAM="[0-9]+M"$' "$server_dir/runtime.env"
+    assert_grep '^MAX_RAM="[0-9]+M"$' "$server_dir/runtime.env"
+    assert_grep '^GC_MAX_PAUSE="[0-9]+"$' "$server_dir/runtime.env"
 
     assert_grep '^alias mcstart=' "$server_dir/comandos.sh"
     assert_grep '^alias mcreconfig=' "$server_dir/comandos.sh"
@@ -147,6 +153,7 @@ EOF
     assert_file "$server_dir/backup-cron.sh"
     assert_file "$server_dir/setup-cron.sh"
     assert_file "$server_dir/.shared/terraria-tuning.sh"
+    assert_grep 'screen -S "' "$server_dir/backup-cron.sh"
     assert_file "$server_dir/terraria.service.rendered"
     assert_file "$server_dir/comandos.sh"
 
@@ -162,6 +169,8 @@ EOF
     assert_bash_syntax "$server_dir/setup-cron.sh"
     assert_bash_syntax "$server_dir/comandos.sh"
 
+    assert_grep "stat -c '%U'" "$server_dir/tt-manager.sh"
+
     assert_grep 'User=terraria-ci' "$server_dir/terraria.service.rendered"
     assert_grep 'MemoryMax=' "$server_dir/terraria.service.rendered"
     assert_not_grep '__SERVER_USER__|__SERVER_DIR__|__MEMORY_MAX_MB__' "$server_dir/terraria.service.rendered"
@@ -173,6 +182,8 @@ EOF
     assert_grep '^BACKUP_ZSTD_LEVEL="-?[0-9]+"$' "$server_dir/runtime.env"
     assert_grep '^HW_TIER="(LOW|MID|HIGH)"$' "$server_dir/hardware-profile.env"
     assert_grep '^TT_SERVICE_MEMORY_MAX_MB="[0-9]+"$' "$server_dir/hardware-profile.env"
+    assert_grep '^BACKUP_RETENTION_DAYS="[0-9]+"$' "$server_dir/runtime.env"
+    assert_grep '^BACKUP_ZSTD_LEVEL="-?[0-9]+"$' "$server_dir/runtime.env"
 
     assert_grep '^alias ttstart=' "$server_dir/comandos.sh"
     assert_grep '^alias ttreconfig=' "$server_dir/comandos.sh"

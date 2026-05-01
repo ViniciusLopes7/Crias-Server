@@ -8,6 +8,15 @@ fi
 
 SERVER_DIR="${SERVER_DIR:-$DEFAULT_SERVER_DIR}"
 SERVER_USER="${SERVER_USER:-minecraft}"
+# If the configured server user does not exist, try to detect the directory owner
+if [ -d "$SERVER_DIR" ]; then
+    if ! id "$SERVER_USER" >/dev/null 2>&1; then
+        detected_owner=$(stat -c '%U' "$SERVER_DIR" 2>/dev/null || true)
+        if [ -n "$detected_owner" ]; then
+            SERVER_USER="$detected_owner"
+        fi
+    fi
+fi
 SCREEN_NAME="minecraft"
 START_SCRIPT="$SERVER_DIR/start-server.sh"
 BACKUP_SCRIPT="$SERVER_DIR/backup-cron.sh"
@@ -50,7 +59,7 @@ err() {
 }
 
 check_server_running() {
-    screen -list | grep -q "$SCREEN_NAME"
+    screen -S "$SCREEN_NAME" -Q select . >/dev/null 2>&1
 }
 
 get_prop() {
@@ -99,13 +108,13 @@ stop_server() {
         return 1
     fi
 
-    screen -S "$SCREEN_NAME" -p 0 -X stuff "say [Server] Reiniciando em 10 segundos...\n"
+    screen -S "$SCREEN_NAME" -p 0 -X stuff "say [Server] Reiniciando em 10 segundos...\n" >/dev/null 2>&1 || true
     sleep 5
-    screen -S "$SCREEN_NAME" -p 0 -X stuff "say [Server] 5 segundos...\n"
+    screen -S "$SCREEN_NAME" -p 0 -X stuff "say [Server] 5 segundos...\n" >/dev/null 2>&1 || true
     sleep 5
-    screen -S "$SCREEN_NAME" -p 0 -X stuff "save-all\n"
+    screen -S "$SCREEN_NAME" -p 0 -X stuff "save-all\n" >/dev/null 2>&1 || true
     sleep 2
-    screen -S "$SCREEN_NAME" -p 0 -X stuff "stop\n"
+    screen -S "$SCREEN_NAME" -p 0 -X stuff "stop\n" >/dev/null 2>&1 || true
 
     for _ in $(seq 1 60); do
         if ! check_server_running; then
@@ -116,7 +125,7 @@ stop_server() {
     done
 
     warn "Timeout na parada graciosa, forçando encerramento."
-    screen -S "$SCREEN_NAME" -X quit
+    screen -S "$SCREEN_NAME" -X quit >/dev/null 2>&1 || true
 }
 
 restart_server() {
@@ -132,8 +141,8 @@ status_server() {
         pid=$(pgrep -f "java.*server.jar" | head -n 1)
         if [ -n "$pid" ]; then
             echo "PID: $pid"
-            echo "CPU: $(ps -p "$pid" -o %cpu= | xargs)%"
-            echo "RAM: $(ps -p "$pid" -o rss= | awk '{printf \"%.1f MB\", $1/1024}')"
+            echo "CPU%: $(ps -p "$pid" -o %cpu= | xargs)%"
+            echo "RSS: $(ps -p "$pid" -o rss= | awk '{printf "%.1f MB", $1/1024}')"
             echo "Uptime: $(ps -p "$pid" -o etime= | xargs)"
         fi
     else
@@ -148,7 +157,7 @@ console_server() {
     fi
 
     echo "Saida do console: Ctrl+A, depois D"
-    screen -r "$SCREEN_NAME"
+    screen -r "$SCREEN_NAME" >/dev/null 2>&1 || true
 }
 
 send_command() {
@@ -165,7 +174,7 @@ send_command() {
         return 1
     fi
 
-    screen -S "$SCREEN_NAME" -p 0 -X stuff "$command\n"
+    screen -S "$SCREEN_NAME" -p 0 -X stuff "$command\n" >/dev/null 2>&1 || true
     log "Comando enviado: $command"
 }
 
@@ -204,7 +213,9 @@ reconfigure_hardware() {
 
     server_port=$(get_prop "server-port" "25565")
     online_mode=$(get_prop "online-mode" "false")
-    write_minecraft_server_properties "$PROPS_FILE" "$server_port" "$online_mode"
+    local current_motd
+    current_motd=$(get_prop "motd" "Servidor Minecraft")
+    write_minecraft_server_properties "$PROPS_FILE" "$server_port" "$online_mode" "$current_motd"
     write_minecraft_tuning_state "$TUNING_STATE"
 
     log "Reconfiguracao concluida."

@@ -22,6 +22,46 @@ if [ -f "$RUNTIME_ENV" ]; then
     source "$RUNTIME_ENV"
 fi
 
+normalize_mem_value() {
+    local value="$1"
+    local default_value="$2"
+
+    if [[ "$value" =~ ^[0-9]+M$ ]]; then
+        echo "$value"
+    else
+        echo "$default_value"
+    fi
+}
+
+normalize_int_value() {
+    local value="$1"
+    local default_value="$2"
+
+    if [[ "$value" =~ ^[0-9]+$ ]]; then
+        echo "$value"
+    else
+        echo "$default_value"
+    fi
+}
+
+MIN_RAM="$(normalize_mem_value "$MIN_RAM" "1024M")"
+MAX_RAM="$(normalize_mem_value "$MAX_RAM" "2048M")"
+GC_MAX_PAUSE="$(normalize_int_value "$GC_MAX_PAUSE" "200")"
+
+if ! [[ "$G1_REGION_SIZE" =~ ^[0-9]+M$ ]]; then
+    G1_REGION_SIZE="8M"
+fi
+
+min_ram_mb=${MIN_RAM%M}
+max_ram_mb=${MAX_RAM%M}
+
+if [ "$min_ram_mb" -ge "$max_ram_mb" ]; then
+    max_ram_mb=$((max_ram_mb > 1536 ? max_ram_mb : 2048))
+    min_ram_mb=$((max_ram_mb * 70 / 100))
+    MIN_RAM="${min_ram_mb}M"
+    MAX_RAM="${max_ram_mb}M"
+fi
+
 JAVA_OPTS=""
 JAVA_OPTS="$JAVA_OPTS -Xms${MIN_RAM}"
 JAVA_OPTS="$JAVA_OPTS -Xmx${MAX_RAM}"

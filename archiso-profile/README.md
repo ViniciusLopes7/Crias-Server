@@ -2,6 +2,13 @@
 
 Com essas configurações, você pode construir sua própria ISO Bootável que já contém todas as dependências pré-instaladas. Isso economiza muito tempo em formatações porque toda a base do sistema (Kernel Padrão Linux), dependências do Minecraft (Java 21, Screen, Tailscale, NetworkManager) já estarão embutidas e prontas na hora do Boot. 
 
+### Credenciais padrao do Live ISO
+
+- Usuario: `Server`
+- Senha: `crias`
+
+Tambem e definido `root` com senha `crias` para manutencao em TTY.
+
 ### Como Construir a Imagem .iso
 
 1. **Rodando a partir de um Arch Linux Hospedeiro**, instale a ferramenta de construção:

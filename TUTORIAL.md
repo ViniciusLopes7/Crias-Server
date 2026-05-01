@@ -92,8 +92,12 @@ source ~/.bashrc
 
 Atalhos mais usados:
 
-- mcstart, mcstatus, mclogs, mcconsole, mcbackup, mcreconfig
-- ttstart, ttstatus, ttlogs, ttconsole, ttbackup, ttreconfig
+- `mcstart`, `mclogs`, `mcconsole`, `mcbackup`, `mcreconfig`
+- `ttstart`, `ttlogs`, `ttconsole`, `ttbackup`, `ttreconfig`
+
+Observacao: os aliases que interagem com o processo do jogo (`mcconsole`, `mcbackup`, `mcreconfig`, `ttconsole`, `ttbackup`, `ttreconfig`) executam o gerenciador de runtime como o `MINECRAFT_USER`/`TERRARIA_USER` automaticamente (usando `sudo -u`). Isso evita problemas quando o nome do usuario do servidor foi alterado.
+
+`mcstatus`/`ttstatus` agora apresentam um resumo conciso via `mc-manager.sh status` / `tt-manager.sh status` em vez de `systemctl status`, tornando mais facil identificar PID, uso de CPU/RAM e uptime.
 
 ## 5. Backups
 
@@ -110,7 +114,13 @@ sudo /opt/minecraft-server/setup-cron.sh
 sudo /opt/terraria-server/setup-cron.sh
 ```
 
-## 6. Cleanup do stack oposto
+## 6. Restauração
+
+Se precisar voltar um mundo ou configuração, siga o runbook em:
+
+- [docs/shared/Restore.md](docs/shared/Restore.md)
+
+## 7. Cleanup do stack oposto
 
 Se habilitado, o instalador remove o stack nao selecionado.
 
@@ -123,7 +133,15 @@ Remocoes previstas:
 
 A remocao destrutiva exige confirmacao explicita.
 
-## 7. Estrutura sem legados
+## 8. Banner e identidade visual
+
+O instalador tenta exibir um banner customizado antes do header padrão. O arquivo é lido nesta ordem:
+
+- `assets/images/branding/banner.txt`
+- `assets/branding/banner.txt`
+- `/etc/crias/banner.txt`
+
+## 9. Estrutura sem legados
 
 Os scripts legados na raiz foram removidos para manter o repositorio limpo.
 

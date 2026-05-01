@@ -44,9 +44,13 @@ case "$choice" in
         ;;
 esac
 
-CRON_LINE="$CRON_EXPR $BACKUP_SCRIPT >> $LOG_FILE 2>&1"
+CRON_LINE="$CRON_EXPR $BACKUP_SCRIPT >> \"$LOG_FILE\" 2>&1"
+tmp_cron_file="$(mktemp)"
+trap 'rm -f "$tmp_cron_file"' EXIT
 
-( crontab -l 2>/dev/null | grep -v "$BACKUP_SCRIPT"; echo "$CRON_LINE" ) | crontab -
+crontab -l 2>/dev/null | grep -Fv "$BACKUP_SCRIPT" > "$tmp_cron_file" || true
+printf '%s\n' "$CRON_LINE" >> "$tmp_cron_file"
+crontab "$tmp_cron_file"
 
 echo -e "${GREEN}Backup configurado:${NC} $DESC"
 echo "Log: $LOG_FILE"

@@ -9,6 +9,19 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 print_header() {
+    # Try to display a repository banner if present, fallback to default header
+    local repo_root
+    repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+    local banner_paths=("$repo_root/assets/images/branding/banner.txt" "$repo_root/assets/branding/banner.txt" "/etc/crias/banner.txt")
+
+    for p in "${banner_paths[@]}"; do
+        if [ -f "$p" ]; then
+            cat "$p"
+            echo ""
+            return 0
+        fi
+    done
+
     echo "=========================================="
     echo "  Crias-Server Installer"
     echo "  Minecraft or Terraria"

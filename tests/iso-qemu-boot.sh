@@ -4,6 +4,7 @@ set -euo pipefail
 
 usage() {
     echo "Uso: $0 <caminho-da-iso> [timeout-segundos]" >&2
+    echo "Ou:  $0 --deep-smoke <caminho-da-iso> [timeout-segundos]" >&2
     echo "Ou:  $0 --analyze-log <arquivo-log>" >&2
 }
 
@@ -30,7 +31,7 @@ validate_qemu_log() {
         return 1
     fi
 
-    if ! grep -Eqi 'archiso login:|Welcome to .*Arch Linux|Reached target .*Multi-User|Reached target .*Login Prompts|Please configure the system|Please enter the new timezone|root@archiso' "$clean_log_file"; then
+    if ! grep -Eqi 'archiso login:|archlinux login:|[A-Za-z0-9._-]+ login:|Welcome to .*Arch Linux|Reached target .*Multi-User|Reached target .*Login Prompts|Please configure the system|Please enter the new timezone|root@archiso|Server@archiso' "$clean_log_file"; then
         echo "Sem marcador de boot completo detectado no log do QEMU." >&2
         return 1
     fi
@@ -64,6 +65,12 @@ if [ "${1:-}" = "--analyze-log" ]; then
     exit 0
 fi
 
+MODE="basic"
+if [ "${1:-}" = "--deep-smoke" ]; then
+    MODE="deep"
+    shift
+fi
+
 if [ "$#" -lt 1 ]; then
     usage
     exit 1
@@ -84,6 +91,11 @@ fi
 
 if ! command -v bsdtar >/dev/null 2>&1; then
     echo "bsdtar nao encontrado no ambiente." >&2
+    exit 1
+fi
+
+if [ "$MODE" = "deep" ] && ! command -v expect >/dev/null 2>&1; then
+    echo "expect nao encontrado no ambiente para --deep-smoke." >&2
     exit 1
 fi
 
@@ -182,20 +194,81 @@ else
     echo "[iso-qemu-boot] Params base via fallback de LABEL/UUID da ISO."
 fi
 echo "[iso-qemu-boot] Kernel cmdline: $kernel_cmdline"
-echo "[iso-qemu-boot] Boot smoke em QEMU (timeout=${BOOT_TIMEOUT}s)..."
+if [ "$MODE" = "deep" ]; then
+    echo "[iso-qemu-boot] Deep smoke em QEMU (login + comandos, timeout=${BOOT_TIMEOUT}s)..."
+else
+    echo "[iso-qemu-boot] Boot smoke em QEMU (timeout=${BOOT_TIMEOUT}s)..."
+fi
 
 set +e
-timeout "$BOOT_TIMEOUT" qemu-system-x86_64 \
-    -m 2048 \
-    -cdrom "$ISO_FILE" \
-    -kernel "$KERNEL_FILE" \
-    -initrd "$INITRAMFS_FILE" \
-    -append "$kernel_cmdline" \
-    -nographic \
-    -no-reboot \
-    -monitor none \
-    -serial stdio > "$LOG_FILE" 2>&1
-qemu_status=$?
+
+if [ "$MODE" = "deep" ]; then
+    export QEMU_BOOT_TIMEOUT="$BOOT_TIMEOUT"
+    export ISO_FILE
+    export KERNEL_FILE
+    export INITRAMFS_FILE
+    export KERNEL_CMDLINE="$kernel_cmdline"
+
+    timeout "$BOOT_TIMEOUT" expect <<'EOF' > "$LOG_FILE" 2>&1
+set timeout $env(QEMU_BOOT_TIMEOUT)
+log_user 1
+
+spawn qemu-system-x86_64 -m 2048 -cdrom $env(ISO_FILE) -kernel $env(KERNEL_FILE) -initrd $env(INITRAMFS_FILE) -append $env(KERNEL_CMDLINE) -nographic -no-reboot -monitor none -serial stdio
+
+expect {
+    -re {(?i)(archiso|archlinux|[A-Za-z0-9._-]+) login:} {}
+    timeout { send_user "Timeout aguardando prompt de login\n"; exit 21 }
+}
+
+send -- "Server\r"
+
+expect {
+    -re {(?i)password:} {}
+    timeout { send_user "Timeout aguardando prompt de senha\n"; exit 22 }
+}
+
+send -- "crias\r"
+
+expect {
+    -re {Server@.*[$#] } {}
+    -re {root@.*# } {}
+    timeout { send_user "Timeout aguardando shell apos login\n"; exit 23 }
+}
+
+send -- "id -un\r"
+expect {
+    -re {(\r\n|^)(Server|root)(\r\n|\n)} {}
+    timeout { send_user "Timeout validando comando id -un\n"; exit 24 }
+}
+
+send -- "test -x /root/.automated_script.sh; echo AUTOMATED_SCRIPT_OK:$?\r"
+expect {
+    -re {AUTOMATED_SCRIPT_OK:0} {}
+    timeout { send_user "Timeout validando /root/.automated_script.sh\n"; exit 25 }
+}
+
+send -- "exit\r"
+expect {
+    -re {(?i)(archiso|archlinux|[A-Za-z0-9._-]+) login:} { exit 0 }
+    eof { exit 0 }
+    timeout { exit 0 }
+}
+EOF
+    qemu_status=$?
+else
+    timeout "$BOOT_TIMEOUT" qemu-system-x86_64 \
+        -m 2048 \
+        -cdrom "$ISO_FILE" \
+        -kernel "$KERNEL_FILE" \
+        -initrd "$INITRAMFS_FILE" \
+        -append "$kernel_cmdline" \
+        -nographic \
+        -no-reboot \
+        -monitor none \
+        -serial stdio > "$LOG_FILE" 2>&1
+    qemu_status=$?
+fi
+
 set -e
 
 cp "$LOG_FILE" "$ROOT_DIR/qemu-boot.log" || true

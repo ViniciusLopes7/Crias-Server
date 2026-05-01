@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare pacman (init keys)
+        run: |
+          pacman-key --init || true
+          pacman-key --populate archlinux || true
+          pacman -Syu --noconfirm bash coreutils findutils gawk grep sed tar gzip unzip curl jq zstd
+
+      - name: Make test scripts executable
+        run: |
+          chmod +x tests/*.sh
+
+      - name: Run static audit
+        run: |
+          chmod +x tests/static-audit.sh
+          bash tests/static-audit.sh
+
+      - name: Run quick script tests
+        run: |
+          bash tests/quick-script-tests.sh
+
+      - name: Run smoke tests
+        run: |
+          bash tests/arch-smoke.sh
+
+      - name: Run contracts
+        run: |
+          bash tests/install-contracts.sh
+
+      - name: Run dry-install (long)
+        run: |
+          bash tests/arch-dry-install.sh

@@ -8,6 +8,15 @@ fi
 
 SERVER_DIR="${SERVER_DIR:-$DEFAULT_SERVER_DIR}"
 SERVER_USER="${SERVER_USER:-terraria}"
+# If the configured server user does not exist, try to detect the directory owner
+if [ -d "$SERVER_DIR" ]; then
+    if ! id "$SERVER_USER" >/dev/null 2>&1; then
+        detected_owner=$(stat -c '%U' "$SERVER_DIR" 2>/dev/null || true)
+        if [ -n "$detected_owner" ]; then
+            SERVER_USER="$detected_owner"
+        fi
+    fi
+fi
 SCREEN_NAME="terraria"
 START_SCRIPT="$SERVER_DIR/start-terraria.sh"
 BACKUP_SCRIPT="$SERVER_DIR/backup-cron.sh"
@@ -50,7 +59,7 @@ err() {
 }
 
 check_server_running() {
-    screen -list | grep -q "$SCREEN_NAME"
+    screen -S "$SCREEN_NAME" -Q select . >/dev/null 2>&1
 }
 
 get_cfg() {
@@ -99,11 +108,11 @@ stop_server() {
         return 1
     fi
 
-    screen -S "$SCREEN_NAME" -p 0 -X stuff "say [Server] Reiniciando em 5 segundos...\n"
+    screen -S "$SCREEN_NAME" -p 0 -X stuff "say [Server] Reiniciando em 5 segundos...\n" >/dev/null 2>&1 || true
     sleep 5
-    screen -S "$SCREEN_NAME" -p 0 -X stuff "save\n"
+    screen -S "$SCREEN_NAME" -p 0 -X stuff "save\n" >/dev/null 2>&1 || true
     sleep 2
-    screen -S "$SCREEN_NAME" -p 0 -X stuff "exit\n"
+    screen -S "$SCREEN_NAME" -p 0 -X stuff "exit\n" >/dev/null 2>&1 || true
 
     for _ in $(seq 1 60); do
         if ! check_server_running; then
@@ -114,7 +123,7 @@ stop_server() {
     done
 
     warn "Timeout na parada graciosa, forçando encerramento."
-    screen -S "$SCREEN_NAME" -X quit
+    screen -S "$SCREEN_NAME" -X quit >/dev/null 2>&1 || true
 }
 
 restart_server() {
@@ -130,8 +139,8 @@ status_server() {
         pid=$(pgrep -f "TerrariaServer.bin.x86_64" | head -n 1)
         if [ -n "$pid" ]; then
             echo "PID: $pid"
-            echo "CPU: $(ps -p "$pid" -o %cpu= | xargs)%"
-            echo "RAM: $(ps -p "$pid" -o rss= | awk '{printf \"%.1f MB\", $1/1024}')"
+            echo "CPU%: $(ps -p "$pid" -o %cpu= | xargs)%"
+            echo "RSS: $(ps -p "$pid" -o rss= | awk '{printf "%.1f MB", $1/1024}')"
             echo "Uptime: $(ps -p "$pid" -o etime= | xargs)"
         fi
     else
@@ -146,7 +155,7 @@ console_server() {
     fi
 
     echo "Saida do console: Ctrl+A, depois D"
-    screen -r "$SCREEN_NAME"
+    screen -r "$SCREEN_NAME" >/dev/null 2>&1 || true
 }
 
 send_command() {
@@ -163,7 +172,7 @@ send_command() {
         return 1
     fi
 
-    screen -S "$SCREEN_NAME" -p 0 -X stuff "$command\n"
+    screen -S "$SCREEN_NAME" -p 0 -X stuff "$command\n" >/dev/null 2>&1 || true
     log "Comando enviado: $command"
 }
 

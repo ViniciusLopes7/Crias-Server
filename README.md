@@ -93,6 +93,17 @@ Flags importantes no config.env:
 - NON_INTERACTIVE=true: desativa perguntas interativas.
 - DRY_RUN=true: evita operacoes destrutivas (pacman/useradd/systemd/cleanup).
 
+Downloads verificados (opcional):
+
+- MRPACK_SHA256: SHA256 esperado para o binario `mrpack-install` (opcional).
+- TERRARIA_SHA256: SHA256 esperado para o zip do servidor Terraria (opcional).
+- Forneca variaveis `*_SHA256` correspondentes para habilitar verificacao de checksum durante o instalador. Quando ausente, o instalador baixa e emite um aviso.
+ - Per-mod SHA variables: `MOD_<NAME>_SHA256` (e.g. `MOD_CHUNKY_SHA256`) can be provided to verify individual QoL mod downloads.
+ 
+Banner:
+
+- Coloque um arquivo `banner.txt` ASCII em `assets/branding/banner.txt` ou `/etc/crias/banner.txt` para mostrar um banner personalizado no instalador. Uma amostra `assets/branding/banner.txt` foi adicionada ao repositório.
+
 Dica para CI: use CONFIG_FILE apontando para um arquivo temporario, sem precisar alterar o config.env versionado.
 
 ## Atencao: limpeza do stack oposto
@@ -185,6 +196,7 @@ Exemplos rapidos:
 - docs/terraria/README.md
 - docs/shared/HardwareTuning.md
 - docs/shared/Cleanup.md
+- docs/shared/Restore.md
 
 ## CI no GitHub Actions
 
@@ -196,6 +208,8 @@ O workflow em .github/workflows/build-iso.yml agora roda:
 - smoke tests em container Arch Linux
 - dry-run de instalacao completa (Minecraft e Terraria) em container Arch Linux
 - build da ISO apenas se os testes passarem
+
+O repositório também inclui `tests/minecraft-tuning-test.sh` para validar alocação de memória e `tools/compare_reports.sh` para comparar os relatórios de auditoria em PDF quando disponíveis na workspace.
 
 ## Testes locais rapidos
 

@@ -7,6 +7,12 @@ clamp_value() {
     local min="$2"
     local max="$3"
 
+    # Ensure numeric
+    if ! [[ "$value" =~ ^-?[0-9]+$ ]]; then
+        echo "$min"
+        return 0
+    fi
+
     if [ "$value" -lt "$min" ]; then
         echo "$min"
         return 0
@@ -66,11 +72,21 @@ compute_minecraft_tuning() {
             ;;
     esac
 
+    # Normalize numeric inputs to avoid "integer expected" errors in comparisons
+    total_ram_mb="${total_ram_mb:-0}"
+    cpu_cores="${cpu_cores:-0}"
+    if ! [[ "$total_ram_mb" =~ ^[0-9]+$ ]]; then
+        total_ram_mb=0
+    fi
+    if ! [[ "$cpu_cores" =~ ^[0-9]+$ ]]; then
+        cpu_cores=0
+    fi
+
     xmx_mb=$((total_ram_mb - reserve_mb))
-    xmx_mb=$(clamp_value "$xmx_mb" 768 12288)
+    xmx_mb=$(clamp_value "$xmx_mb" 512 12288)
 
     xms_mb=$((xmx_mb * 70 / 100))
-    xms_mb=$(clamp_value "$xms_mb" 512 "$xmx_mb")
+    xms_mb=$(clamp_value "$xms_mb" 384 "$xmx_mb")
 
     if [ "$cpu_cores" -le 2 ] && [ "$MC_MAX_PLAYERS" -gt 10 ]; then
         MC_MAX_PLAYERS=10
@@ -105,13 +121,16 @@ compute_minecraft_tuning() {
         MC_BACKUP_RETENTION_DAYS=7
     fi
 
-    service_memory_mb=$((xmx_mb + 768))
-    if [ "$total_ram_mb" -gt 1024 ]; then
-        local max_allowed_mb
-        max_allowed_mb=$((total_ram_mb - 256))
-        service_memory_mb=$(clamp_value "$service_memory_mb" "$xmx_mb" "$max_allowed_mb")
+    service_memory_mb=$((xmx_mb + 512))
+    local min_allowed_mb
+    local max_allowed_mb
+    min_allowed_mb=$((xmx_mb + 128))
+    max_allowed_mb=$((total_ram_mb - 256))
+
+    if [ "$max_allowed_mb" -ge "$min_allowed_mb" ]; then
+        service_memory_mb=$(clamp_value "$service_memory_mb" "$min_allowed_mb" "$max_allowed_mb")
     else
-        service_memory_mb=$(clamp_value "$service_memory_mb" "$xmx_mb" "$xmx_mb")
+        service_memory_mb="$xmx_mb"
     fi
     MC_SERVICE_MEMORY_MAX_MB="$service_memory_mb"
 
@@ -146,12 +165,14 @@ write_minecraft_server_properties() {
     local file_path="$1"
     local server_port="$2"
     local online_mode="$3"
+    local motd="${4:-§6§l🏰 REINO DOS CRIAS 🏰\\n§eAdrenaline + QoL §7| §aA resenha nunca morre...§r}"
 
     cat > "$file_path" << EOF
 # Minecraft server properties
 server-port=$server_port
 server-ip=
 online-mode=$online_mode
+motd=$motd
 max-players=$MC_MAX_PLAYERS
 network-compression-threshold=256
 prevent-proxy-connections=false

@@ -71,7 +71,7 @@ apply_cpupower_tuning() {
     fi
 
     if [ -f /etc/default/cpupower ]; then
-        sed -i -E "s/^governor=.*/governor='$target_governor'/" /etc/default/cpupower || true
+        sed -i -E "s|^governor=.*|governor='$target_governor'|" /etc/default/cpupower || true
         systemctl enable cpupower >/dev/null 2>&1 || true
     fi
 }

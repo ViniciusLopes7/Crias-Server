@@ -23,6 +23,14 @@ if [ -f "$RUNTIME_ENV" ]; then
     source "$RUNTIME_ENV"
 fi
 
+if ! [[ "$BACKUP_RETENTION_DAYS" =~ ^[0-9]+$ ]]; then
+    BACKUP_RETENTION_DAYS="$RETENTION_DAYS"
+fi
+
+if ! [[ "$BACKUP_ZSTD_LEVEL" =~ ^-?[0-9]+$ ]]; then
+    BACKUP_ZSTD_LEVEL="$ZSTD_LEVEL"
+fi
+
 if [ -n "$BACKUP_RETENTION_DAYS" ]; then
     RETENTION_DAYS="$BACKUP_RETENTION_DAYS"
 fi
@@ -36,19 +44,23 @@ log() {
 }
 
 check_server_running() {
-    screen -list | grep -q "$SCREEN_NAME"
+    screen -S "$SCREEN_NAME" -Q select . >/dev/null 2>&1
+}
+
+escape_screen_message() {
+    printf '%s' "$1" | sed 's/[\\]/\\\\/g; s/"/\\"/g'
 }
 
 notify_server() {
     local message="$1"
     if check_server_running; then
-        screen -S "$SCREEN_NAME" -p 0 -X stuff "say $message\n"
+        screen -S "$SCREEN_NAME" -p 0 -X stuff "say $(escape_screen_message "$message")\n" >/dev/null 2>&1 || true
     fi
 }
 
 trigger_save() {
     if check_server_running; then
-        screen -S "$SCREEN_NAME" -p 0 -X stuff "save\n"
+        screen -S "$SCREEN_NAME" -p 0 -X stuff "save\n" >/dev/null 2>&1 || true
         sleep 3
     fi
 }
@@ -63,7 +75,7 @@ create_backup() {
 
     cd "$SERVER_DIR" || return 1
 
-    if ionice -c3 tar -I "zstd ${ZSTD_LEVEL}" -cf "$BACKUP_DIR/$BACKUP_NAME" "$(basename "$WORLDS_DIR")" "$(basename "$CONFIG_DIR")" 2>/dev/null; then
+    if ionice -c3 tar -I "zstd ${ZSTD_LEVEL}" -cf "$BACKUP_DIR/$BACKUP_NAME" "$(basename "$WORLDS_DIR")" "$(basename "$CONFIG_DIR")"; then
         log "Backup criado: $BACKUP_DIR/$BACKUP_NAME"
         return 0
     fi

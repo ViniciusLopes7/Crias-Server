@@ -20,6 +20,7 @@ OVERRIDABLE_VARS=(
     MINECRAFT_SERVER_DIR
     MINECRAFT_PORT
     MINECRAFT_ONLINE_MODE
+    MINECRAFT_MOTD
     MINECRAFT_VERSION
     MINECRAFT_LOADER
     MINECRAFT_INSTALL_MODPACK
@@ -81,6 +82,7 @@ MINECRAFT_USER="${MINECRAFT_USER:-minecraft}"
 MINECRAFT_SERVER_DIR="${MINECRAFT_SERVER_DIR:-/opt/minecraft-server}"
 MINECRAFT_PORT="${MINECRAFT_PORT:-25565}"
 MINECRAFT_ONLINE_MODE="${MINECRAFT_ONLINE_MODE:-false}"
+MINECRAFT_MOTD="${MINECRAFT_MOTD:-§6§l🏰 REINO DOS CRIAS 🏰\\n§eAdrenaline + QoL §7| §aA resenha nunca morre...§r}"
 MINECRAFT_VERSION="${MINECRAFT_VERSION:-1.21.11}"
 MINECRAFT_LOADER="${MINECRAFT_LOADER:-fabric}"
 MINECRAFT_INSTALL_MODPACK="${MINECRAFT_INSTALL_MODPACK:-true}"
@@ -174,6 +176,7 @@ prompt_minecraft_options() {
         ask_value "Usuario do Minecraft" "$MINECRAFT_USER" MINECRAFT_USER
         ask_value "Diretorio do Minecraft" "$MINECRAFT_SERVER_DIR" MINECRAFT_SERVER_DIR
         ask_value "Porta do Minecraft" "$MINECRAFT_PORT" MINECRAFT_PORT
+        ask_value "MOTD (Message of the Day)" "$MINECRAFT_MOTD" MINECRAFT_MOTD
         ask_value "Versao do Minecraft" "$MINECRAFT_VERSION" MINECRAFT_VERSION
         ask_value "Loader (fabric/quilt/paper/vanilla/forge/neoforge)" "$MINECRAFT_LOADER" MINECRAFT_LOADER
 
@@ -356,10 +359,7 @@ run_selected_stack_installer() {
         export MINECRAFT_SERVER_DIR
         export MINECRAFT_PORT
         export MINECRAFT_ONLINE_MODE
-        export MINECRAFT_VERSION
-        export MINECRAFT_LOADER
-        export MINECRAFT_INSTALL_MODPACK
-        export MINECRAFT_ADRENALINE_VERSION
+    export MINECRAFT_MOTD
         export MINECRAFT_INSTALL_QOL_MODS
         export FORCE_HARDWARE_TIER
         export APPLY_SYSTEM_TUNING
@@ -424,7 +424,7 @@ cleanup_stack_by_type() {
     fi
 
     if crontab -l >/dev/null 2>&1; then
-        (crontab -l 2>/dev/null | grep -v "$stack_dir/backup-cron.sh") | crontab - || true
+        (crontab -l 2>/dev/null | grep -Fv "$stack_dir/backup-cron.sh") | crontab - || true
     fi
 
     remove_alias_autoload_entry "$stack_dir/comandos.sh"

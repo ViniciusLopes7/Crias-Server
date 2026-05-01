@@ -569,29 +569,25 @@ Criar arquivo `/opt/minecraft-server/comandos.sh`:
 alias mcstart='sudo systemctl start minecraft'
 alias mcstop='sudo systemctl stop minecraft'
 alias mcrestart='sudo systemctl restart minecraft'
-alias mcstatus='sudo systemctl status minecraft'
+# concise status via manager (PID/CPU/RSS/Uptime)
+alias mcstatus='sudo -u minecraft /opt/minecraft-server/mc-manager.sh status'
 alias mclogs='sudo journalctl -u minecraft -f'
-alias mcconsole='sudo /opt/minecraft-server/mc-manager.sh console'
-alias mcbackup='sudo /opt/minecraft-server/mc-manager.sh backup'
-alias mcchunky='sudo /opt/minecraft-server/mc-manager.sh chunky'
-alias mctailscale='sudo tailscale status'
+# manager-run commands execute as the server user to avoid username mismatch issues
+alias mcconsole='sudo -u minecraft /opt/minecraft-server/mc-manager.sh console'
+alias mcbackup='sudo -u minecraft /opt/minecraft-server/mc-manager.sh backup'
 alias mcdir='cd /opt/minecraft-server'
 alias mcprops='sudo nano /opt/minecraft-server/server.properties'
-alias mcmod='sudo /opt/minecraft-server/mc-manager.sh mod'
 
 echo "Atalhos carregados:"
 echo "  mcstart    - Iniciar servidor"
 echo "  mcstop     - Parar servidor"
 echo "  mcrestart  - Reiniciar servidor"
-echo "  mcstatus   - Status do serviço"
-echo "  mclogs     - Ver logs"
-echo "  mcconsole  - Acessar console"
-echo "  mcbackup   - Fazer backup"
-echo "  mcchunky   - Menu do Chunky"
-echo "  mctailscale- Status do Tailscale"
+echo "  mcstatus   - Resumo via mc-manager.sh (PID/CPU/RSS/Uptime)"
+echo "  mclogs     - Ver logs do systemd"
+echo "  mcconsole  - Acessar console (executa como usuário do servidor)"
+echo "  mcbackup   - Fazer backup (executa como usuário do servidor)"
 echo "  mcdir      - Ir para a pasta do servidor"
 echo "  mcprops    - Editar server.properties"
-echo "  mcmod      - Gerenciar mods (add/remove/list)"
 ```
 
 ### 10.2 Uso dos Atalhos

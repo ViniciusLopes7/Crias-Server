@@ -29,4 +29,7 @@ grep -Fq 'archisosearchuuid=%ARCHISO_UUID%' archiso-profile/syslinux/syslinux.cf
 echo "[quick-script-tests] Validando parser de logs do QEMU..."
 bash tests/qemu-log-parser-test.sh
 
+echo "[quick-script-tests] Validando tuning do Minecraft..."
+bash tests/minecraft-tuning-test.sh
+
 echo "[quick-script-tests] OK"
