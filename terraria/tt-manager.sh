@@ -122,6 +122,7 @@ cmd_reconfigure_hardware() {
             ;;
     esac
 
+    # shellcheck disable=SC2016 # Intentional: script is passed literally to bash -c and expanded there
     run_as_server_user bash -c '
         set -euo pipefail
         SERVER_DIR="$1"

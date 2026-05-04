@@ -9,7 +9,6 @@ wait_for_network() {
     # On Arch live ISO, NetworkManager may take a moment to become active.
     if command -v systemctl >/dev/null 2>&1; then
         echo "Aguardando NetworkManager..."
-        local i
         for i in $(seq 1 20); do
             if systemctl is-active --quiet NetworkManager; then
                 break
