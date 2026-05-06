@@ -22,7 +22,7 @@ sudo /opt/terraria-server/tt-manager.sh reconfigure-hardware
 
 ## Aliases de comandos
 
-O instalador gera o arquivo abaixo com aliases prontos para operacao diaria e configura autoload automaticamente no ~/.bashrc do usuario operador:
+O instalador gera o arquivo abaixo com aliases prontos para operacao diaria e configura autoload automaticamente via /etc/profile.d/crias-server.sh:
 
 - /opt/terraria-server/comandos.sh
 
@@ -31,7 +31,7 @@ As entradas sao idempotentes (nao duplicam em reinstalacoes).
 Para usar imediatamente na sessao atual:
 
 ```bash
-source ~/.bashrc
+source /etc/profile.d/crias-server.sh
 ```
 
 Aliases disponiveis:

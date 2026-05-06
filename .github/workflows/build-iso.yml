@@ -71,7 +71,7 @@ jobs:
       options: --privileged
     steps:
       - name: Install CI dependencies
-        run: pacman -Syu --noconfirm git bash
+        run: pacman -S --needed --noconfirm git bash
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -93,7 +93,7 @@ jobs:
       options: --privileged
     steps:
       - name: Install dependencies
-        run: pacman -Syu --noconfirm archiso git grub
+        run: pacman -S --needed --noconfirm archiso git grub
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -101,6 +101,7 @@ jobs:
       - name: Build ISO
         run: |
           mkdir -p out
+          rm -rf /tmp/archiso-tmp
           mkarchiso -v -w /tmp/archiso-tmp -o out/ archiso-profile/
 
       - name: Upload ISO Artifact
@@ -119,7 +120,7 @@ jobs:
       options: --privileged
     steps:
       - name: Install validation dependencies
-        run: pacman -Syu --noconfirm git bash mkinitcpio libarchive squashfs-tools
+        run: pacman -S --needed --noconfirm git bash mkinitcpio libarchive squashfs-tools
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -244,6 +245,8 @@ jobs:
           (cd release-assets/_pkg/full && zip -qr ../../crias-server-full.zip .)
           (cd release-assets/_pkg/slim && zip -qr ../../crias-server-slim.zip .)
 
+          sha256sum release-assets/iso/*.iso release-assets/crias-server-full.zip release-assets/crias-server-slim.zip > release-assets/sha256sums.txt
+
       - name: Create and push tag
         run: |
           git config user.name "github-actions[bot]"
@@ -266,5 +269,6 @@ jobs:
             "${ISO_FILE}" \
             release-assets/crias-server-full.zip \
             release-assets/crias-server-slim.zip \
+            release-assets/sha256sums.txt \
             --title "Release ${{ steps.release_tag.outputs.tag }}" \
             --generate-notes

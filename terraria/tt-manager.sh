@@ -184,7 +184,7 @@ Comandos:
   logs                       Tail dos logs (journalctl)
   console                    Alias de logs
   backup                     Executa backup imediato
-  setup-cron                 Configura cron de backup para o usuario do servidor
+  setup-cron                 Configura timer systemd de backup
   reconfigure-hardware [TIER] Recalcula tuning (TIER: LOW|MID|HIGH ou vazio)
   hardware-report            Exibe perfil/tuning aplicado
 EOF

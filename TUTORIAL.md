@@ -80,14 +80,14 @@ sudo /opt/terraria-server/tt-manager.sh backup
 
 ### Aliases (opcional, recomendado)
 
-O instalador cria os arquivos de aliases e adiciona autoload no ~/.bashrc automaticamente.
+O instalador cria os arquivos de aliases e adiciona autoload automaticamente via /etc/profile.d/crias-server.sh.
 
 As entradas sao idempotentes (nao duplicam em reinstalacoes).
 
 Para usar imediatamente na sessao atual:
 
 ```bash
-source ~/.bashrc
+source /etc/profile.d/crias-server.sh
 ```
 
 Atalhos mais usados:

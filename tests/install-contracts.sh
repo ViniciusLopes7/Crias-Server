@@ -96,23 +96,65 @@ EOF
 
     SERVER_TYPE="terraria" CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1
 
-    if [ ! -f "$tt_dir/TerrariaServer.bin.x86_64" ]; then
-        echo "[install-contracts] Override de ambiente para SERVER_TYPE nao foi respeitado." >&2
-        cat "$log_file" >&2
-        exit 1
-    fi
-
-    if [ -d "$mc_dir" ]; then
-        echo "[install-contracts] Diretorio Minecraft nao deveria ser criado no teste de precedencia." >&2
-        cat "$log_file" >&2
-        exit 1
-    fi
-
     if ! grep -q 'Stack selecionado: terraria' "$log_file"; then
         echo "[install-contracts] Log nao confirma stack terraria no teste de precedencia." >&2
         cat "$log_file" >&2
         exit 1
     fi
+
+    if ! grep -q 'Instalacao concluida para stack: terraria' "$log_file"; then
+        echo "[install-contracts] Log nao confirma conclusao do stack terraria no teste de precedencia." >&2
+        cat "$log_file" >&2
+        exit 1
+    fi
+
+    if [ -e "$mc_dir" ] || [ -e "$tt_dir" ]; then
+        echo "[install-contracts] DRY_RUN nao deveria criar diretorios de instalacao no teste de precedencia." >&2
+        cat "$log_file" >&2
+        exit 1
+    fi
+}
+
+run_config_parsing_contract() {
+    local cfg_file="$TMP_TEST_DIR/config-parsing.env"
+
+    cat > "$cfg_file" << 'EOF'
+SERVER_TYPE="minecraft"
+NON_INTERACTIVE="true"
+DRY_RUN="true"
+INSTALL_TAILSCALE="false"
+APPLY_SYSTEM_TUNING="false"
+CLEANUP_OTHER_STACK="false"
+MINECRAFT_MOTD="Servidor Crias com espacos"
+TERRARIA_MOTD='Terraria com aspas simples e espacos'
+TERRARIA_WORLD_NAME="Mundo do Crias"
+EOF
+
+    (
+        # shellcheck source=/dev/null
+        source ./install.sh
+        CONFIG_FILE="$cfg_file"
+        MINECRAFT_MOTD=""
+        TERRARIA_MOTD=""
+        TERRARIA_WORLD_NAME=""
+
+        load_config_file
+
+        if [ "$MINECRAFT_MOTD" != "Servidor Crias com espacos" ]; then
+            echo "[install-contracts] MOTD do Minecraft nao preservou espacos/aspas." >&2
+            exit 1
+        fi
+
+        if [ "$TERRARIA_MOTD" != "Terraria com aspas simples e espacos" ]; then
+            echo "[install-contracts] MOTD do Terraria nao preservou aspas simples." >&2
+            exit 1
+        fi
+
+        if [ "$TERRARIA_WORLD_NAME" != "Mundo do Crias" ]; then
+            echo "[install-contracts] Nome do mundo do Terraria nao preservou espacos." >&2
+            exit 1
+        fi
+    )
 }
 
 echo "[install-contracts] Validando falha rapida para configuracoes invalidas..."
@@ -121,5 +163,8 @@ run_invalid_server_type_contract
 
 echo "[install-contracts] Validando precedencia de variaveis de ambiente..."
 run_env_override_precedence_contract
+
+echo "[install-contracts] Validando parse de valores com espacos e aspas..."
+run_config_parsing_contract
 
 echo "[install-contracts] OK"

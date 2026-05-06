@@ -4,7 +4,7 @@
     <img src="assets/images/branding/EscudoCrias.png" alt="Escudo Crias" width="220" />
 </p>
 
-Instalador modular para servidor de jogos em Arch Linux, com escolha inicial entre Minecraft e Terraria, tuning automatico por hardware e limpeza segura do stack nao selecionado.
+Instalador modular para servidor de jogos em Arch Linux, com escolha inicial entre Minecraft e Terraria, tuning automatico por hardware e desativacao nao destrutiva do stack nao selecionado.
 
 ## Principais recursos
 
@@ -13,7 +13,7 @@ Instalador modular para servidor de jogos em Arch Linux, com escolha inicial ent
 - Camada compartilhada com deteccao de hardware (CPU/RAM/disco).
 - Tuning automatico por tier (LOW/MID/HIGH) com override manual opcional.
 - Comando de recalibracao de hardware apos instalacao.
-- Limpeza agressiva do stack oposto com confirmacao explicita.
+- Limpeza nao destrutiva do stack oposto com confirmacao explicita.
 - Modo nao interativo e DRY_RUN para testes de instalacao em CI.
 
 ## Estrutura do projeto
@@ -92,6 +92,7 @@ Flags importantes no config.env:
 
 - NON_INTERACTIVE=true: desativa perguntas interativas.
 - DRY_RUN=true: evita operacoes destrutivas (pacman/useradd/systemd/cleanup).
+- O arquivo usa formato shell `CHAVE=valor`; use aspas quando o valor tiver espacos ou caracteres especiais.
 
 Downloads verificados (opcional):
 
@@ -106,16 +107,11 @@ Banner:
 
 Dica para CI: use CONFIG_FILE apontando para um arquivo temporario, sem precisar alterar o config.env versionado.
 
-## Atencao: limpeza do stack oposto
+## Atencao: desativacao do stack oposto
 
-Durante a instalacao, se existir stack oposto no host, o instalador pode remover:
+Durante a instalacao, se existir stack oposto no host, o instalador apenas desativa os servicos associados e remove o autoload de aliases correspondente.
 
-- Servico systemd do stack oposto
-- Usuario do sistema do stack oposto
-- Diretorio do servidor em /opt
-- Entrada de cron de backup relacionada
-
-A remocao so acontece com confirmacao explicita.
+Nao ha remoção de dados em `/opt` nem exclusao de usuario sem acao explicita fora do fluxo padrao.
 
 ## Tuning por hardware
 
@@ -171,7 +167,7 @@ Terraria:
 
 ## Aliases de comandos
 
-Durante a instalacao, cada stack gera um arquivo de aliases e o instalador configura o autoload automaticamente no ~/.bashrc do usuario operador:
+Durante a instalacao, cada stack gera um arquivo de aliases e o instalador configura o autoload automaticamente via `/etc/profile.d/crias-server.sh`:
 
 - /opt/minecraft-server/comandos.sh
 - /opt/terraria-server/comandos.sh
@@ -181,7 +177,7 @@ As entradas sao idempotentes (nao duplicam linhas em reinstalacoes).
 Para usar imediatamente na sessao atual:
 
 ```bash
-source ~/.bashrc
+source /etc/profile.d/crias-server.sh
 ```
 
 Exemplos rapidos:

@@ -29,35 +29,35 @@ set_readahead_kb() {
 }
 
 apply_block_device_tuning() {
-    local device
+    local device="${1:-}"
     local rotational
 
-    for device_path in /sys/block/*; do
-        device=$(basename "$device_path")
+    if [ -z "$device" ]; then
+        return 0
+    fi
 
-        if [ ! -r "$device_path/queue/rotational" ]; then
-            continue
-        fi
+    if [[ "$device" == loop* ]] || [[ "$device" == ram* ]]; then
+        return 0
+    fi
 
-        rotational=$(cat "$device_path/queue/rotational" 2>/dev/null)
+    if [ ! -r "/sys/block/$device/queue/rotational" ]; then
+        return 0
+    fi
 
-        if [[ "$device" == loop* ]] || [[ "$device" == ram* ]]; then
-            continue
-        fi
+    rotational=$(cat "/sys/block/$device/queue/rotational" 2>/dev/null)
 
-        if [[ "$device" == nvme* ]]; then
-            set_readahead_kb "$device" 1024
-            continue
-        fi
+    if [[ "$device" == nvme* ]]; then
+        set_readahead_kb "$device" 1024
+        return 0
+    fi
 
-        if [ "$rotational" = "1" ]; then
-            set_scheduler_if_supported "$device" "bfq"
-            set_readahead_kb "$device" 4096
-        else
-            set_scheduler_if_supported "$device" "mq-deadline"
-            set_readahead_kb "$device" 2048
-        fi
-    done
+    if [ "$rotational" = "1" ]; then
+        set_scheduler_if_supported "$device" "bfq"
+        set_readahead_kb "$device" 4096
+    else
+        set_scheduler_if_supported "$device" "mq-deadline"
+        set_readahead_kb "$device" 2048
+    fi
 }
 
 apply_cpupower_tuning() {
@@ -66,6 +66,23 @@ apply_cpupower_tuning() {
 
     if [ "$tier" = "MID" ] || [ "$tier" = "HIGH" ]; then
         target_governor="performance"
+    fi
+
+    if [ "$target_governor" = "performance" ]; then
+        local battery_status_file
+        local battery_status
+
+        for battery_status_file in /sys/class/power_supply/BAT*/status; do
+            if [ ! -r "$battery_status_file" ]; then
+                continue
+            fi
+
+            battery_status=$(tr -d '[:space:]' < "$battery_status_file" 2>/dev/null || true)
+            if [ "$battery_status" = "Discharging" ]; then
+                target_governor="ondemand"
+                break
+            fi
+        done
     fi
 
     if command -v cpupower >/dev/null 2>&1; then
@@ -86,15 +103,16 @@ apply_cpupower_tuning() {
 
 apply_nofile_limit() {
     local server_user="$1"
+    local limits_conf="/etc/security/limits.d/99-crias-gameserver.conf"
 
     if [ -z "$server_user" ]; then
         return 0
     fi
 
-    if ! grep -q "^${server_user} soft nofile" /etc/security/limits.conf; then
-        echo "${server_user} soft nofile 65536" >> /etc/security/limits.conf
-        echo "${server_user} hard nofile 65536" >> /etc/security/limits.conf
-    fi
+    cat > "$limits_conf" << EOF
+${server_user} soft nofile 65536
+${server_user} hard nofile 65536
+EOF
 }
 
 apply_zram_and_sysctl_tuning() {
@@ -110,14 +128,20 @@ apply_zram_and_sysctl_tuning() {
     fi
 
     if [ "$total_ram_mb" -le 4096 ]; then
-        zram_size_mb="$total_ram_mb"
-        swappiness=180
+        zram_size_mb=$((total_ram_mb / 2))
+        if [ "$zram_size_mb" -lt 1024 ]; then
+            zram_size_mb=1024
+        fi
+        swappiness=60
     elif [ "$total_ram_mb" -le 8192 ]; then
-        zram_size_mb=4096
-        swappiness=120
+        zram_size_mb=$((total_ram_mb / 2))
+        if [ "$zram_size_mb" -gt 4096 ]; then
+            zram_size_mb=4096
+        fi
+        swappiness=40
     else
         zram_size_mb=2048
-        swappiness=80
+        swappiness=20
     fi
 
     backup_suffix="$(date +%Y%m%d-%H%M%S 2>/dev/null || true)"
@@ -156,6 +180,10 @@ apply_common_system_tuning() {
     local tier="$2"
     local total_ram_mb="$3"
 
+    if dry_run_enabled; then
+        return 0
+    fi
+
     # Scope guard: avoid host-wide changes unless explicitly allowed.
     # host = apply sysctl/zram/scheduler/cpupower; anything else skips.
     local scope="${SYSTEM_TUNING_SCOPE:-host}"
@@ -163,7 +191,8 @@ apply_common_system_tuning() {
         return 0
     fi
 
+    apply_nofile_limit "$server_user"
     apply_zram_and_sysctl_tuning "$total_ram_mb"
-    apply_block_device_tuning
+    apply_block_device_tuning "${HW_TARGET_DEVICE:-}"
     apply_cpupower_tuning "$tier"
 }

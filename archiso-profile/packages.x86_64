@@ -19,13 +19,11 @@ usbutils
 # Networking
 networkmanager
 tailscale
-openssh
 curl
 wget
 
 # Minecraft Dependencies
 jdk21-openjdk
-screen
 tar
 gzip
 zstd

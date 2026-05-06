@@ -34,7 +34,7 @@ sudo pacman -Syu
 sudo pacman -S jdk21-openjdk
 
 # Ferramentas úteis
-sudo pacman -S screen htop iotop nano curl wget tar gzip base-devel
+sudo pacman -S htop iotop nano curl wget tar gzip jq zram-generator cpupower lm_sensors
 
 # Verificar instalação do Java
 java -version
@@ -42,16 +42,13 @@ java -version
 
 ### 1.3 Criar Usuário Dedicado (Recomendado)
 ```bash
-sudo useradd -m -s /bin/bash minecraft
-sudo passwd minecraft
-sudo usermod -aG wheel minecraft
+sudo useradd -r -M -s /usr/bin/nologin -d /opt/minecraft-server minecraft
 ```
 
 ### 1.4 Configurar Diretórios
 ```bash
 sudo mkdir -p /opt/minecraft-server
 sudo chown minecraft:minecraft /opt/minecraft-server
-su - minecraft
 cd /opt/minecraft-server
 ```
 
@@ -508,13 +505,13 @@ Description=Minecraft Server (Adrenaline + QoL)
 After=network.target
 
 [Service]
-Type=forking
+Type=simple
 User=minecraft
 Group=minecraft
 WorkingDirectory=/opt/minecraft-server
 
-# Comando de inicialização usando screen
-ExecStart=/usr/bin/screen -dmS minecraft /opt/minecraft-server/start-server.sh
+# Comando de inicialização direto pelo script do servidor
+ExecStart=/opt/minecraft-server/start-server.sh
 
 # Comando de parada
 ExecStop=/opt/minecraft-server/mc-manager.sh stop
@@ -531,12 +528,20 @@ StartLimitBurst=3
 # Limites de recursos
 LimitNOFILE=65536
 LimitNPROC=4096
+MemorySwapMax=0
 
 # Prioridade de CPU
 Nice=-5
 
 # OOM killer - não matar o servidor facilmente
 OOMScoreAdjust=-800
+
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+Conflicts=terraria.service
+ReadWritePaths=/opt/minecraft-server
 
 # Ambiente
 Environment="JAVA_HOME=/usr/lib/jvm/java-21-openjdk"
@@ -651,15 +656,11 @@ mcchunky
 
 ## 12. Backup Automático
 
-### 12.1 Configurar Cron
+### 12.1 Configurar Timer systemd
 ```bash
 sudo /opt/minecraft-server/setup-cron.sh
-```
-
-Ou manualmente:
-```bash
-sudo crontab -e
-# Adicionar: 0 3 * * * /opt/minecraft-server/backup-cron.sh
+sudo systemctl enable --now minecraft-backup.timer
+journalctl -u minecraft-backup.service -f
 ```
 
 ### 12.2 Retenção

@@ -14,6 +14,7 @@ source "$ROOT_DIR/tests/lib/assert.sh"
 run_minecraft_dry_install() {
     local server_dir="$TMP_TEST_DIR/minecraft"
     local cfg_file="$TMP_TEST_DIR/minecraft.env"
+    local log_file="$TMP_TEST_DIR/minecraft-dry.log"
 
     rm -rf "$server_dir"
 
@@ -35,59 +36,32 @@ MINECRAFT_INSTALL_MODPACK="true"
 MINECRAFT_INSTALL_QOL_MODS="true"
 EOF
 
-    CONFIG_FILE="$cfg_file" bash ./install.sh
+    CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1
 
-    assert_file "$server_dir/server.jar"
-    assert_file "$server_dir/eula.txt"
-    assert_file "$server_dir/server.properties"
-    assert_file "$server_dir/runtime.env"
-    assert_file "$server_dir/hardware-profile.env"
-    assert_file "$server_dir/start-server.sh"
-    assert_file "$server_dir/mc-manager.sh"
-    assert_file "$server_dir/backup-cron.sh"
-    assert_file "$server_dir/setup-cron.sh"
-    assert_file "$server_dir/.shared/common.sh"
-    assert_file "$server_dir/.shared/minecraft-tuning.sh"
-    assert_not_grep 'screen -S "' "$server_dir/backup-cron.sh"
-    assert_file "$server_dir/minecraft.service.rendered"
-    assert_file "$server_dir/comandos.sh"
+    assert_grep 'Modo DRY_RUN ativo: nenhuma alteracao destrutiva no host sera aplicada\.' "$log_file"
+    assert_grep 'Stack selecionado: minecraft' "$log_file"
 
-    assert_executable "$server_dir/start-server.sh"
-    assert_executable "$server_dir/mc-manager.sh"
-    assert_executable "$server_dir/backup-cron.sh"
-    assert_executable "$server_dir/setup-cron.sh"
-    assert_executable "$server_dir/comandos.sh"
+    if [ -e "$server_dir" ]; then
+        echo "[arch-dry-install] DRY_RUN nao deveria criar o diretorio do Minecraft." >&2
+        cat "$log_file" >&2
+        exit 1
+    fi
 
-    assert_grep "stat -c '%U'" "$server_dir/mc-manager.sh"
+    assert_bash_syntax "$ROOT_DIR/minecraft/install.sh"
+    assert_bash_syntax "$ROOT_DIR/minecraft/start-server.sh"
+    assert_bash_syntax "$ROOT_DIR/minecraft/mc-manager.sh"
+    assert_bash_syntax "$ROOT_DIR/minecraft/backup-cron.sh"
+    assert_bash_syntax "$ROOT_DIR/minecraft/setup-cron.sh"
 
-    assert_bash_syntax "$server_dir/start-server.sh"
-    assert_bash_syntax "$server_dir/mc-manager.sh"
-    assert_bash_syntax "$server_dir/backup-cron.sh"
-    assert_bash_syntax "$server_dir/setup-cron.sh"
-    assert_bash_syntax "$server_dir/comandos.sh"
-
-    assert_grep 'User=minecraft-ci' "$server_dir/minecraft.service.rendered"
-    assert_grep '^Type=simple$' "$server_dir/minecraft.service.rendered"
-    assert_not_grep 'screen -dmS|SCREENDIR=' "$server_dir/minecraft.service.rendered"
-    assert_grep 'MemoryMax=' "$server_dir/minecraft.service.rendered"
-    assert_not_grep '__SERVER_USER__|__SERVER_DIR__|__MEMORY_MAX_MB__' "$server_dir/minecraft.service.rendered"
-
-    assert_grep '^MIN_RAM="[0-9]+M"$' "$server_dir/runtime.env"
-    assert_grep '^MAX_RAM="[0-9]+M"$' "$server_dir/runtime.env"
-    assert_grep '^GC_MAX_PAUSE="[0-9]+"$' "$server_dir/runtime.env"
-    assert_grep '^HW_TIER="(LOW|MID|HIGH)"$' "$server_dir/hardware-profile.env"
-    assert_grep '^MC_SERVICE_MEMORY_MAX_MB="[0-9]+"$' "$server_dir/hardware-profile.env"
-    assert_grep '^MIN_RAM="[0-9]+M"$' "$server_dir/runtime.env"
-    assert_grep '^MAX_RAM="[0-9]+M"$' "$server_dir/runtime.env"
-    assert_grep '^GC_MAX_PAUSE="[0-9]+"$' "$server_dir/runtime.env"
-
-    assert_grep '^alias mcstart=' "$server_dir/comandos.sh"
-    assert_grep '^alias mcreconfig=' "$server_dir/comandos.sh"
+    assert_grep '^alias mcstart=' "$ROOT_DIR/minecraft/install.sh"
+    assert_grep '^alias mcreconfig=' "$ROOT_DIR/minecraft/install.sh"
+    assert_grep "stat -c '%U'" "$ROOT_DIR/minecraft/mc-manager.sh"
 }
 
 run_terraria_dry_install() {
     local server_dir="$TMP_TEST_DIR/terraria"
     local cfg_file="$TMP_TEST_DIR/terraria.env"
+    local log_file="$TMP_TEST_DIR/terraria-dry.log"
 
     rm -rf "$server_dir"
 
@@ -107,54 +81,26 @@ TERRARIA_MOTD="Servidor Terraria CI"
 TERRARIA_DOWNLOAD_URL="https://example.invalid/terraria.zip"
 EOF
 
-    CONFIG_FILE="$cfg_file" bash ./install.sh
+    CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1
 
-    assert_file "$server_dir/TerrariaServer.bin.x86_64"
-    assert_file "$server_dir/config/serverconfig.txt"
-    assert_file "$server_dir/runtime.env"
-    assert_file "$server_dir/hardware-profile.env"
-    assert_file "$server_dir/start-terraria.sh"
-    assert_file "$server_dir/tt-manager.sh"
-    assert_file "$server_dir/backup-cron.sh"
-    assert_file "$server_dir/setup-cron.sh"
-    assert_file "$server_dir/.shared/common.sh"
-    assert_file "$server_dir/.shared/terraria-tuning.sh"
-    assert_not_grep 'screen -S "' "$server_dir/backup-cron.sh"
-    assert_file "$server_dir/terraria.service.rendered"
-    assert_file "$server_dir/comandos.sh"
+    assert_grep 'Modo DRY_RUN ativo: nenhuma alteracao destrutiva no host sera aplicada\.' "$log_file"
+    assert_grep 'Stack selecionado: terraria' "$log_file"
 
-    assert_executable "$server_dir/start-terraria.sh"
-    assert_executable "$server_dir/tt-manager.sh"
-    assert_executable "$server_dir/backup-cron.sh"
-    assert_executable "$server_dir/setup-cron.sh"
-    assert_executable "$server_dir/comandos.sh"
+    if [ -e "$server_dir" ]; then
+        echo "[arch-dry-install] DRY_RUN nao deveria criar o diretorio do Terraria." >&2
+        cat "$log_file" >&2
+        exit 1
+    fi
 
-    assert_bash_syntax "$server_dir/start-terraria.sh"
-    assert_bash_syntax "$server_dir/tt-manager.sh"
-    assert_bash_syntax "$server_dir/backup-cron.sh"
-    assert_bash_syntax "$server_dir/setup-cron.sh"
-    assert_bash_syntax "$server_dir/comandos.sh"
+    assert_bash_syntax "$ROOT_DIR/terraria/install.sh"
+    assert_bash_syntax "$ROOT_DIR/terraria/start-terraria.sh"
+    assert_bash_syntax "$ROOT_DIR/terraria/tt-manager.sh"
+    assert_bash_syntax "$ROOT_DIR/terraria/backup-cron.sh"
+    assert_bash_syntax "$ROOT_DIR/terraria/setup-cron.sh"
 
-    assert_grep "stat -c '%U'" "$server_dir/tt-manager.sh"
-
-    assert_grep 'User=terraria-ci' "$server_dir/terraria.service.rendered"
-    assert_grep '^Type=simple$' "$server_dir/terraria.service.rendered"
-    assert_not_grep 'screen -dmS|SCREENDIR=' "$server_dir/terraria.service.rendered"
-    assert_grep 'MemoryMax=' "$server_dir/terraria.service.rendered"
-    assert_not_grep '__SERVER_USER__|__SERVER_DIR__|__MEMORY_MAX_MB__' "$server_dir/terraria.service.rendered"
-
-    assert_grep '^maxplayers=' "$server_dir/config/serverconfig.txt"
-    assert_grep '^port=7777$' "$server_dir/config/serverconfig.txt"
-
-    assert_grep '^BACKUP_RETENTION_DAYS="[0-9]+"$' "$server_dir/runtime.env"
-    assert_grep '^BACKUP_ZSTD_LEVEL="-?[0-9]+"$' "$server_dir/runtime.env"
-    assert_grep '^HW_TIER="(LOW|MID|HIGH)"$' "$server_dir/hardware-profile.env"
-    assert_grep '^TT_SERVICE_MEMORY_MAX_MB="[0-9]+"$' "$server_dir/hardware-profile.env"
-    assert_grep '^BACKUP_RETENTION_DAYS="[0-9]+"$' "$server_dir/runtime.env"
-    assert_grep '^BACKUP_ZSTD_LEVEL="-?[0-9]+"$' "$server_dir/runtime.env"
-
-    assert_grep '^alias ttstart=' "$server_dir/comandos.sh"
-    assert_grep '^alias ttreconfig=' "$server_dir/comandos.sh"
+    assert_grep '^alias ttstart=' "$ROOT_DIR/terraria/install.sh"
+    assert_grep '^alias ttreconfig=' "$ROOT_DIR/terraria/install.sh"
+    assert_grep "stat -c '%U'" "$ROOT_DIR/terraria/tt-manager.sh"
 }
 
 echo "[arch-dry-install] Iniciando dry-run de instalacao Minecraft..."

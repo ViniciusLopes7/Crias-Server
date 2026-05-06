@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -u
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_SERVER_DIR="$SCRIPT_DIR"
@@ -24,10 +24,23 @@ if [ ! -f "$CONFIG_FILE" ]; then
     exit 1
 fi
 
+SERVER_PORT="$(grep -E '^port=' "$CONFIG_FILE" 2>/dev/null | tail -n 1 | cut -d'=' -f2- || true)"
+if ! [[ "$SERVER_PORT" =~ ^[0-9]+$ ]]; then
+    SERVER_PORT=7777
+fi
+
+if command -v ss >/dev/null 2>&1; then
+    if ss -H -tln | awk -v port=":$SERVER_PORT" '$4 ~ port { found=1 } END { exit found ? 0 : 1 }'; then
+        echo "ERRO: Porta $SERVER_PORT ja esta em uso. Ajuste port em $CONFIG_FILE."
+        exit 1
+    fi
+fi
+
 echo "=========================================="
 echo "Terraria Dedicated Server"
 echo "Diretorio: $SERVER_DIR"
 echo "Config: $CONFIG_FILE"
+echo "Porta: $SERVER_PORT"
 echo "=========================================="
 
 exec "$SERVER_BIN" -config "$CONFIG_FILE"

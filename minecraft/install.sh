@@ -35,9 +35,6 @@ install_minecraft_dependencies() {
         return 0
     fi
 
-    print_step "Sincronizando repositorios..."
-    pacman -Sy --noconfirm
-
     print_step "Instalando dependencias do Minecraft..."
     pacman -S --needed --noconfirm \
         jdk21-openjdk \
@@ -49,26 +46,22 @@ install_minecraft_dependencies() {
         tar \
         gzip \
         unzip \
-        base-devel \
         zram-generator \
         cpupower \
         lm_sensors \
-        openssh \
         jq
-
-    systemctl enable --now sshd >/dev/null 2>&1 || true
 }
 
 create_minecraft_user_and_dirs() {
     print_step "Garantindo usuario e diretorio do Minecraft..."
 
     if is_true "$DRY_RUN"; then
-        mkdir -p "$MINECRAFT_SERVER_DIR"
+        print_step "[DRY_RUN] Pulando criacao do usuario e diretorio do Minecraft."
         return 0
     fi
 
     if ! id "$MINECRAFT_USER" >/dev/null 2>&1; then
-        useradd -m -s /bin/bash "$MINECRAFT_USER"
+        useradd -r -M -s /usr/bin/nologin -d "$MINECRAFT_SERVER_DIR" "$MINECRAFT_USER"
     fi
 
     mkdir -p "$MINECRAFT_SERVER_DIR"
@@ -101,9 +94,7 @@ install_minecraft_base() {
     print_step "Instalando base do servidor Minecraft..."
 
     if is_true "$DRY_RUN"; then
-        mkdir -p "$MINECRAFT_SERVER_DIR"
-        touch "$MINECRAFT_SERVER_DIR/server.jar"
-        echo "eula=true" > "$MINECRAFT_SERVER_DIR/eula.txt"
+        print_step "[DRY_RUN] Pulando instalacao base do Minecraft."
         return 0
     fi
 
@@ -159,13 +150,13 @@ install_minecraft_qol_mods() {
         return 0
     fi
 
-    print_step "Instalando mods QoL..."
-    mkdir -p "$MINECRAFT_SERVER_DIR/mods"
-
     if is_true "$DRY_RUN"; then
-        touch "$MINECRAFT_SERVER_DIR/mods/qol-dry-run.txt"
+        print_step "[DRY_RUN] Pulando instalacao dos mods QoL do Minecraft."
         return 0
     fi
+
+    print_step "Instalando mods QoL..."
+    mkdir -p "$MINECRAFT_SERVER_DIR/mods"
 
     download_qol_mod "chunky" "chunky"
     download_qol_mod "essential-commands" "essential-commands"
@@ -177,10 +168,10 @@ install_minecraft_qol_mods() {
 }
 
 write_minecraft_extra_configs() {
-    mkdir -p "$MINECRAFT_SERVER_DIR/config/essentialcommands" "$MINECRAFT_SERVER_DIR/config/universal_graves"
+    run_or_dry_run "Criando diretorios de configuracao do Minecraft" mkdir -p "$MINECRAFT_SERVER_DIR/config/essentialcommands" "$MINECRAFT_SERVER_DIR/config/universal_graves"
 
     if [ ! -f "$MINECRAFT_SERVER_DIR/config/essentialcommands/config.toml" ]; then
-        cat > "$MINECRAFT_SERVER_DIR/config/essentialcommands/config.toml" << 'EOF'
+        write_file_or_dry_run "Gerando config do Essential Commands em $MINECRAFT_SERVER_DIR/config/essentialcommands/config.toml" "$MINECRAFT_SERVER_DIR/config/essentialcommands/config.toml" << 'EOF'
 [teleportation]
 allow_teleport_between_dimensions = true
 teleport_request_timeout_seconds = 120
@@ -209,7 +200,7 @@ EOF
     fi
 
     if [ ! -f "$MINECRAFT_SERVER_DIR/config/universal_graves/config.json" ]; then
-        cat > "$MINECRAFT_SERVER_DIR/config/universal_graves/config.json" << 'EOF'
+        write_file_or_dry_run "Gerando config do Universal Graves em $MINECRAFT_SERVER_DIR/config/universal_graves/config.json" "$MINECRAFT_SERVER_DIR/config/universal_graves/config.json" << 'EOF'
 {
   "protection_time": 300,
   "breaking_time": 1800,
@@ -243,25 +234,27 @@ configure_minecraft_runtime() {
 deploy_minecraft_scripts() {
     print_step "Copiando scripts do modulo Minecraft..."
 
-    cp "$MODULE_DIR/start-server.sh" "$MINECRAFT_SERVER_DIR/start-server.sh"
-    cp "$MODULE_DIR/mc-manager.sh" "$MINECRAFT_SERVER_DIR/mc-manager.sh"
-    cp "$MODULE_DIR/backup-cron.sh" "$MINECRAFT_SERVER_DIR/backup-cron.sh"
-    cp "$MODULE_DIR/setup-cron.sh" "$MINECRAFT_SERVER_DIR/setup-cron.sh"
+    run_or_dry_run "Copiando start-server.sh do Minecraft" cp "$MODULE_DIR/start-server.sh" "$MINECRAFT_SERVER_DIR/start-server.sh"
+    run_or_dry_run "Copiando mc-manager.sh do Minecraft" cp "$MODULE_DIR/mc-manager.sh" "$MINECRAFT_SERVER_DIR/mc-manager.sh"
+    run_or_dry_run "Copiando backup-cron.sh do Minecraft" cp "$MODULE_DIR/backup-cron.sh" "$MINECRAFT_SERVER_DIR/backup-cron.sh"
+    run_or_dry_run "Copiando setup-cron.sh do Minecraft" cp "$MODULE_DIR/setup-cron.sh" "$MINECRAFT_SERVER_DIR/setup-cron.sh"
 
-    mkdir -p "$MINECRAFT_SERVER_DIR/.shared"
-    cp "$ROOT_DIR/shared/lib/common.sh" "$MINECRAFT_SERVER_DIR/.shared/common.sh"
-    cp "$ROOT_DIR/shared/lib/hardware-profile.sh" "$MINECRAFT_SERVER_DIR/.shared/hardware-profile.sh"
-    cp "$ROOT_DIR/shared/lib/minecraft-tuning.sh" "$MINECRAFT_SERVER_DIR/.shared/minecraft-tuning.sh"
+    run_or_dry_run "Criando diretorio compartilhado do Minecraft" mkdir -p "$MINECRAFT_SERVER_DIR/.shared"
+    run_or_dry_run "Copiando common.sh compartilhado do Minecraft" cp "$ROOT_DIR/shared/lib/common.sh" "$MINECRAFT_SERVER_DIR/.shared/common.sh"
+    run_or_dry_run "Copiando hardware-profile.sh compartilhado do Minecraft" cp "$ROOT_DIR/shared/lib/hardware-profile.sh" "$MINECRAFT_SERVER_DIR/.shared/hardware-profile.sh"
+    run_or_dry_run "Copiando minecraft-tuning.sh compartilhado do Minecraft" cp "$ROOT_DIR/shared/lib/minecraft-tuning.sh" "$MINECRAFT_SERVER_DIR/.shared/minecraft-tuning.sh"
 
-    chmod +x "$MINECRAFT_SERVER_DIR/start-server.sh" "$MINECRAFT_SERVER_DIR/mc-manager.sh" "$MINECRAFT_SERVER_DIR/backup-cron.sh" "$MINECRAFT_SERVER_DIR/setup-cron.sh"
+    run_or_dry_run "Marcando scripts do Minecraft como executaveis" chmod +x "$MINECRAFT_SERVER_DIR/start-server.sh" "$MINECRAFT_SERVER_DIR/mc-manager.sh" "$MINECRAFT_SERVER_DIR/backup-cron.sh" "$MINECRAFT_SERVER_DIR/setup-cron.sh"
 
     # Deploy server icon if available
     if [ -f "$ROOT_DIR/assets/images/branding/server-icon.png" ]; then
-        cp "$ROOT_DIR/assets/images/branding/server-icon.png" "$MINECRAFT_SERVER_DIR/server-icon.png"
-        print_success "Server icon deploiement: $MINECRAFT_SERVER_DIR/server-icon.png"
+        run_or_dry_run "Copiando server icon para $MINECRAFT_SERVER_DIR/server-icon.png" cp "$ROOT_DIR/assets/images/branding/server-icon.png" "$MINECRAFT_SERVER_DIR/server-icon.png"
+        if ! dry_run_enabled; then
+            print_success "Server icon deploiement: $MINECRAFT_SERVER_DIR/server-icon.png"
+        fi
     fi
 
-    cat > "$MINECRAFT_SERVER_DIR/comandos.sh" << EOF
+    write_file_or_dry_run "Gerando comandos do Minecraft em $MINECRAFT_SERVER_DIR/comandos.sh" "$MINECRAFT_SERVER_DIR/comandos.sh" << EOF
 #!/bin/bash
 # Generated by Crias-Server installer - do not edit manually
 ## Generated aliases for Minecraft
@@ -281,9 +274,9 @@ alias mchw='sudo $MINECRAFT_SERVER_DIR/mc-manager.sh hardware-report'
 alias mcreconfig='sudo $MINECRAFT_SERVER_DIR/mc-manager.sh reconfigure-hardware'
 EOF
 
-    chmod +x "$MINECRAFT_SERVER_DIR/comandos.sh"
+    run_or_dry_run "Marcando comandos do Minecraft como executavel" chmod +x "$MINECRAFT_SERVER_DIR/comandos.sh"
 
-    if ! is_true "$DRY_RUN"; then
+    if ! dry_run_enabled; then
         chown -R "${MINECRAFT_USER}:${MINECRAFT_USER}" "$MINECRAFT_SERVER_DIR"
     fi
 }
@@ -302,21 +295,15 @@ install_minecraft_service() {
     escaped_dir="$(sed_escape_replacement "$MINECRAFT_SERVER_DIR")"
     escaped_memory="$(sed_escape_replacement "$MC_SERVICE_MEMORY_MAX_MB")"
 
-    if is_true "$DRY_RUN"; then
-        sed \
-            -e "s|__SERVER_USER__|$escaped_user|g" \
-            -e "s|__SERVER_DIR__|$escaped_dir|g" \
-            -e "s|__MEMORY_MAX_MB__|$escaped_memory|g" \
-            "$MODULE_DIR/minecraft.service" > "$MINECRAFT_SERVER_DIR/minecraft.service.rendered"
-        print_step "[DRY_RUN] Unidade gerada em $MINECRAFT_SERVER_DIR/minecraft.service.rendered"
-        return 0
-    fi
-
     sed \
         -e "s|__SERVER_USER__|$escaped_user|g" \
         -e "s|__SERVER_DIR__|$escaped_dir|g" \
         -e "s|__MEMORY_MAX_MB__|$escaped_memory|g" \
-        "$MODULE_DIR/minecraft.service" > /etc/systemd/system/minecraft.service
+        "$MODULE_DIR/minecraft.service" | write_file_or_dry_run "Gerando unidade systemd do Minecraft em /etc/systemd/system/minecraft.service" "/etc/systemd/system/minecraft.service"
+
+    if dry_run_enabled; then
+        return 0
+    fi
 
     systemctl daemon-reload
     systemctl enable minecraft >/dev/null 2>&1 || true

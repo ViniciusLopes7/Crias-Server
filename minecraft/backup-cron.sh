@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_SERVER_DIR="$SCRIPT_DIR"
@@ -10,6 +11,8 @@ SERVER_DIR="${SERVER_DIR:-$DEFAULT_SERVER_DIR}"
 BACKUP_DIR="$SERVER_DIR/backups"
 WORLD_DIRS=("world" "world_nether" "world_the_end")
 RUNTIME_ENV="$SERVER_DIR/runtime.env"
+BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-}"
+BACKUP_ZSTD_LEVEL="${BACKUP_ZSTD_LEVEL:-}"
 
 RETENTION_DAYS=7
 ZSTD_LEVEL="-3"
@@ -45,6 +48,12 @@ create_backup() {
     local backup_dirs=()
 
     mkdir -p "$BACKUP_DIR"
+    exec 200>"$BACKUP_DIR/.backup.lock"
+    if ! flock -n 200; then
+        log "ERRO: Ja existe um backup em andamento. Abortando nova execucao."
+        return 1
+    fi
+
     cd "$SERVER_DIR" || return 1
 
     for dir in "${WORLD_DIRS[@]}"; do
@@ -63,7 +72,7 @@ create_backup() {
         return 1
     fi
 
-    if ionice -c3 tar -I "zstd ${ZSTD_LEVEL}" -cf "$BACKUP_DIR/$BACKUP_NAME" "${backup_dirs[@]}"; then
+    if ionice -c2 -n7 tar -I "zstd ${ZSTD_LEVEL}" -cf "$BACKUP_DIR/$BACKUP_NAME" "${backup_dirs[@]}"; then
         log "Backup criado: $BACKUP_DIR/$BACKUP_NAME"
         return 0
     fi

@@ -2,7 +2,7 @@
 
 # Minecraft runtime launcher with dynamic hardware-based runtime.env.
 
-set -u
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_SERVER_DIR="$SCRIPT_DIR"
@@ -12,7 +12,9 @@ fi
 
 SERVER_DIR="${SERVER_DIR:-$DEFAULT_SERVER_DIR}"
 SERVER_JAR="${SERVER_JAR:-server.jar}"
+SERVER_PROPERTIES="${SERVER_PROPERTIES:-$SERVER_DIR/server.properties}"
 RUNTIME_ENV="$SERVER_DIR/runtime.env"
+JAVA_PREFER_IPV4_STACK="${JAVA_PREFER_IPV4_STACK:-true}"
 
 MIN_RAM="1024M"
 MAX_RAM="2048M"
@@ -84,7 +86,10 @@ JAVA_OPTS="$JAVA_OPTS -XX:InitiatingHeapOccupancyPercent=15"
 JAVA_OPTS="$JAVA_OPTS -XX:+UseCompressedOops"
 JAVA_OPTS="$JAVA_OPTS -XX:+UseStringDeduplication"
 JAVA_OPTS="$JAVA_OPTS -XX:+PerfDisableSharedMem"
-JAVA_OPTS="$JAVA_OPTS -Djava.net.preferIPv4Stack=true"
+JAVA_OPTS="$JAVA_OPTS -XX:+AlwaysPreTouch"
+if [ "$JAVA_PREFER_IPV4_STACK" = "true" ]; then
+    JAVA_OPTS="$JAVA_OPTS -Djava.net.preferIPv4Stack=true"
+fi
 JAVA_OPTS="$JAVA_OPTS -Dfabric.log.disable-ansi=true"
 
 cd "$SERVER_DIR" || exit 1
@@ -94,16 +99,38 @@ if ! command -v java >/dev/null 2>&1; then
     exit 1
 fi
 
+JAVA_VERSION_RAW="$(java -version 2>&1 | head -n 1)"
+JAVA_VERSION_STRING="$(printf '%s\n' "$JAVA_VERSION_RAW" | awk -F'"' '{print $2}')"
+JAVA_MAJOR_VERSION="$(printf '%s\n' "$JAVA_VERSION_STRING" | awk -F. '{ if ($1 == 1) { print $2 } else { print $1 } }')"
+
+if ! [[ "$JAVA_MAJOR_VERSION" =~ ^[0-9]+$ ]] || [ "$JAVA_MAJOR_VERSION" -lt 21 ]; then
+    echo "ERRO: Java 21+ required. Detectado: ${JAVA_VERSION_STRING:-desconhecido}"
+    exit 1
+fi
+
 if [ ! -f "$SERVER_JAR" ]; then
     echo "ERRO: $SERVER_JAR nao encontrado em $SERVER_DIR"
     exit 1
+fi
+
+SERVER_PORT="$(grep -E '^server-port=' "$SERVER_PROPERTIES" 2>/dev/null | tail -n 1 | cut -d'=' -f2- || true)"
+if ! [[ "$SERVER_PORT" =~ ^[0-9]+$ ]]; then
+    SERVER_PORT=25565
+fi
+
+if command -v ss >/dev/null 2>&1; then
+    if ss -H -tln | awk -v port=":$SERVER_PORT" '$4 ~ port { found=1 } END { exit found ? 0 : 1 }'; then
+        echo "ERRO: Porta $SERVER_PORT ja esta em uso. Ajuste server-port em $SERVER_PROPERTIES."
+        exit 1
+    fi
 fi
 
 echo "=========================================="
 echo "Minecraft Server"
 echo "Diretorio: $SERVER_DIR"
 echo "Heap: $MIN_RAM -> $MAX_RAM"
-echo "Java: $(java -version 2>&1 | head -1)"
+echo "Java: $JAVA_VERSION_RAW"
+echo "Porta: $SERVER_PORT"
 echo "=========================================="
 
 # shellcheck disable=SC2086

@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_SERVER_DIR="$SCRIPT_DIR"
@@ -11,6 +12,8 @@ BACKUP_DIR="$SERVER_DIR/backups"
 WORLDS_DIR="$SERVER_DIR/worlds"
 CONFIG_DIR="$SERVER_DIR/config"
 RUNTIME_ENV="$SERVER_DIR/runtime.env"
+BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-}"
+BACKUP_ZSTD_LEVEL="${BACKUP_ZSTD_LEVEL:-}"
 
 RETENTION_DAYS=7
 ZSTD_LEVEL="-3"
@@ -44,6 +47,11 @@ log() {
 
 create_backup() {
     mkdir -p "$BACKUP_DIR"
+    exec 200>"$BACKUP_DIR/.backup.lock"
+    if ! flock -n 200; then
+        log "ERRO: Ja existe um backup em andamento. Abortando nova execucao."
+        return 1
+    fi
 
     if [ ! -d "$WORLDS_DIR" ]; then
         log "ERRO: Pasta de mundos nao encontrada: $WORLDS_DIR"
@@ -57,7 +65,7 @@ create_backup() {
         return 1
     fi
 
-    if ionice -c3 tar -I "zstd ${ZSTD_LEVEL}" -cf "$BACKUP_DIR/$BACKUP_NAME" "$(basename "$WORLDS_DIR")" "$(basename "$CONFIG_DIR")"; then
+    if ionice -c2 -n7 tar -I "zstd ${ZSTD_LEVEL}" -cf "$BACKUP_DIR/$BACKUP_NAME" "$(basename "$WORLDS_DIR")" "$(basename "$CONFIG_DIR")"; then
         log "Backup criado: $BACKUP_DIR/$BACKUP_NAME"
         return 0
     fi

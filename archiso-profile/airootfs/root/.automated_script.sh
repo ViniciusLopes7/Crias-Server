@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # ============================================
 # Hook de Inicialização do ISO - Instalação Automática
@@ -49,14 +50,23 @@ fi
 
 echo "Verificando conectividade com github.com..."
 wait_for_network
-if ! ping -c 1 -W 2 github.com >/dev/null 2>&1; then
+if ! command -v curl >/dev/null 2>&1; then
+    echo "curl nao encontrado no ambiente da ISO." >&2
+    exit 1
+fi
+
+if ! curl -fsSL --connect-timeout 5 https://github.com/ViniciusLopes7/Crias-Server >/dev/null; then
     echo "Internet nao detectada. Conecte a rede e execute o instalador manualmente." >&2
     exit 1
 fi
 
+pacman -Sy --noconfirm archlinux-keyring
+
 echo "Clonando repositório (verifique assinatura/sha local se disponível)..."
-git clone https://github.com/ViniciusLopes7/Crias-Server || { echo "Falha no git clone" >&2; exit 1; }
+git clone --depth 1 --branch main https://github.com/ViniciusLopes7/Crias-Server || { echo "Falha no git clone" >&2; exit 1; }
 cd Crias-Server || exit 1
+
+git verify-commit HEAD >/dev/null 2>&1 || echo "WARNING: Commit nao assinado"
 
 # Mostra checksum do instalador para verificar manualmente (opcional)
 if [ -f install.sh ]; then

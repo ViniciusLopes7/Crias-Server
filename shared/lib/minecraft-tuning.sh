@@ -121,10 +121,10 @@ compute_minecraft_tuning() {
         MC_BACKUP_RETENTION_DAYS=7
     fi
 
-    service_memory_mb=$((xmx_mb + 512))
+    service_memory_mb=$((xmx_mb + 1792))
     local min_allowed_mb
     local max_allowed_mb
-    min_allowed_mb=$((xmx_mb + 128))
+    min_allowed_mb=$((xmx_mb + 1024))
     max_allowed_mb=$((total_ram_mb - 256))
 
     if [ "$max_allowed_mb" -ge "$min_allowed_mb" ]; then
@@ -151,7 +151,7 @@ compute_minecraft_tuning() {
 write_minecraft_runtime_env() {
     local file_path="$1"
 
-    cat > "$file_path" << EOF
+    write_file_or_dry_run "Gerando runtime.env do Minecraft em $file_path" "$file_path" << EOF
 MIN_RAM="$MC_MIN_RAM"
 MAX_RAM="$MC_MAX_RAM"
 GC_MAX_PAUSE="$MC_GC_MAX_PAUSE"
@@ -167,7 +167,7 @@ write_minecraft_server_properties() {
     local online_mode="$3"
     local motd="${4:-§6§l🏰 REINO DOS CRIAS 🏰\\n§eAdrenaline + QoL §7| §aA resenha nunca morre...§r}"
 
-    cat > "$file_path" << EOF
+    write_file_or_dry_run "Gerando server.properties do Minecraft em $file_path" "$file_path" << EOF
 # Minecraft server properties
 server-port=$server_port
 server-ip=
@@ -197,8 +197,10 @@ EOF
 write_minecraft_tuning_state() {
     local file_path="$1"
 
-    cat > "$file_path" << EOF
+    write_file_or_dry_run "Gerando hardware-profile.env do Minecraft em $file_path" "$file_path" << EOF
 HW_TOTAL_RAM_MB="$HW_TOTAL_RAM_MB"
+HW_FS_TYPE="$HW_FS_TYPE"
+HW_TARGET_DEVICE="$HW_TARGET_DEVICE"
 HW_AVAILABLE_RAM_MB="$HW_AVAILABLE_RAM_MB"
 HW_CPU_CORES="$HW_CPU_CORES"
 HW_CPU_THREADS="$HW_CPU_THREADS"

@@ -62,6 +62,35 @@ is_true() {
     esac
 }
 
+dry_run_enabled() {
+    is_true "${DRY_RUN:-false}"
+}
+
+run_or_dry_run() {
+    local description="$1"
+    shift
+
+    if dry_run_enabled; then
+        print_step "[DRY_RUN] $description"
+        return 0
+    fi
+
+    "$@"
+}
+
+write_file_or_dry_run() {
+    local description="$1"
+    local file_path="$2"
+
+    if dry_run_enabled; then
+        print_step "[DRY_RUN] $description"
+        cat >/dev/null
+        return 0
+    fi
+
+    cat > "$file_path"
+}
+
 ask_confirm() {
     local prompt="$1"
     local default_ans="${2:-Y}"

@@ -1,8 +1,10 @@
 #!/bin/bash
+set -euo pipefail
 
 SERVER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_SCRIPT="$SERVER_DIR/backup-cron.sh"
-LOG_FILE="/var/log/terraria-backup.log"
+BACKUP_SERVICE="/etc/systemd/system/terraria-backup.service"
+BACKUP_TIMER="/etc/systemd/system/terraria-backup.timer"
 SERVER_USER="${SERVER_USER:-}"
 
 # Reuse shared ANSI color definitions when available (installed stacks ship it in .shared).
@@ -29,6 +31,77 @@ detect_server_user() {
     fi
 }
 
+write_service_unit() {
+    cat > "$BACKUP_SERVICE" <<EOF
+[Unit]
+Description=Terraria Backup Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=$SERVER_USER
+Group=$SERVER_USER
+WorkingDirectory=$SERVER_DIR
+ExecStart=$BACKUP_SCRIPT
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=$SERVER_DIR
+UMask=0027
+
+EOF
+    chmod 0644 "$BACKUP_SERVICE"
+}
+
+write_timer_unit() {
+    local desc="$1"
+    shift
+
+    cat > "$BACKUP_TIMER" <<EOF
+[Unit]
+Description=Terraria Backup Timer ($desc)
+
+[Timer]
+Persistent=true
+RandomizedDelaySec=5m
+EOF
+
+    for line in "$@"; do
+        printf '%s\n' "$line" >> "$BACKUP_TIMER"
+    done
+
+    cat >> "$BACKUP_TIMER" <<EOF
+
+[Install]
+WantedBy=timers.target
+EOF
+    chmod 0644 "$BACKUP_TIMER"
+}
+
+remove_legacy_cron_entries() {
+    local tmp_cron_file
+
+    if ! command -v crontab >/dev/null 2>&1; then
+        return 0
+    fi
+
+    tmp_cron_file="$(mktemp)"
+    trap 'rm -f "$tmp_cron_file"' RETURN
+
+    crontab -l 2>/dev/null | grep -Fv "$BACKUP_SCRIPT" > "$tmp_cron_file" || true
+    crontab "$tmp_cron_file" >/dev/null 2>&1 || true
+
+    if [ "$SERVER_USER" != "root" ] && crontab -u "$SERVER_USER" -l 2>/dev/null >/dev/null; then
+        crontab -u "$SERVER_USER" -l 2>/dev/null | grep -Fv "$BACKUP_SCRIPT" > "$tmp_cron_file" || true
+        crontab -u "$SERVER_USER" "$tmp_cron_file" >/dev/null 2>&1 || true
+    fi
+}
+
 echo -e "${BLUE}==========================================${NC}"
 echo -e "${BLUE} Configuracao de Backup Terraria${NC}"
 echo -e "${BLUE}==========================================${NC}"
@@ -39,8 +112,9 @@ if [ ! -f "$BACKUP_SCRIPT" ]; then
 fi
 
 chmod +x "$BACKUP_SCRIPT"
+detect_server_user
 
-echo -e "${CYAN}Escolha a frequencia:${NC}"
+echo -e "${CYAN}Escolha a frequencia do timer systemd:${NC}"
 echo "1) Diario as 03:00"
 echo "2) Duas vezes por dia (03:00 e 15:00)"
 echo "3) A cada 4 horas"
@@ -49,13 +123,26 @@ echo "5) Personalizado"
 read -r -p "Opcao (1-5): " choice
 
 case "$choice" in
-    1) CRON_EXPR="0 3 * * *" ; DESC="Diario as 03:00" ;;
-    2) CRON_EXPR="0 3,15 * * *" ; DESC="Duas vezes por dia" ;;
-    3) CRON_EXPR="0 */4 * * *" ; DESC="A cada 4 horas" ;;
-    4) CRON_EXPR="0 3 * * 0" ; DESC="Semanal domingo as 03:00" ;;
+    1)
+        DESC="Diario as 03:00"
+        TIMER_LINES=("OnCalendar=*-*-* 03:00:00")
+        ;;
+    2)
+        DESC="Duas vezes por dia"
+        TIMER_LINES=("OnCalendar=*-*-* 03:00:00" "OnCalendar=*-*-* 15:00:00")
+        ;;
+    3)
+        DESC="A cada 4 horas"
+        TIMER_LINES=("OnBootSec=15m" "OnUnitActiveSec=4h")
+        ;;
+    4)
+        DESC="Semanal domingo as 03:00"
+        TIMER_LINES=("OnCalendar=Sun 03:00:00")
+        ;;
     5)
-        read -r -p "Digite a expressao cron: " CRON_EXPR
-        DESC="Personalizado ($CRON_EXPR)"
+        read -r -p "Digite uma linha valida do systemd (OnCalendar=... ou OnUnitActiveSec=...): " CUSTOM_LINE
+        DESC="Personalizado ($CUSTOM_LINE)"
+        TIMER_LINES=("$CUSTOM_LINE")
         ;;
     *)
         echo "Opcao invalida."
@@ -63,21 +150,14 @@ case "$choice" in
         ;;
 esac
 
-CRON_LINE="$CRON_EXPR $BACKUP_SCRIPT >> \"$LOG_FILE\" 2>&1"
-tmp_cron_file="$(mktemp)"
-trap 'rm -f "$tmp_cron_file"' EXIT
+write_service_unit
+write_timer_unit "$DESC" "${TIMER_LINES[@]}"
+remove_legacy_cron_entries
 
-detect_server_user
+systemctl daemon-reload
+systemctl enable --now terraria-backup.timer
 
-if [ "$(id -u)" -eq 0 ] && [ -n "$SERVER_USER" ] && [ "$SERVER_USER" != "root" ]; then
-    crontab -u "$SERVER_USER" -l 2>/dev/null | grep -Fv "$BACKUP_SCRIPT" > "$tmp_cron_file" || true
-    printf '%s\n' "$CRON_LINE" >> "$tmp_cron_file"
-    crontab -u "$SERVER_USER" "$tmp_cron_file"
-else
-    crontab -l 2>/dev/null | grep -Fv "$BACKUP_SCRIPT" > "$tmp_cron_file" || true
-    printf '%s\n' "$CRON_LINE" >> "$tmp_cron_file"
-    crontab "$tmp_cron_file"
-fi
-
-echo -e "${GREEN}Backup configurado:${NC} $DESC"
-echo "Log: $LOG_FILE"
+echo -e "${GREEN}Timer configurado:${NC} $DESC"
+echo "Servico: $BACKUP_SERVICE"
+echo "Timer:   $BACKUP_TIMER"
+echo "Logs:    journalctl -u terraria-backup.service -f"

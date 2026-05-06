@@ -108,7 +108,7 @@ write_terraria_server_config() {
     local motd="$4"
     local world_name="$5"
 
-    cat > "$file_path" << EOF
+    write_file_or_dry_run "Gerando serverconfig.txt do Terraria em $file_path" "$file_path" << EOF
 worldpath=$world_path
 autocreate=$TT_WORLD_AUTOCREATE
 worldname=$world_name
@@ -127,7 +127,7 @@ EOF
 write_terraria_runtime_env() {
     local file_path="$1"
 
-    cat > "$file_path" << EOF
+    write_file_or_dry_run "Gerando runtime.env do Terraria em $file_path" "$file_path" << EOF
 BACKUP_RETENTION_DAYS="$TT_BACKUP_RETENTION_DAYS"
 BACKUP_ZSTD_LEVEL="$TT_BACKUP_ZSTD_LEVEL"
 EOF
@@ -136,8 +136,10 @@ EOF
 write_terraria_tuning_state() {
     local file_path="$1"
 
-    cat > "$file_path" << EOF
+    write_file_or_dry_run "Gerando hardware-profile.env do Terraria em $file_path" "$file_path" << EOF
 HW_TOTAL_RAM_MB="$HW_TOTAL_RAM_MB"
+HW_FS_TYPE="$HW_FS_TYPE"
+HW_TARGET_DEVICE="$HW_TARGET_DEVICE"
 HW_AVAILABLE_RAM_MB="$HW_AVAILABLE_RAM_MB"
 HW_CPU_CORES="$HW_CPU_CORES"
 HW_CPU_THREADS="$HW_CPU_THREADS"
