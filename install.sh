@@ -501,4 +501,6 @@ main() {
     print_success "Instalacao concluida para stack: $SERVER_TYPE"
 }
 
-main
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main
+fi

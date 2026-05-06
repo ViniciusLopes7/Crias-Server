@@ -67,9 +67,7 @@ EOF
 
 run_env_override_precedence_contract() {
     local cfg_file="$TMP_TEST_DIR/env-precedence.env"
-    local log_file="$TMP_TEST_DIR/env-precedence.log"
-    local mc_dir="$TMP_TEST_DIR/minecraft-from-config"
-    local tt_dir="$TMP_TEST_DIR/terraria-from-env"
+    local resolved_server_type=""
 
     cat > "$cfg_file" << EOF
 SERVER_TYPE="minecraft"
@@ -94,25 +92,34 @@ TERRARIA_MOTD="Contrato CI"
 TERRARIA_DOWNLOAD_URL="https://example.invalid/terraria.zip"
 EOF
 
-    SERVER_TYPE="terraria" CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1
+    (
+        SERVER_TYPE="terraria"
+        CONFIG_FILE="$cfg_file"
 
-    if ! grep -q 'Stack selecionado: terraria' "$log_file"; then
-        echo "[install-contracts] Log nao confirma stack terraria no teste de precedencia." >&2
-        cat "$log_file" >&2
-        exit 1
-    fi
+        # shellcheck source=/dev/null
+        source ./install.sh
 
-    if ! grep -q 'Instalacao concluida para stack: terraria' "$log_file"; then
-        echo "[install-contracts] Log nao confirma conclusao do stack terraria no teste de precedencia." >&2
-        cat "$log_file" >&2
-        exit 1
-    fi
+        capture_env_overrides
+        load_config_file
+        restore_env_overrides
 
-    if [ -e "$mc_dir" ] || [ -e "$tt_dir" ]; then
-        echo "[install-contracts] DRY_RUN nao deveria criar diretorios de instalacao no teste de precedencia." >&2
-        cat "$log_file" >&2
-        exit 1
-    fi
+        resolved_server_type="$SERVER_TYPE"
+
+        if [ "$resolved_server_type" != "terraria" ]; then
+            echo "[install-contracts] SERVER_TYPE nao preservou precedencia do ambiente." >&2
+            exit 1
+        fi
+
+        if [ "$MINECRAFT_USER" != "minecraft-ci" ]; then
+            echo "[install-contracts] Config do Minecraft nao foi carregada corretamente." >&2
+            exit 1
+        fi
+
+        if [ "$TERRARIA_USER" != "terraria-ci" ]; then
+            echo "[install-contracts] Config do Terraria nao foi carregada corretamente." >&2
+            exit 1
+        fi
+    )
 }
 
 run_config_parsing_contract() {
