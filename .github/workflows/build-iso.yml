@@ -71,7 +71,7 @@ jobs:
       options: --privileged
     steps:
       - name: Install CI dependencies
-        run: pacman -S --needed --noconfirm git bash
+        run: pacman -Syu --noconfirm --needed git bash
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -93,7 +93,7 @@ jobs:
       options: --privileged
     steps:
       - name: Install dependencies
-        run: pacman -S --needed --noconfirm archiso git grub
+        run: pacman -Syu --noconfirm --needed archiso git grub
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -120,7 +120,7 @@ jobs:
       options: --privileged
     steps:
       - name: Install validation dependencies
-        run: pacman -S --needed --noconfirm git bash mkinitcpio libarchive squashfs-tools
+        run: pacman -Syu --noconfirm --needed git bash mkinitcpio libarchive squashfs-tools
 
       - name: Checkout code
         uses: actions/checkout@v4
