@@ -133,12 +133,11 @@ EOF
     (
         # shellcheck source=/dev/null
         source ./install.sh
-        CONFIG_FILE="$cfg_file"
         MINECRAFT_MOTD=""
         TERRARIA_MOTD=""
         TERRARIA_WORLD_NAME=""
 
-        load_config_file
+        CONFIG_FILE="$cfg_file" load_config_file
 
         if [ "$MINECRAFT_MOTD" != "Servidor Crias com espacos" ]; then
             echo "[install-contracts] MOTD do Minecraft nao preservou espacos/aspas." >&2

@@ -453,10 +453,6 @@ cleanup_other_stack_if_needed() {
         has_existing_data=true
     fi
 
-    if id "$other_user" >/dev/null 2>&1; then
-        has_existing_data=true
-    fi
-
     if systemctl list-unit-files | grep -q "^${other_stack}.service"; then
         has_existing_data=true
     fi
