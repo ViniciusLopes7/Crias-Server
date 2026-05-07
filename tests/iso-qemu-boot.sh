@@ -216,11 +216,23 @@ log_user 1
 spawn qemu-system-x86_64 -m 2048 -cdrom $env(ISO_FILE) -kernel $env(KERNEL_FILE) -initrd $env(INITRAMFS_FILE) -append $env(KERNEL_CMDLINE) -nographic -no-reboot -monitor none -serial stdio
 
 expect {
-    -re {(?i)(archiso|archlinux|[A-Za-z0-9._-]+) login:} {}
+    -re {(?i)(archiso|archlinux|[A-Za-z0-9._-]+) login:} {
+        send_user "Login prompt detectado (deep smoke sem credenciais hardcoded).\n"
+        exit 0
+    }
+    -re {(?i)Please enter the new timezone name or number} {
+        send_user "Prompt de timezone detectado, enviando ENTER para prosseguir...\n"
+        send "\r"
+        exp_continue
+    }
+    -re {(?i)Pressione \[ENTER\]|Continuar\? \(Y/n\)} {
+        send_user "Prompt inicial detectado, enviando ENTER para prosseguir...\n"
+        send "\r"
+        exp_continue
+    }
     timeout { send_user "Timeout aguardando prompt de login\n"; exit 21 }
+    eof { send_user "QEMU encerrou antes do prompt de login\n"; exit 22 }
 }
-send_user "Login prompt detectado (deep smoke sem credenciais hardcoded).\n"
-exit 0
 EOF
     qemu_status=$?
 else
