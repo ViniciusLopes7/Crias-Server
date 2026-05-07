@@ -474,13 +474,14 @@ cleanup_other_stack_if_needed() {
 
 main() {
     print_header
-    check_root
-    check_arch
     load_config_file
     restore_env_overrides
 
     if is_true "$DRY_RUN"; then
         print_warning "Modo DRY_RUN ativo: nenhuma alteracao destrutiva no host sera aplicada."
+    else
+        check_root
+        check_arch
     fi
 
     select_server_type
