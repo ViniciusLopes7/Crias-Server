@@ -207,6 +207,12 @@ apply_terraria_system_tuning() {
 
 run_terraria_install() {
     print_step "Iniciando instalacao do stack Terraria..."
+
+    if is_true "$DRY_RUN"; then
+        print_step "[DRY_RUN] Instalacao do Terraria encerrada sem aplicar alteracoes."
+        return 0
+    fi
+
     install_terraria_dependencies
     create_terraria_user_and_dirs
     download_and_extract_terraria

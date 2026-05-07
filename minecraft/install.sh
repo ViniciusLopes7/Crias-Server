@@ -323,6 +323,12 @@ apply_minecraft_system_tuning() {
 
 run_minecraft_install() {
     print_step "Iniciando instalacao do stack Minecraft..."
+
+    if is_true "$DRY_RUN"; then
+        print_step "[DRY_RUN] Instalacao do Minecraft encerrada sem aplicar alteracoes."
+        return 0
+    fi
+
     install_minecraft_dependencies
     create_minecraft_user_and_dirs
     install_mrpack_install
