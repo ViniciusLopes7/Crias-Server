@@ -36,7 +36,11 @@ MINECRAFT_INSTALL_MODPACK="true"
 MINECRAFT_INSTALL_QOL_MODS="true"
 EOF
 
-    CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1
+    if ! CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1; then
+        echo "[arch-dry-install] install.sh retornou erro. Conteudo de $log_file:" >&2
+        sed -n '1,2000p' "$log_file" >&2 || true
+        return 1
+    fi
 
     assert_grep 'Modo DRY_RUN ativo: nenhuma alteracao destrutiva no host sera aplicada\.' "$log_file"
     assert_grep 'Stack selecionado: minecraft' "$log_file"
@@ -81,7 +85,11 @@ TERRARIA_MOTD="Servidor Terraria CI"
 TERRARIA_DOWNLOAD_URL="https://example.invalid/terraria.zip"
 EOF
 
-    CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1
+    if ! CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1; then
+        echo "[arch-dry-install] install.sh retornou erro. Conteudo de $log_file:" >&2
+        sed -n '1,2000p' "$log_file" >&2 || true
+        return 1
+    fi
 
     assert_grep 'Modo DRY_RUN ativo: nenhuma alteracao destrutiva no host sera aplicada\.' "$log_file"
     assert_grep 'Stack selecionado: terraria' "$log_file"
