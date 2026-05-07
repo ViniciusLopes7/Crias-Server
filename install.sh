@@ -107,7 +107,7 @@ load_config_file() {
         local sanitized_config
 
         sanitized_config="$(mktemp)"
-        trap 'rm -f "$sanitized_config"' RETURN
+        trap 'rm -f "${sanitized_config:-}" 2>/dev/null || true' RETURN
 
         awk '
             {
