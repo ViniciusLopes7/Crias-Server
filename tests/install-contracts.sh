@@ -99,7 +99,6 @@ EOF
         # shellcheck source=/dev/null
         source ./install.sh
 
-        capture_env_overrides
         load_config_file
         restore_env_overrides
 
