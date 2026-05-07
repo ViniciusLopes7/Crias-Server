@@ -479,6 +479,11 @@ main() {
 
     if is_true "$DRY_RUN"; then
         print_warning "Modo DRY_RUN ativo: nenhuma alteracao destrutiva no host sera aplicada."
+        # In dry-run mode we avoid failing fast so that non-essential runtime checks
+        # or optional platform probes cannot abort the simulation. Any real
+        # destructive actions remain gated by dry-run checks in modules.
+        set +e
+        trap 'echo "[install.sh] erro detectado durante DRY_RUN (exit=$?)" >&2; echo "--- Ambiente (partial) ---" >&2; env | sort >&2; echo "--- Conteudo do CONFIG_FILE (${CONFIG_FILE:-<unset>}) ---" >&2; if [ -f "${CONFIG_FILE:-}" ]; then sed -n "1,200p" "${CONFIG_FILE}" >&2 || true; fi' ERR
     else
         check_root
         check_arch
