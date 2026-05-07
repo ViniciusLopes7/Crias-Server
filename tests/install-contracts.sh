@@ -68,6 +68,8 @@ EOF
 run_env_override_precedence_contract() {
     local cfg_file="$TMP_TEST_DIR/env-precedence.env"
     local resolved_server_type=""
+    local mc_dir="$TMP_TEST_DIR/minecraft"
+    local tt_dir="$TMP_TEST_DIR/terraria"
 
     cat > "$cfg_file" << EOF
 SERVER_TYPE="minecraft"
@@ -94,12 +96,11 @@ EOF
 
     (
         SERVER_TYPE="terraria"
-        CONFIG_FILE="$cfg_file"
 
         # shellcheck source=/dev/null
         source ./install.sh
 
-        load_config_file
+        load_config_file "$cfg_file"
         restore_env_overrides
 
         resolved_server_type="$SERVER_TYPE"
@@ -143,7 +144,7 @@ EOF
         TERRARIA_MOTD=""
         TERRARIA_WORLD_NAME=""
 
-        CONFIG_FILE="$cfg_file" load_config_file
+        load_config_file "$cfg_file"
 
         if [ "$MINECRAFT_MOTD" != "Servidor Crias com espacos" ]; then
             echo "[install-contracts] MOTD do Minecraft nao preservou espacos/aspas." >&2

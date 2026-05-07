@@ -101,7 +101,9 @@ TERRARIA_MOTD="${TERRARIA_MOTD:-Servidor Terraria gerenciado por Crias-Server}"
 TERRARIA_DOWNLOAD_URL="${TERRARIA_DOWNLOAD_URL:-https://terraria.org/api/download/pc-dedicated-server/terraria-server-1449.zip}"
 
 load_config_file() {
-    if [ -f "$CONFIG_FILE" ]; then
+    local config_file="${1:-$CONFIG_FILE}"
+
+    if [ -f "$config_file" ]; then
         local sanitized_config
 
         sanitized_config="$(mktemp)"
@@ -125,7 +127,7 @@ load_config_file() {
 
                 print "Linha ignorada em config.env (formato invalido): " line > "/dev/stderr"
             }
-        ' "$CONFIG_FILE" > "$sanitized_config"
+        ' "$config_file" > "$sanitized_config"
 
         set -a
         # shellcheck source=/dev/null
