@@ -37,41 +37,6 @@ compute_minecraft_tuning() {
     local xms_mb
     local service_memory_mb
 
-    case "$tier" in
-        LOW)
-            reserve_mb=1000
-            MC_VIEW_DISTANCE=4
-            MC_SIMULATION_DISTANCE=3
-            MC_MAX_PLAYERS=6
-            MC_GC_MAX_PAUSE=250
-            MC_ENTITY_BROADCAST_RANGE=60
-            ;;
-        MID)
-            reserve_mb=1800
-            MC_VIEW_DISTANCE=8
-            MC_SIMULATION_DISTANCE=5
-            MC_MAX_PLAYERS=16
-            MC_GC_MAX_PAUSE=200
-            MC_ENTITY_BROADCAST_RANGE=80
-            ;;
-        HIGH)
-            reserve_mb=3072
-            MC_VIEW_DISTANCE=12
-            MC_SIMULATION_DISTANCE=8
-            MC_MAX_PLAYERS=40
-            MC_GC_MAX_PAUSE=150
-            MC_ENTITY_BROADCAST_RANGE=100
-            ;;
-        *)
-            reserve_mb=1800
-            MC_VIEW_DISTANCE=8
-            MC_SIMULATION_DISTANCE=5
-            MC_MAX_PLAYERS=16
-            MC_GC_MAX_PAUSE=200
-            MC_ENTITY_BROADCAST_RANGE=80
-            ;;
-    esac
-
     # Normalize numeric inputs to avoid "integer expected" errors in comparisons
     total_ram_mb="${total_ram_mb:-0}"
     cpu_cores="${cpu_cores:-0}"
@@ -81,6 +46,43 @@ compute_minecraft_tuning() {
     if ! [[ "$cpu_cores" =~ ^[0-9]+$ ]]; then
         cpu_cores=0
     fi
+
+    case "$tier" in
+        LOW)
+            reserve_mb=$((total_ram_mb * 25 / 100))
+            MC_VIEW_DISTANCE=4
+            MC_SIMULATION_DISTANCE=3
+            MC_MAX_PLAYERS=6
+            MC_GC_MAX_PAUSE=250
+            MC_ENTITY_BROADCAST_RANGE=60
+            ;;
+        MID)
+            reserve_mb=$((total_ram_mb * 20 / 100))
+            MC_VIEW_DISTANCE=8
+            MC_SIMULATION_DISTANCE=5
+            MC_MAX_PLAYERS=16
+            MC_GC_MAX_PAUSE=200
+            MC_ENTITY_BROADCAST_RANGE=80
+            ;;
+        HIGH)
+            reserve_mb=$((total_ram_mb * 15 / 100))
+            MC_VIEW_DISTANCE=12
+            MC_SIMULATION_DISTANCE=8
+            MC_MAX_PLAYERS=40
+            MC_GC_MAX_PAUSE=150
+            MC_ENTITY_BROADCAST_RANGE=100
+            ;;
+        *)
+            reserve_mb=$((total_ram_mb * 20 / 100))
+            MC_VIEW_DISTANCE=8
+            MC_SIMULATION_DISTANCE=5
+            MC_MAX_PLAYERS=16
+            MC_GC_MAX_PAUSE=200
+            MC_ENTITY_BROADCAST_RANGE=80
+            ;;
+    esac
+
+    reserve_mb=$(clamp_value "$reserve_mb" 1000 8192)
 
     xmx_mb=$((total_ram_mb - reserve_mb))
     xmx_mb=$(clamp_value "$xmx_mb" 512 12288)

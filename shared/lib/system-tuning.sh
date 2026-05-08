@@ -193,6 +193,11 @@ apply_common_system_tuning() {
 
     apply_nofile_limit "$server_user"
     apply_zram_and_sysctl_tuning "$total_ram_mb"
-    apply_block_device_tuning "${HW_TARGET_DEVICE:-}"
+    if [ -n "${HW_TARGET_DEVICE:-}" ]; then
+        apply_block_device_tuning "$HW_TARGET_DEVICE"
+    else
+        print_warning "Tuning de I/O pulado: nenhum device de bloco detectado (ZFS/Btrfs/LVM/subvolume)."
+        print_warning "Esse comportamento e esperado quando o filesystem gerencia I/O internamente."
+    fi
     apply_cpupower_tuning "$tier"
 }

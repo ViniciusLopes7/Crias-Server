@@ -53,3 +53,24 @@ Aliases disponiveis:
 - /opt/minecraft-server/runtime.env
 - /opt/minecraft-server/hardware-profile.env
 - /opt/minecraft-server/server.properties
+
+## Backups consistentes (producao)
+
+Para aumentar consistencia de backup com servidor online, o script tenta usar RCON para pausar saves durante o `tar`.
+
+Recomendado:
+
+```bash
+sudo pacman -S --needed mcrcon
+```
+
+No `server.properties`, configure:
+
+```bash
+enable-rcon=true
+rcon.password=sua_senha_segura
+rcon.port=25575
+```
+
+Com RCON ativo, o backup executa `save-off` + `save-all`, aguarda flush e depois `save-on`.
+Sem RCON, o backup roda em modo best-effort.

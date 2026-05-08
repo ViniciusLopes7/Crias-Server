@@ -22,6 +22,12 @@ O Crias-Server detecta hardware automaticamente para ajustar parametros de servi
 - Limites de servico systemd (MemoryMax)
 - Politicas de host (zram, swappiness, scheduler e governor)
 
+## Filesystems avancados
+
+- ZFS: detectado automaticamente; tuning de scheduler pode ser pulado (o proprio ZFS gerencia I/O).
+- Btrfs: em subvolumes/dispositivos abstratos, tuning de bloco pode ser pulado com aviso.
+- LVM: quando o dispositivo fisico subjacente e detectado, tuning e aplicado nesse alvo.
+
 ## Override manual
 
 No config.env:

@@ -52,8 +52,10 @@ print_error() {
 
 is_true() {
     local value="${1:-}"
+    value="${value#${value%%[![:space:]]*}}"
+    value="${value%${value##*[![:space:]]}}"
     case "${value,,}" in
-        1|true|yes|y|sim|s|on)
+        1|true|yes|y|sim|s|on|enabled)
             return 0
             ;;
         *)
@@ -103,7 +105,11 @@ ask_confirm() {
         prompt_text="$prompt [y/N]: "
     fi
 
-    read -r -p "$prompt_text" answer
+    if ! read -r -p "$prompt_text" answer; then
+        echo ""
+        print_warning "Operacao cancelada pelo usuario (EOF/SIGINT)."
+        return 1
+    fi
     if [ -z "$answer" ]; then
         answer="$default_ans"
     fi

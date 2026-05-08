@@ -35,6 +35,8 @@ write_service_unit() {
     cat > "$BACKUP_SERVICE" <<EOF
 [Unit]
 Description=Minecraft Backup Service
+Requires=minecraft.service
+After=minecraft.service
 After=network-online.target
 Wants=network-online.target
 
@@ -53,6 +55,10 @@ PrivateTmp=true
 NoNewPrivileges=true
 ReadWritePaths=$SERVER_DIR
 UMask=0027
+TimeoutStartSec=3600
+MemoryMax=1G
+MemorySwapMax=0
+OOMScoreAdjust=0
 
 EOF
     chmod 0644 "$BACKUP_SERVICE"
@@ -85,20 +91,47 @@ EOF
 
 remove_legacy_cron_entries() {
     local tmp_cron_file
+    local has_legacy=false
 
     if ! command -v crontab >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if crontab -l 2>/dev/null | grep -Fq "$BACKUP_SCRIPT"; then
+        has_legacy=true
+    fi
+
+    if [ "$has_legacy" = false ] && [ "$SERVER_USER" != "root" ]; then
+        if crontab -u "$SERVER_USER" -l 2>/dev/null | grep -Fq "$BACKUP_SCRIPT"; then
+            has_legacy=true
+        fi
+    fi
+
+    if [ "$has_legacy" = false ]; then
         return 0
     fi
 
     tmp_cron_file="$(mktemp)"
     trap 'rm -f "$tmp_cron_file"' RETURN
 
-    crontab -l 2>/dev/null | grep -Fv "$BACKUP_SCRIPT" > "$tmp_cron_file" || true
-    crontab "$tmp_cron_file" >/dev/null 2>&1 || true
+    if crontab -l 2>/dev/null | grep -Fq "$BACKUP_SCRIPT"; then
+        crontab -l 2>/dev/null | grep -Fv "$BACKUP_SCRIPT" > "$tmp_cron_file" || true
+        if [ -s "$tmp_cron_file" ]; then
+            crontab "$tmp_cron_file" >/dev/null 2>&1 || true
+        else
+            crontab -r >/dev/null 2>&1 || true
+        fi
+    fi
 
     if [ "$SERVER_USER" != "root" ] && crontab -u "$SERVER_USER" -l 2>/dev/null >/dev/null; then
-        crontab -u "$SERVER_USER" -l 2>/dev/null | grep -Fv "$BACKUP_SCRIPT" > "$tmp_cron_file" || true
-        crontab -u "$SERVER_USER" "$tmp_cron_file" >/dev/null 2>&1 || true
+        if crontab -u "$SERVER_USER" -l 2>/dev/null | grep -Fq "$BACKUP_SCRIPT"; then
+            crontab -u "$SERVER_USER" -l 2>/dev/null | grep -Fv "$BACKUP_SCRIPT" > "$tmp_cron_file" || true
+            if [ -s "$tmp_cron_file" ]; then
+                crontab -u "$SERVER_USER" "$tmp_cron_file" >/dev/null 2>&1 || true
+            else
+                crontab -u "$SERVER_USER" -r >/dev/null 2>&1 || true
+            fi
+        fi
     fi
 }
 

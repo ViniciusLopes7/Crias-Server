@@ -19,10 +19,30 @@ if [ ! -x "$SERVER_BIN" ]; then
     exit 1
 fi
 
+if command -v file >/dev/null 2>&1; then
+    if ! file "$SERVER_BIN" | grep -qi "x86-64"; then
+        echo "AVISO: Binario pode nao ser x86_64. Verifique compatibilidade da arquitetura."
+    fi
+fi
+
+if command -v ldd >/dev/null 2>&1; then
+    if ! ldd "$SERVER_BIN" >/dev/null 2>&1; then
+        echo "ERRO: Dependencias do binario nao satisfeitas. Verifique multilib/bibliotecas necessarias."
+        exit 1
+    fi
+fi
+
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "ERRO: Arquivo de configuracao nao encontrado: $CONFIG_FILE"
     exit 1
 fi
+
+for key in worldpath port maxplayers; do
+    if ! grep -qE "^${key}=" "$CONFIG_FILE"; then
+        echo "ERRO: Campo obrigatorio '${key}' ausente em $CONFIG_FILE"
+        exit 1
+    fi
+done
 
 SERVER_PORT="$(grep -E '^port=' "$CONFIG_FILE" 2>/dev/null | tail -n 1 | cut -d'=' -f2- || true)"
 if ! [[ "$SERVER_PORT" =~ ^[0-9]+$ ]]; then

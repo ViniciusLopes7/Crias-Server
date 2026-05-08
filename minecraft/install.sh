@@ -155,6 +155,12 @@ install_minecraft_qol_mods() {
         return 0
     fi
 
+    if [ -d "$MINECRAFT_SERVER_DIR/mods" ] && [ -n "$(ls -A "$MINECRAFT_SERVER_DIR/mods" 2>/dev/null || true)" ]; then
+        print_warning "Diretorio mods/ ja existe e contem arquivos. Pulando QoL para evitar conflitos."
+        print_warning "Se quiser reinstalar QoL, limpe os .jar manualmente antes de rodar novamente."
+        return 0
+    fi
+
     print_step "Instalando mods QoL..."
     mkdir -p "$MINECRAFT_SERVER_DIR/mods"
 
@@ -241,6 +247,7 @@ deploy_minecraft_scripts() {
 
     run_or_dry_run "Criando diretorio compartilhado do Minecraft" mkdir -p "$MINECRAFT_SERVER_DIR/.shared"
     run_or_dry_run "Copiando common.sh compartilhado do Minecraft" cp "$ROOT_DIR/shared/lib/common.sh" "$MINECRAFT_SERVER_DIR/.shared/common.sh"
+    run_or_dry_run "Copiando manager-common.sh compartilhado do Minecraft" cp "$ROOT_DIR/shared/lib/manager-common.sh" "$MINECRAFT_SERVER_DIR/.shared/manager-common.sh"
     run_or_dry_run "Copiando hardware-profile.sh compartilhado do Minecraft" cp "$ROOT_DIR/shared/lib/hardware-profile.sh" "$MINECRAFT_SERVER_DIR/.shared/hardware-profile.sh"
     run_or_dry_run "Copiando minecraft-tuning.sh compartilhado do Minecraft" cp "$ROOT_DIR/shared/lib/minecraft-tuning.sh" "$MINECRAFT_SERVER_DIR/.shared/minecraft-tuning.sh"
 

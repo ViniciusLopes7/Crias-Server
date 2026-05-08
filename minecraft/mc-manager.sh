@@ -46,24 +46,23 @@ TUNING_STATE="$SERVER_DIR/hardware-profile.env"
 SHARED_DIR="$SERVER_DIR/.shared"
 HARDWARE_LIB="$SHARED_DIR/hardware-profile.sh"
 MC_TUNING_LIB="$SHARED_DIR/minecraft-tuning.sh"
+MANAGER_COMMON_LIB="$SHARED_DIR/manager-common.sh"
+
+if [ ! -f "$MANAGER_COMMON_LIB" ]; then
+    MANAGER_COMMON_LIB="$SCRIPT_DIR/../shared/lib/manager-common.sh"
+fi
+
+if [ ! -f "$MANAGER_COMMON_LIB" ]; then
+    echo "[ERRO] Biblioteca manager-common nao encontrada." >&2
+    exit 1
+fi
+
+# shellcheck source=/dev/null
+source "$MANAGER_COMMON_LIB"
 
 log() { echo "[INFO] $1"; }
 warn() { echo "[AVISO] $1"; }
 err() { echo "[ERRO] $1" >&2; }
-
-need_root() {
-    if [ "$(id -u)" -ne 0 ]; then
-        exec sudo "$SELF" "$@"
-    fi
-}
-
-run_as_server_user() {
-    if [ "$(id -u)" -eq 0 ] && id "$SERVER_USER" >/dev/null 2>&1; then
-        sudo -u "$SERVER_USER" -- "$@"
-    else
-        "$@"
-    fi
-}
 
 get_prop() {
     local key="$1"
@@ -81,19 +80,43 @@ get_prop() {
     echo "$default_value"
 }
 
-cmd_start() { need_root "$@"; systemctl start "$SERVICE_NAME"; }
-cmd_stop() { need_root "$@"; systemctl stop "$SERVICE_NAME"; }
-cmd_restart() { need_root "$@"; systemctl restart "$SERVICE_NAME"; }
-cmd_status() { systemctl status "$SERVICE_NAME" --no-pager || true; }
-cmd_logs() { journalctl -u "$SERVICE_NAME" -f; }
-cmd_console() { cmd_logs; }
+cmd_start() { manager_cmd_start "$SERVICE_NAME"; }
+cmd_stop() { manager_cmd_stop "$SERVICE_NAME"; }
+cmd_restart() { manager_cmd_restart "$SERVICE_NAME"; }
+cmd_status() { manager_cmd_status "$SERVICE_NAME"; }
+cmd_logs() { manager_cmd_logs "$SERVICE_NAME"; }
+cmd_console() {
+    local rcon_pass
+    local rcon_port
+
+    if ! command -v mcrcon >/dev/null 2>&1; then
+        warn "Console interativo requer mcrcon. Instale: pacman -S --needed mcrcon"
+        cmd_logs
+        return 0
+    fi
+
+    rcon_pass="$(get_prop "rcon.password" "")"
+    rcon_port="$(get_prop "rcon.port" "25575")"
+
+    if [ -z "$rcon_pass" ]; then
+        warn "RCON nao configurado em $PROPS_FILE (rcon.password)."
+        cmd_logs
+        return 0
+    fi
+
+    if ! [[ "$rcon_port" =~ ^[0-9]+$ ]]; then
+        rcon_port=25575
+    fi
+
+    exec mcrcon -H localhost -P "$rcon_port" -p "$rcon_pass"
+}
 
 cmd_backup() {
     if [ ! -x "$BACKUP_SCRIPT" ]; then
         err "Script de backup nao encontrado: $BACKUP_SCRIPT"
         return 1
     fi
-    run_as_server_user "$BACKUP_SCRIPT"
+    manager_run_as_server_user "$SERVER_USER" "$BACKUP_SCRIPT"
 }
 
 cmd_setup_cron() {
@@ -101,13 +124,15 @@ cmd_setup_cron() {
         err "Script de setup-cron nao encontrado: $SETUP_CRON_SCRIPT"
         return 1
     fi
-    need_root "$@"
+    manager_need_root "$SELF" "$@"
     SERVER_USER="$SERVER_USER" "$SETUP_CRON_SCRIPT"
 }
 
 cmd_reconfigure_hardware() {
     local forced_tier="${1:-}"
     forced_tier="${forced_tier^^}"
+
+    manager_need_root "$SELF" "reconfigure-hardware" "$forced_tier"
 
     if [ ! -f "$HARDWARE_LIB" ] || [ ! -f "$MC_TUNING_LIB" ]; then
         err "Bibliotecas de tuning nao encontradas em $SHARED_DIR"
@@ -123,7 +148,7 @@ cmd_reconfigure_hardware() {
     esac
 
     # shellcheck disable=SC2016 # Intentional: script is passed literally to bash -c and expanded there
-    run_as_server_user bash -c '
+    bash -c '
         set -euo pipefail
         SERVER_DIR="$1"
         forced_tier="$2"
@@ -160,6 +185,8 @@ cmd_reconfigure_hardware() {
         echo "Max players: $MC_MAX_PLAYERS"
     ' bash "$SERVER_DIR" "$forced_tier" "$PROPS_FILE" "$RUNTIME_ENV" "$TUNING_STATE" "$HARDWARE_LIB" "$MC_TUNING_LIB"
 
+    chown -R "${SERVER_USER}:${SERVER_USER}" "$SERVER_DIR"
+
     warn "Reconfiguracao aplicada em arquivos. Reinicie o servico para aplicar no runtime: sudo systemctl restart $SERVICE_NAME"
 }
 
@@ -181,7 +208,7 @@ Comandos:
   restart                   Reinicia o servico (systemd)
   status                    Mostra status (systemd)
   logs                       Tail dos logs (journalctl)
-  console                    Alias de logs
+    console                    Console interativo via RCON (fallback para logs)
   backup                     Executa backup imediato
   setup-cron                 Configura timer systemd de backup
   reconfigure-hardware [TIER] Recalcula tuning (TIER: LOW|MID|HIGH ou vazio)

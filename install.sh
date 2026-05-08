@@ -104,35 +104,35 @@ load_config_file() {
     local config_file="${1:-$CONFIG_FILE}"
 
     if [ -f "$config_file" ]; then
-        local sanitized_config
+        # Read file line-by-line and export safe KEY=VALUE pairs.
+        # Do NOT 'source' the file to avoid executing command substitutions.
+        while IFS= read -r line || [ -n "$line" ]; do
+            # Trim leading/trailing whitespace
+            line="${line#${line%%[![:space:]]*}}"
+            line="${line%${line##*[![:space:]]}}"
 
-        sanitized_config="$(mktemp)"
-        trap 'rm -f "${sanitized_config:-}" 2>/dev/null || true' RETURN
+            [ -z "$line" ] && continue
+            [[ "$line" == \#* ]] && continue
 
-        awk '
-            {
-                line = $0
-                sub(/^[[:space:]]+/, "", line)
-                sub(/[[:space:]]+$/, "", line)
+            if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+                local key="${BASH_REMATCH[1]}"
+                local value="${BASH_REMATCH[2]}"
 
-                if (line == "" || line ~ /^#/) {
-                    print line
-                    next
-                }
+                # Remove surrounding quotes if present
+                if [[ "$value" == '"'*'"' ]] || [[ "$value" == "'"*"'" ]]; then
+                    value="${value:1:${#value}-2}"
+                fi
 
-                if (line ~ /^[A-Za-z_][A-Za-z0-9_]*=/) {
-                    print line
-                    next
-                }
+                # Neutralize command substitution and backticks to avoid execution
+                value="${value//\$\(/\\$\(}"
+                value="${value//\`/\\\`}"
 
-                print "Linha ignorada em config.env (formato invalido): " line > "/dev/stderr"
-            }
-        ' "$config_file" > "$sanitized_config"
-
-        set -a
-        # shellcheck source=/dev/null
-        . "$sanitized_config"
-        set +a
+                # Export safely (child shells will inherit these)
+                export "${key}=${value}"
+            else
+                printf '%s\n' "Linha ignorada em ${config_file} (formato invalido): ${line}" >&2
+            fi
+        done < "$config_file"
     fi
 }
 
@@ -250,6 +250,8 @@ prompt_terraria_options() {
 }
 
 install_tailscale_if_enabled() {
+    local outdated_packages
+
     if ! is_true "$INSTALL_TAILSCALE"; then
         return 0
     fi
@@ -261,6 +263,17 @@ install_tailscale_if_enabled() {
 
     print_step "Instalando Tailscale..."
     if ! command_exists tailscale; then
+        outdated_packages="$(pacman -Qu 2>/dev/null || true)"
+        if [ -n "$outdated_packages" ]; then
+            print_warning "Foram detectados pacotes desatualizados no sistema."
+            print_warning "Recomendado executar 'pacman -Syu' antes de instalar Tailscale para evitar partial-upgrade."
+            if ! is_true "$NON_INTERACTIVE"; then
+                if ! ask_confirm "Continuar mesmo assim?" "N"; then
+                    print_error "Instalacao do Tailscale cancelada pelo usuario."
+                    return 1
+                fi
+            fi
+        fi
         pacman -S --needed --noconfirm tailscale
     fi
 
@@ -355,40 +368,38 @@ configure_alias_autoload_for_selected_stack() {
 
 run_selected_stack_installer() {
     if [ "$SERVER_TYPE" = "minecraft" ]; then
-        export MINECRAFT_USER
-        export MINECRAFT_SERVER_DIR
-        export MINECRAFT_PORT
-        export MINECRAFT_ONLINE_MODE
-        export MINECRAFT_MOTD
-        export MINECRAFT_VERSION
-        export MINECRAFT_LOADER
-        export MINECRAFT_INSTALL_MODPACK
-        export MINECRAFT_ADRENALINE_VERSION
-        export MINECRAFT_INSTALL_QOL_MODS
-        export MRPACK_SHA256
-        export FORCE_HARDWARE_TIER
-        export APPLY_SYSTEM_TUNING
-        export SYSTEM_TUNING_SCOPE
-        export DRY_RUN
-        export NON_INTERACTIVE
-
+        MINECRAFT_USER="$MINECRAFT_USER" \
+        MINECRAFT_SERVER_DIR="$MINECRAFT_SERVER_DIR" \
+        MINECRAFT_PORT="$MINECRAFT_PORT" \
+        MINECRAFT_ONLINE_MODE="$MINECRAFT_ONLINE_MODE" \
+        MINECRAFT_MOTD="$MINECRAFT_MOTD" \
+        MINECRAFT_VERSION="$MINECRAFT_VERSION" \
+        MINECRAFT_LOADER="$MINECRAFT_LOADER" \
+        MINECRAFT_INSTALL_MODPACK="$MINECRAFT_INSTALL_MODPACK" \
+        MINECRAFT_ADRENALINE_VERSION="$MINECRAFT_ADRENALINE_VERSION" \
+        MINECRAFT_INSTALL_QOL_MODS="$MINECRAFT_INSTALL_QOL_MODS" \
+        MRPACK_SHA256="$MRPACK_SHA256" \
+        FORCE_HARDWARE_TIER="$FORCE_HARDWARE_TIER" \
+        APPLY_SYSTEM_TUNING="$APPLY_SYSTEM_TUNING" \
+        SYSTEM_TUNING_SCOPE="$SYSTEM_TUNING_SCOPE" \
+        DRY_RUN="$DRY_RUN" \
+        NON_INTERACTIVE="$NON_INTERACTIVE" \
         bash "$SCRIPT_DIR/minecraft/install.sh"
         return 0
     fi
 
-    export TERRARIA_USER
-    export TERRARIA_SERVER_DIR
-    export TERRARIA_PORT
-    export TERRARIA_WORLD_NAME
-    export TERRARIA_MOTD
-    export TERRARIA_DOWNLOAD_URL
-    export TERRARIA_SHA256
-    export FORCE_HARDWARE_TIER
-    export APPLY_SYSTEM_TUNING
-    export SYSTEM_TUNING_SCOPE
-    export DRY_RUN
-    export NON_INTERACTIVE
-
+    TERRARIA_USER="$TERRARIA_USER" \
+    TERRARIA_SERVER_DIR="$TERRARIA_SERVER_DIR" \
+    TERRARIA_PORT="$TERRARIA_PORT" \
+    TERRARIA_WORLD_NAME="$TERRARIA_WORLD_NAME" \
+    TERRARIA_MOTD="$TERRARIA_MOTD" \
+    TERRARIA_DOWNLOAD_URL="$TERRARIA_DOWNLOAD_URL" \
+    TERRARIA_SHA256="$TERRARIA_SHA256" \
+    FORCE_HARDWARE_TIER="$FORCE_HARDWARE_TIER" \
+    APPLY_SYSTEM_TUNING="$APPLY_SYSTEM_TUNING" \
+    SYSTEM_TUNING_SCOPE="$SYSTEM_TUNING_SCOPE" \
+    DRY_RUN="$DRY_RUN" \
+    NON_INTERACTIVE="$NON_INTERACTIVE" \
     bash "$SCRIPT_DIR/terraria/install.sh"
 }
 

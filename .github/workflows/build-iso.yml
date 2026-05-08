@@ -71,7 +71,10 @@ jobs:
       options: --privileged
     steps:
       - name: Install CI dependencies
-        run: pacman -Syu --noconfirm --needed git bash
+        run: |
+          pacman-key --init || true
+          pacman-key --populate archlinux || true
+          pacman -Syu --noconfirm --needed git bash
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -93,7 +96,10 @@ jobs:
       options: --privileged
     steps:
       - name: Install dependencies
-        run: pacman -Syu --noconfirm --needed archiso git grub
+        run: |
+          pacman-key --init || true
+          pacman-key --populate archlinux || true
+          pacman -Syu --noconfirm --needed archiso git grub
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -120,7 +126,10 @@ jobs:
       options: --privileged
     steps:
       - name: Install validation dependencies
-        run: pacman -Syu --noconfirm --needed git bash mkinitcpio libarchive squashfs-tools
+        run: |
+          pacman-key --init || true
+          pacman-key --populate archlinux || true
+          pacman -Syu --noconfirm --needed git bash mkinitcpio libarchive squashfs-tools
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -247,6 +256,16 @@ jobs:
 
           sha256sum release-assets/iso/*.iso release-assets/crias-server-full.zip release-assets/crias-server-slim.zip > release-assets/sha256sums.txt
 
+      - name: Import release GPG key (optional)
+        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
+        run: |
+          printf '%s' "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+
+      - name: Sign checksums (optional)
+        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
+        run: |
+          gpg --batch --yes --detach-sign -o release-assets/sha256sums.txt.sig release-assets/sha256sums.txt
+
       - name: Create and push tag
         run: |
           git config user.name "github-actions[bot]"
@@ -265,10 +284,18 @@ jobs:
             exit 1
           fi
 
+          assets=(
+            "${ISO_FILE}"
+            release-assets/crias-server-full.zip
+            release-assets/crias-server-slim.zip
+            release-assets/sha256sums.txt
+          )
+
+          if [ -f release-assets/sha256sums.txt.sig ]; then
+            assets+=(release-assets/sha256sums.txt.sig)
+          fi
+
           gh release create "${{ steps.release_tag.outputs.tag }}" \
-            "${ISO_FILE}" \
-            release-assets/crias-server-full.zip \
-            release-assets/crias-server-slim.zip \
-            release-assets/sha256sums.txt \
+            "${assets[@]}" \
             --title "Release ${{ steps.release_tag.outputs.tag }}" \
             --generate-notes

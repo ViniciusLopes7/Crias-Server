@@ -66,7 +66,13 @@ echo "Clonando repositório (verifique assinatura/sha local se disponível)..."
 git clone --depth 1 --branch main https://github.com/ViniciusLopes7/Crias-Server || { echo "Falha no git clone" >&2; exit 1; }
 cd Crias-Server || exit 1
 
-git verify-commit HEAD >/dev/null 2>&1 || echo "WARNING: Commit nao assinado"
+if [ "${SKIP_VERIFY:-0}" != "1" ]; then
+    if ! git verify-commit HEAD >/dev/null 2>&1; then
+        echo "ERRO: Commit nao assinado. Abortando por seguranca."
+        echo "Para ignorar esta verificacao, reexecute com SKIP_VERIFY=1"
+        exit 1
+    fi
+fi
 
 # Mostra checksum do instalador para verificar manualmente (opcional)
 if [ -f install.sh ]; then

@@ -135,6 +135,7 @@ deploy_terraria_scripts() {
 
     run_or_dry_run "Criando diretorio compartilhado do Terraria" mkdir -p "$TERRARIA_SERVER_DIR/.shared"
     run_or_dry_run "Copiando common.sh compartilhado do Terraria" cp "$ROOT_DIR/shared/lib/common.sh" "$TERRARIA_SERVER_DIR/.shared/common.sh"
+    run_or_dry_run "Copiando manager-common.sh compartilhado do Terraria" cp "$ROOT_DIR/shared/lib/manager-common.sh" "$TERRARIA_SERVER_DIR/.shared/manager-common.sh"
     run_or_dry_run "Copiando hardware-profile.sh compartilhado do Terraria" cp "$ROOT_DIR/shared/lib/hardware-profile.sh" "$TERRARIA_SERVER_DIR/.shared/hardware-profile.sh"
     run_or_dry_run "Copiando terraria-tuning.sh compartilhado do Terraria" cp "$ROOT_DIR/shared/lib/terraria-tuning.sh" "$TERRARIA_SERVER_DIR/.shared/terraria-tuning.sh"
 

@@ -14,6 +14,8 @@ CONFIG_DIR="$SERVER_DIR/config"
 RUNTIME_ENV="$SERVER_DIR/runtime.env"
 BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-}"
 BACKUP_ZSTD_LEVEL="${BACKUP_ZSTD_LEVEL:-}"
+BACKUP_REQUIRE_ACTIVE_SERVICE="${BACKUP_REQUIRE_ACTIVE_SERVICE:-true}"
+BACKUP_SERVICE_NAME="${BACKUP_SERVICE_NAME:-terraria}"
 
 RETENTION_DAYS=7
 ZSTD_LEVEL="-3"
@@ -78,7 +80,33 @@ cleanup_old_backups() {
     find "$BACKUP_DIR" -name "terraria-backup-*.tar.zst" -type f -mtime +"$RETENTION_DAYS" -delete
 }
 
+is_service_active_or_skip() {
+    if [ "$BACKUP_REQUIRE_ACTIVE_SERVICE" != "true" ]; then
+        return 0
+    fi
+
+    if ! command -v systemctl >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if ! systemctl show -p LoadState "$BACKUP_SERVICE_NAME.service" >/dev/null 2>&1; then
+        log "AVISO: Nao foi possivel verificar status de ${BACKUP_SERVICE_NAME}.service; seguindo backup."
+        return 0
+    fi
+
+    if systemctl is-active --quiet "$BACKUP_SERVICE_NAME.service"; then
+        return 0
+    fi
+
+    log "Servidor ${BACKUP_SERVICE_NAME} offline. Backup cancelado."
+    return 1
+}
+
 main() {
+    if ! is_service_active_or_skip; then
+        exit 0
+    fi
+
     if create_backup; then
         cleanup_old_backups
         log "Backup concluido com sucesso."
