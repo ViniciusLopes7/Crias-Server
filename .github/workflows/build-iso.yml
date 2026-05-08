@@ -257,14 +257,24 @@ jobs:
           sha256sum release-assets/iso/*.iso release-assets/crias-server-full.zip release-assets/crias-server-slim.zip > release-assets/sha256sums.txt
 
       - name: Import release GPG key (optional)
-        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
         run: |
-          printf '%s' "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+          if [ -n "${GPG_PRIVATE_KEY}" ]; then
+            printf '%s' "${GPG_PRIVATE_KEY}" | gpg --batch --import
+          else
+            echo "No GPG_PRIVATE_KEY provided; skipping import"
+          fi
 
       - name: Sign checksums (optional)
-        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
         run: |
-          gpg --batch --yes --detach-sign -o release-assets/sha256sums.txt.sig release-assets/sha256sums.txt
+          if [ -n "${GPG_PRIVATE_KEY}" ]; then
+            gpg --batch --yes --detach-sign -o release-assets/sha256sums.txt.sig release-assets/sha256sums.txt
+          else
+            echo "No GPG_PRIVATE_KEY provided; skipping signing"
+          fi
 
       - name: Create and push tag
         run: |
