@@ -52,8 +52,11 @@ print_error() {
 
 is_true() {
     local value="${1:-}"
-    value="${value#${value%%[![:space:]]*}}"
-    value="${value%${value##*[![:space:]]}}"
+    local __trim
+    __trim="${value%%[![:space:]]*}"
+    value="${value#"$__trim"}"
+    __trim="${value##*[![:space:]]}"
+    value="${value%"$__trim"}"
     case "${value,,}" in
         1|true|yes|y|sim|s|on|enabled)
             return 0

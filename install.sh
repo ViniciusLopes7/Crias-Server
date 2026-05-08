@@ -108,8 +108,11 @@ load_config_file() {
         # Do NOT 'source' the file to avoid executing command substitutions.
         while IFS= read -r line || [ -n "$line" ]; do
             # Trim leading/trailing whitespace
-            line="${line#${line%%[![:space:]]*}}"
-            line="${line%${line##*[![:space:]]}}"
+            local __trim
+            __trim="${line%%[![:space:]]*}"
+            line="${line#"$__trim"}"
+            __trim="${line##*[![:space:]]}"
+            line="${line%"$__trim"}"
 
             [ -z "$line" ] && continue
             [[ "$line" == \#* ]] && continue
