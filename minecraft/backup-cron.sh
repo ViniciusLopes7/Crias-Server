@@ -165,6 +165,12 @@ cleanup_old_backups() {
 }
 
 is_service_active_or_skip() {
+    # In dry-run mode, skip checking the real service state so the dry-run
+    # exercise still exercises RCON and backup logic for tests.
+    if [ "$BACKUP_DRY_RUN" = "true" ]; then
+        log "[DRY_RUN] Pulando verificacao de status do serviço"
+        return 0
+    fi
     if [ "$BACKUP_REQUIRE_ACTIVE_SERVICE" != "true" ]; then
         return 0
     fi
