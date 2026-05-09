@@ -14,7 +14,7 @@ git_short="$(git -C "$repo_root" rev-parse --short=6 HEAD 2>/dev/null || true)"
 
 # Keep iso_label stable and <= 11 chars (classic FAT label limit).
 if [ -n "$git_short" ]; then
-    iso_label="CRIAS${git_short^^}"
+    iso_label="CRIAS${git_short::5^^}"
 else
     iso_label="CRIASNOGIT0"
 fi

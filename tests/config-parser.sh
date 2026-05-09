@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=/dev/null
-source "$REPO_ROOT/install.sh"
+source "$REPO_ROOT/shared/lib/config-parser.sh"
 
 TMPDIR="$(mktemp -d)"
 CFG="$TMPDIR/test.env"

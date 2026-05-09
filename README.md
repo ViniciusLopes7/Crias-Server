@@ -79,13 +79,13 @@ Observacao: se voce usar diretorio customizado no install, os scripts de runtime
 Para rodar em modo nao interativo:
 
 ```bash
-sudo NON_INTERACTIVE=true ACCEPT_EULA=true SERVER_TYPE=minecraft ./install.sh
+sudo -E NON_INTERACTIVE=true ACCEPT_EULA=true SERVER_TYPE=minecraft ./install.sh
 ```
 
 Para validar pipeline sem alterar o host (dry-run):
 
 ```bash
-sudo NON_INTERACTIVE=true DRY_RUN=true SERVER_TYPE=terraria ./install.sh
+sudo -E NON_INTERACTIVE=true DRY_RUN=true SERVER_TYPE=terraria ./install.sh
 ```
 
 Flags importantes no config.env:
@@ -186,7 +186,32 @@ Exemplos rapidos:
 - mcstart, mcstatus, mclogs, mcbackup, mcreconfig
 - ttstart, ttstatus, ttlogs, ttbackup, ttreconfig
 
+## Gerenciamento de Serviços
+
+Cada stack (Minecraft e Terraria) cria um arquivo systemd em `/etc/systemd/system/`:
+
+- `minecraft.service`
+- `terraria.service`
+
+### Comportamento de Conflitos
+
+Os dois servicos sao marcados com a diretiva `Conflicts=` no systemd, o que significa:
+
+- Apenas **um** stack pode rodar simultaneamente no mesmo host
+- Se tentar iniciar um stack enquanto o outro está ativo, o systemd desativará o conflitante automaticamente
+
+Isso é intencional e evita uso duplicado de recursos (RAM, CPU, disco). Para executar ambos:
+
+1. Parar o stack atual: `sudo systemctl stop minecraft` ou `sudo systemctl stop terraria`
+2. Iniciar o novo stack: `sudo systemctl start terraria` ou `sudo systemctl start minecraft`
+
+Modificar este comportamento requer edição manual dos arquivos .service e é **não recomendado** para ambientes padrão.
+
 ## Documentacao
+
+Para usar imediatamente na sessao atual:
+
+```bash
 
 - docs/README.md
 - docs/minecraft/README.md

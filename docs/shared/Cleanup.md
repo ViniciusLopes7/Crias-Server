@@ -18,6 +18,18 @@ O instalador solicita confirmacao explicita antes de desativar o stack oposto qu
 
 Os arquivos `comandos.sh` gerados pelo instalador incluem cabecalho identificando a origem do arquivo, para diferenciar aliases gerados pelo projeto de aliases pessoais do operador.
 
+## Recarregando o shell após cleanup
+
+Após o cleanup do stack oposto, os aliases do instalador podem ter sido removidos de `/etc/profile.d/crias-server.sh`. 
+
+Para recarregar o ambiente de shell na sessão atual:
+
+```bash
+source /etc/profile.d/crias-server.sh
+```
+
+Ou abra um novo terminal, que carregará automaticamente as configurações atualizadas.
+
 ## Recomendacao
 
 Antes de confirmar qualquer limpeza automatica:

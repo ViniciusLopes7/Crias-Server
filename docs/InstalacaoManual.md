@@ -81,6 +81,7 @@ mrpack-install adrenaline --server-dir /opt/minecraft-server --server-file serve
 ```
 
 ### 2.3 Aceitar EULA
+A EULA oficial do Minecraft fica em https://www.minecraft.net/en-us/eula. Leia antes de aceitar.
 ```bash
 echo "eula=true" > /opt/minecraft-server/eula.txt
 ```
@@ -308,6 +309,9 @@ sudo tailscale up
 ## 5. Configurações de Performance
 
 ### 5.1 server.properties (Otimizado para hardware limitado)
+
+⚠️ `online-mode=false` reduz a segurança do servidor e deve ser usado apenas em redes privadas ou com mitigação adequada.
+
 ```properties
 # /opt/minecraft-server/server.properties
 # Gerado automaticamente - EDITAR CONFORME ABAIXO
@@ -431,13 +435,22 @@ echo "RAM Alocada: $MIN_RAM - $MAX_RAM"
 echo "Diretório: $SERVER_DIR"
 echo "=========================================="
 
-exec java $JAVA_OPTS -jar "$SERVER_JAR" nogui
+exec java "${JAVA_OPTS[@]}" -jar "$SERVER_JAR" nogui
 ```
 
 ### 6.3 Tornar Script Executável
 ```bash
 chmod +x /opt/minecraft-server/start-server.sh
 ```
+
+### 6.4 Server Icon (auto-copy)
+- O instalador copia automaticamente o icone se existir em:
+  - `assets/images/branding/server-icon.png` (repositório)
+- Destino final no host:
+  - `/opt/minecraft-server/server-icon.png`
+- Requisitos recomendados:
+  - PNG 64x64
+  - Nome exato: `server-icon.png`
 
 ---
 
@@ -446,8 +459,8 @@ chmod +x /opt/minecraft-server/start-server.sh
 ### 7.1 Configurações de Swappiness
 ```bash
 # Reduzir uso de swap (melhor para performance)
-echo "vm.swappiness=10" | sudo tee -a /etc/sysctl.conf
-echo "vm.vfs_cache_pressure=50" | sudo tee -a /etc/sysctl.conf
+sudo grep -q "vm.swappiness=10" /etc/sysctl.conf || echo "vm.swappiness=10" | sudo tee -a /etc/sysctl.conf
+sudo grep -q "vm.vfs_cache_pressure=50" /etc/sysctl.conf || echo "vm.vfs_cache_pressure=50" | sudo tee -a /etc/sysctl.conf
 sudo sysctl -p
 ```
 
@@ -464,23 +477,25 @@ sudo udevadm trigger
 ### 7.3 Limites de Arquivos Abertos
 ```bash
 # Aumentar limites para usuário minecraft
-echo "minecraft soft nofile 65536" | sudo tee -a /etc/security/limits.conf
-echo "minecraft hard nofile 65536" | sudo tee -a /etc/security/limits.conf
+sudo grep -q "minecraft soft nofile 65536" /etc/security/limits.conf || echo "minecraft soft nofile 65536" | sudo tee -a /etc/security/limits.conf
+sudo grep -q "minecraft hard nofile 65536" /etc/security/limits.conf || echo "minecraft hard nofile 65536" | sudo tee -a /etc/security/limits.conf
 ```
 
 ### 7.4 Otimizações de Kernel (Opcional)
 ```bash
-# Adicionar ao /etc/sysctl.conf
+# Adicionar bloco apenas uma vez ao /etc/sysctl.conf
+if ! sudo grep -q "CRIAS_SERVER_TUNING_BEGIN" /etc/sysctl.conf; then
 sudo tee -a /etc/sysctl.conf << 'EOF'
-
-# Otimizações para servidor Minecraft
+# CRIAS_SERVER_TUNING_BEGIN
 vm.max_map_count=262144
 net.core.rmem_max=134217728
 net.core.wmem_max=134217728
 net.ipv4.tcp_rmem=4096 65536 134217728
 net.ipv4.tcp_wmem=4096 65536 134217728
 net.ipv4.tcp_congestion_control=bbr
+# CRIAS_SERVER_TUNING_END
 EOF
+fi
 
 sudo sysctl -p
 ```

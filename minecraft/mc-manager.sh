@@ -147,43 +147,31 @@ cmd_reconfigure_hardware() {
             ;;
     esac
 
-    # shellcheck disable=SC2016 # Intentional: script is passed literally to bash -c and expanded there
-    bash -c '
-        set -euo pipefail
-        SERVER_DIR="$1"
-        forced_tier="$2"
-        PROPS_FILE="$3"
-        RUNTIME_ENV="$4"
-        TUNING_STATE="$5"
-        HARDWARE_LIB="$6"
-        MC_TUNING_LIB="$7"
+    # shellcheck source=/dev/null
+    source "$HARDWARE_LIB"
+    # shellcheck source=/dev/null
+    source "$MC_TUNING_LIB"
 
-        # shellcheck source=/dev/null
-        source "$HARDWARE_LIB"
-        # shellcheck source=/dev/null
-        source "$MC_TUNING_LIB"
+    detect_hardware_profile "$SERVER_DIR" "$forced_tier"
+    compute_minecraft_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER"
 
-        detect_hardware_profile "$SERVER_DIR" "$forced_tier"
-        compute_minecraft_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER"
+    write_minecraft_runtime_env "$RUNTIME_ENV"
 
-        write_minecraft_runtime_env "$RUNTIME_ENV"
+    server_port=$(grep -E "^server-port=" "$PROPS_FILE" | tail -n 1 | cut -d"=" -f2- || true)
+    online_mode=$(grep -E "^online-mode=" "$PROPS_FILE" | tail -n 1 | cut -d"=" -f2- || true)
+    motd=$(grep -E "^motd=" "$PROPS_FILE" | tail -n 1 | cut -d"=" -f2- || true)
+    server_port="${server_port:-25565}"
+    online_mode="${online_mode:-false}"
+    motd="${motd:-Servidor Minecraft}"
 
-        server_port=$(grep -E "^server-port=" "$PROPS_FILE" | tail -n 1 | cut -d"=" -f2- || true)
-        online_mode=$(grep -E "^online-mode=" "$PROPS_FILE" | tail -n 1 | cut -d"=" -f2- || true)
-        motd=$(grep -E "^motd=" "$PROPS_FILE" | tail -n 1 | cut -d"=" -f2- || true)
-        server_port="${server_port:-25565}"
-        online_mode="${online_mode:-false}"
-        motd="${motd:-Servidor Minecraft}"
+    write_minecraft_server_properties "$PROPS_FILE" "$server_port" "$online_mode" "$motd"
+    write_minecraft_tuning_state "$TUNING_STATE"
 
-        write_minecraft_server_properties "$PROPS_FILE" "$server_port" "$online_mode" "$motd"
-        write_minecraft_tuning_state "$TUNING_STATE"
-
-        echo "Tier detectado: $HW_DETECTED_TIER"
-        echo "Tier aplicado: $HW_TIER"
-        echo "Heap aplicado: $MC_MIN_RAM -> $MC_MAX_RAM"
-        echo "View/Simulation: $MC_VIEW_DISTANCE / $MC_SIMULATION_DISTANCE"
-        echo "Max players: $MC_MAX_PLAYERS"
-    ' bash "$SERVER_DIR" "$forced_tier" "$PROPS_FILE" "$RUNTIME_ENV" "$TUNING_STATE" "$HARDWARE_LIB" "$MC_TUNING_LIB"
+    echo "Tier detectado: $HW_DETECTED_TIER"
+    echo "Tier aplicado: $HW_TIER"
+    echo "Heap aplicado: $MC_MIN_RAM -> $MC_MAX_RAM"
+    echo "View/Simulation: $MC_VIEW_DISTANCE / $MC_SIMULATION_DISTANCE"
+    echo "Max players: $MC_MAX_PLAYERS"
 
     chown -R "${SERVER_USER}:${SERVER_USER}" "$SERVER_DIR"
 

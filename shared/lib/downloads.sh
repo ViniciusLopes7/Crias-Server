@@ -13,6 +13,7 @@ download_and_verify() {
     local tmpfile
 
     tmpfile=$(mktemp)
+    mkdir -p "$(dirname "$dest")"
 
     if ! curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors --connect-timeout 10 --max-time 300 -o "$tmpfile" "$url"; then
         print_error "Falha ao baixar $url"

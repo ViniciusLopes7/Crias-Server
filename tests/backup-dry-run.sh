@@ -44,6 +44,13 @@ chmod +x "$stub_bin/ionice"
 cat > "$stub_bin/tar" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+
+# Validate expected arguments for tar (should include compression and output)
+if [[ "$*" != *"-c"* ]] || [[ "$*" != *"-f"* ]]; then
+    echo "ERROR: tar must be called with -c (create) and -f (file) arguments" >&2
+    exit 1
+fi
+
 echo "tar:$*" >> "${TAR_LOG_FILE:?}"
 exit 0
 EOF

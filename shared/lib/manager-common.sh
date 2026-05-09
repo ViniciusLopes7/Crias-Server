@@ -40,6 +40,11 @@ manager_cmd_restart() {
 manager_cmd_status() {
     local service_name="$1"
     systemctl status "$service_name" --no-pager || true
+
+    if command -v sensors >/dev/null 2>&1; then
+        printf '\n[Hardware]\n'
+        sensors 2>/dev/null || true
+    fi
 }
 
 manager_cmd_logs() {

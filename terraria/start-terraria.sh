@@ -44,6 +44,15 @@ for key in worldpath port maxplayers; do
     fi
 done
 
+WORLD_PATH="$(grep -E '^worldpath=' "$CONFIG_FILE" 2>/dev/null | tail -n 1 | cut -d'=' -f2- || true)"
+if [ -n "$WORLD_PATH" ]; then
+    WORLD_PATH_DIR="$(dirname "$WORLD_PATH")"
+    if [ ! -w "$WORLD_PATH_DIR" ]; then
+        echo "ERRO: Diretorio de worldpath nao e gravavel: $WORLD_PATH_DIR"
+        exit 1
+    fi
+fi
+
 SERVER_PORT="$(grep -E '^port=' "$CONFIG_FILE" 2>/dev/null | tail -n 1 | cut -d'=' -f2- || true)"
 if ! [[ "$SERVER_PORT" =~ ^[0-9]+$ ]]; then
     SERVER_PORT=7777

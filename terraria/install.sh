@@ -87,11 +87,18 @@ download_and_extract_terraria() {
     fi
 
     print_step "Extraindo servidor Terraria..."
-    unzip -q -o "$tmp_zip" -d "$tmp_dir"
+    unzip -q -o -j "$tmp_zip" -d "$tmp_dir"
 
-    binary_path=$(find "$tmp_dir" -type f -name "TerrariaServer.bin.x86_64" | head -n 1)
+    binary_path=$(find "$tmp_dir" -type f -name "TerrariaServer.bin.x86_64" -print -quit)
     if [ -z "$binary_path" ]; then
         print_error "Nao foi possivel localizar TerrariaServer.bin.x86_64 no pacote baixado."
+        rm -f "$tmp_zip"
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+
+    if ! file "$binary_path" | grep -q 'ELF'; then
+        print_error "O binario encontrado nao parece ser um executavel ELF valido."
         rm -f "$tmp_zip"
         rm -rf "$tmp_dir"
         exit 1

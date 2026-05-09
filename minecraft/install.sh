@@ -29,6 +29,35 @@ FORCE_HARDWARE_TIER="${FORCE_HARDWARE_TIER:-}"
 APPLY_SYSTEM_TUNING="${APPLY_SYSTEM_TUNING:-true}"
 DRY_RUN="${DRY_RUN:-false}"
 
+validate_minecraft_inputs() {
+    case "$MINECRAFT_LOADER" in
+        fabric|quilt|paper|vanilla|forge|neoforge)
+            ;;
+        *)
+            print_error "MINECRAFT_LOADER invalido: $MINECRAFT_LOADER"
+            print_error "Use: fabric, quilt, paper, vanilla, forge ou neoforge."
+            exit 1
+            ;;
+    esac
+
+    if ! [[ "$MINECRAFT_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+        print_error "MINECRAFT_VERSION invalido: $MINECRAFT_VERSION"
+        print_error "Use formato semantico (ex.: 1.21.11)."
+        exit 1
+    fi
+
+    if is_true "$MINECRAFT_INSTALL_MODPACK" && [ "$MINECRAFT_LOADER" != "fabric" ]; then
+        print_warning "Adrenaline e otimizado para Fabric. Loader atual: $MINECRAFT_LOADER"
+        if is_true "${NON_INTERACTIVE:-false}"; then
+            print_warning "Mantendo loader informado por estar em modo non-interactive."
+        else
+            if ask_confirm "Trocar loader para fabric para maximizar compatibilidade do modpack?" "Y"; then
+                MINECRAFT_LOADER="fabric"
+            fi
+        fi
+    fi
+}
+
 install_minecraft_dependencies() {
     if is_true "$DRY_RUN"; then
         print_step "[DRY_RUN] Pulando instalacao de dependencias do Minecraft."
@@ -76,6 +105,12 @@ install_mrpack_install() {
 
     print_step "Instalando mrpack-install..."
 
+    if pacman -Si mrpack-install >/dev/null 2>&1; then
+        print_step "Pacote mrpack-install encontrado no repositorio. Instalando via pacman..."
+        pacman -S --needed --noconfirm mrpack-install
+        return 0
+    fi
+
     local mrpack_url
     mrpack_url=$(curl -fsSL --connect-timeout 10 --max-time 60 https://api.github.com/repos/nothub/mrpack-install/releases/latest | jq -r '.assets[] | select(.name=="mrpack-install-linux") | .browser_download_url')
 
@@ -103,6 +138,13 @@ install_mrpack_install() {
         print_error "Falha ao baixar/validar mrpack-install"
         exit 1
     fi
+
+    # Validate ELF format before marking executable
+    if ! file /tmp/mrpack-install | grep -q "ELF.*executable"; then
+        print_error "mrpack-install nao e um binario ELF valido. Download pode estar corrompido."
+        exit 1
+    fi
+
     install -m 755 /tmp/mrpack-install /usr/local/bin/mrpack-install
 }
 
@@ -118,12 +160,12 @@ install_minecraft_base() {
 
     if is_true "$MINECRAFT_INSTALL_MODPACK"; then
         if [ -n "$MINECRAFT_ADRENALINE_VERSION" ]; then
-            mrpack-install adrenaline "$MINECRAFT_ADRENALINE_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
+            timeout 300 mrpack-install adrenaline "$MINECRAFT_ADRENALINE_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
         else
-            mrpack-install adrenaline --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
+            timeout 300 mrpack-install adrenaline --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
         fi
     else
-        mrpack-install "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
+        timeout 300 mrpack-install "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
     fi
 
     # Write EULA file.
@@ -352,6 +394,8 @@ apply_minecraft_system_tuning() {
 run_minecraft_install() {
     print_step "Iniciando instalacao do stack Minecraft..."
 
+    validate_minecraft_inputs
+
     if is_true "$DRY_RUN"; then
         print_step "[DRY_RUN] Instalacao do Minecraft encerrada sem aplicar alteracoes."
         return 0
@@ -380,6 +424,9 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         fi
     else
         # In interactive mode, ask user to confirm EULA acceptance.
+        echo "Para mais informacoes sobre a EULA da Mojang, visite:"
+        echo "https://account.mojang.com/documents/minecraft_eula"
+        echo ""
         if ! ask_confirm "Aceitar EULA da Mojang?" "N"; then
             print_error "EULA nao aceita. Instalacao abortada."
             exit 1

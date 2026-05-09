@@ -3,12 +3,13 @@ set -euo pipefail
 
 echo "Running static audit checks..."
 errors=0
+scan_excludes=(--exclude-dir=.git --exclude-dir=docs --exclude-dir=assets)
 
 echo "Checking for curl downloads without timeouts (only flagging -o/-O usage)..."
-bad_curls=$(grep -RIn "curl [^\n]* -o\|curl [^\n]* -O" --exclude-dir=.git --exclude-dir=docs --exclude-dir=assets || true)
+bad_curls=$(grep -RInE "^[[:space:]]*[^#]*\bcurl\b[^#]*[[:space:]]-(o|O)([[:space:]]|$)" "${scan_excludes[@]}" . || true)
 if [ -n "$bad_curls" ]; then
   # Filter out lines that include explicit timeouts
-  filtered=$(printf "%s" "$bad_curls" | grep -v -- "--connect-timeout" | grep -v -- "--max-time" || true)
+  filtered=$(printf "%s\n" "$bad_curls" | grep -v -- "--connect-timeout" | grep -v -- "--max-time" || true)
   if [ -n "$filtered" ]; then
     echo "ERROR: Found curl downloads without timeouts:" >&2
     printf "%s\n" "$filtered" >&2
@@ -17,7 +18,7 @@ if [ -n "$bad_curls" ]; then
 fi
 
 echo "Checking for tar commands with stderr suppressed to /dev/null..."
-bad_tar=$(grep -RIn "tar .*2>/dev/null" --exclude-dir=.git --exclude-dir=docs --exclude-dir=assets --exclude-dir=tests || true)
+bad_tar=$(grep -RInE "^[[:space:]]*[^#]*\btar\b[^#]*2>/dev/null" "${scan_excludes[@]}" --exclude-dir=tests . || true)
 if [ -n "$bad_tar" ]; then
   echo "ERROR: Found tar commands redirecting stderr to /dev/null:" >&2
   printf "%s\n" "$bad_tar" >&2
@@ -25,7 +26,7 @@ if [ -n "$bad_tar" ]; then
 fi
 
 echo "Checking for ionice+tar with stderr redirection..."
-bad_ionice=$(grep -RIn "ionice .*tar .*2>/dev/null" --exclude-dir=.git --exclude-dir=docs --exclude-dir=assets --exclude-dir=tests || true)
+bad_ionice=$(grep -RInE "^[[:space:]]*[^#]*\bionice\b[^#]*\btar\b[^#]*2>/dev/null" "${scan_excludes[@]}" --exclude-dir=tests . || true)
 if [ -n "$bad_ionice" ]; then
   echo "ERROR: Found ionice+tar redirecting stderr to /dev/null:" >&2
   printf "%s\n" "$bad_ionice" >&2

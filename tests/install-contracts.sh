@@ -10,6 +10,8 @@ trap 'rm -rf "$TMP_TEST_DIR"' EXIT
 
 # shellcheck source=/dev/null
 source "$ROOT_DIR/tests/lib/assert.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/shared/lib/config-parser.sh"
 
 assert_expected_failure() {
     local config_file="$1"
@@ -97,8 +99,7 @@ EOF
     (
         SERVER_TYPE="terraria"
 
-        # shellcheck source=/dev/null
-        source ./install.sh
+        capture_env_overrides
 
         load_config_file "$cfg_file"
         restore_env_overrides
@@ -138,8 +139,6 @@ TERRARIA_WORLD_NAME="Mundo do Crias"
 EOF
 
     (
-        # shellcheck source=/dev/null
-        source ./install.sh
         MINECRAFT_MOTD=""
         TERRARIA_MOTD=""
         TERRARIA_WORLD_NAME=""

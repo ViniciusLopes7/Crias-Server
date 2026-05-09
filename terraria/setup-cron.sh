@@ -35,7 +35,7 @@ detect_server_user() {
 write_service_unit() {
     local target_service="$BACKUP_SERVICE"
     if [ "$DRY_RUN" = "true" ]; then
-        target_service="${BACKUP_SERVICE}.dryrun"
+        target_service="/tmp/$(basename "$BACKUP_SERVICE").dryrun"
         echo "[DRY_RUN] Registrando unidade em $target_service (nao sera escrita em /etc em modo DRY_RUN)"
     fi
 
@@ -77,7 +77,7 @@ write_timer_unit() {
 
     local target_timer="$BACKUP_TIMER"
     if [ "$DRY_RUN" = "true" ]; then
-        target_timer="${BACKUP_TIMER}.dryrun"
+        target_timer="/tmp/$(basename "$BACKUP_TIMER").dryrun"
         echo "[DRY_RUN] Registrando timer em $target_timer (nao sera escrita em /etc em modo DRY_RUN)"
     fi
 
@@ -91,10 +91,10 @@ RandomizedDelaySec=5m
 EOF
 
     for line in "$@"; do
-        printf '%s\n' "$line" >> "$BACKUP_TIMER"
+        printf '%s\n' "$line" >> "$target_timer"
     done
 
-    cat >> "$BACKUP_TIMER" <<EOF
+    cat >> "$target_timer" <<EOF
 
 [Install]
 WantedBy=timers.target
@@ -105,6 +105,11 @@ EOF
 remove_legacy_cron_entries() {
     local tmp_cron_file
     local has_legacy=false
+
+    if [ "$DRY_RUN" = "true" ]; then
+        echo "[DRY_RUN] Simulando remocao de cron (sem alteracoes)"
+        return 0
+    fi
 
     if ! command -v crontab >/dev/null 2>&1; then
         return 0

@@ -85,11 +85,9 @@ resolve_block_device_for_path() {
         probe_path="$(dirname "$probe_path")"
     fi
 
-    # Prefer findmnt for robust resolution; fall back to df on older systems.
+    # Prefer findmnt for robust resolution.
     if command -v findmnt >/dev/null 2>&1; then
         device=$(findmnt -no SOURCE --target "$probe_path" 2>/dev/null | head -n 1)
-    else
-        device=$(df -P "$probe_path" 2>/dev/null | awk 'NR==2 {print $1}')
     fi
 
     if [ -z "$device" ] || [ "${device#/dev/}" = "$device" ]; then
@@ -133,6 +131,9 @@ detect_disk_type_for_path() {
                 return 0
                 ;;
         esac
+        if command -v print_warning >/dev/null 2>&1; then
+            print_warning "Nao foi possivel inferir o tipo de disco para $target_path; usando UNKNOWN."
+        fi
         echo "UNKNOWN"
         return 0
     fi
@@ -165,6 +166,9 @@ detect_disk_type_for_path() {
         return 0
     fi
 
+    if command -v print_warning >/dev/null 2>&1; then
+        print_warning "Nao foi possivel inferir o tipo de disco para $target_path; usando UNKNOWN."
+    fi
     echo "UNKNOWN"
 }
 

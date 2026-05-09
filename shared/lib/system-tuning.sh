@@ -89,6 +89,7 @@ apply_cpupower_tuning() {
         local available_list
         available_list=$(cpupower frequency-info -g 2>/dev/null || true)
         if [ -n "$available_list" ] && ! echo "$available_list" | grep -qw "$target_governor"; then
+            print_warning "Governor $target_governor nao encontrado; mantendo configuracao padrao do sistema."
             return 0
         fi
         cpupower frequency-set -g "$target_governor" >/dev/null 2>&1 || true
@@ -121,6 +122,10 @@ apply_zram_and_sysctl_tuning() {
     local zram_conf="/etc/systemd/zram-generator.conf"
     local sysctl_conf="/etc/sysctl.d/99-server-tuning.conf"
     local backup_suffix
+
+    if dry_run_enabled; then
+        return 0
+    fi
 
     if [ -z "$total_ram_mb" ] || [ "$total_ram_mb" -le 0 ]; then
         total_ram_mb=4096

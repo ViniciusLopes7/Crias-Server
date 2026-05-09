@@ -8,90 +8,8 @@ CONFIG_FILE="${CONFIG_FILE:-$SCRIPT_DIR/config.env}"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/shared/lib/common.sh"
 
-OVERRIDABLE_VARS=(
-    SERVER_TYPE
-    FORCE_HARDWARE_TIER
-    INSTALL_TAILSCALE
-    APPLY_SYSTEM_TUNING
-    SYSTEM_TUNING_SCOPE
-    CLEANUP_OTHER_STACK
-    DRY_RUN
-    NON_INTERACTIVE
-    MINECRAFT_USER
-    MINECRAFT_SERVER_DIR
-    MINECRAFT_PORT
-    MINECRAFT_ONLINE_MODE
-    MINECRAFT_MOTD
-    MINECRAFT_VERSION
-    MINECRAFT_LOADER
-    MINECRAFT_INSTALL_MODPACK
-    MINECRAFT_ADRENALINE_VERSION
-    MINECRAFT_INSTALL_QOL_MODS
-    ACCEPT_EULA
-    MRPACK_SHA256
-    TERRARIA_USER
-    TERRARIA_SERVER_DIR
-    TERRARIA_PORT
-    TERRARIA_WORLD_NAME
-    TERRARIA_MOTD
-    TERRARIA_DOWNLOAD_URL
-    TERRARIA_SHA256
-)
-
-capture_env_overrides() {
-    local var_name
-    local has_name
-    local value_name
-    local __escaped
-
-    for var_name in "${OVERRIDABLE_VARS[@]}"; do
-        has_name="ENV_HAS_${var_name}"
-        value_name="ENV_VALUE_${var_name}"
-
-        if [[ -v $var_name ]]; then
-            __escaped=$(printf '%q' "true")
-            # shellcheck disable=SC2163
-            eval export "${has_name}=${__escaped}"
-            __escaped=$(printf '%q' "${!var_name}")
-            # shellcheck disable=SC2163
-            eval export "${value_name}=${__escaped}"
-        else
-            __escaped=$(printf '%q' "false")
-            # shellcheck disable=SC2163
-            eval export "${has_name}=${__escaped}"
-        fi
-    done
-}
-
-# Safely set and export a dynamic variable name.
-# Use printf %q to safely escape the value, then eval the assignment.
-set_config_var() {
-    local __key="$1"
-    local __val="$2"
-    local __escaped
-
-    __escaped=$(printf '%q' "$__val")
-    # shellcheck disable=SC2163
-    eval export "${__key}=${__escaped}"
-}
-
-restore_env_overrides() {
-    local var_name
-    local has_name
-    local value_name
-    local __escaped
-
-    for var_name in "${OVERRIDABLE_VARS[@]}"; do
-        has_name="ENV_HAS_${var_name}"
-        value_name="ENV_VALUE_${var_name}"
-
-        if [ "${!has_name}" = "true" ]; then
-            __escaped=$(printf '%q' "${!value_name}")
-            # shellcheck disable=SC2163
-            eval export "${var_name}=${__escaped}"
-        fi
-    done
-}
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/shared/lib/config-parser.sh"
 
 capture_env_overrides
 
@@ -123,46 +41,6 @@ TERRARIA_PORT="${TERRARIA_PORT:-7777}"
 TERRARIA_WORLD_NAME="${TERRARIA_WORLD_NAME:-world}"
 TERRARIA_MOTD="${TERRARIA_MOTD:-Servidor Terraria gerenciado por Crias-Server}"
 TERRARIA_DOWNLOAD_URL="${TERRARIA_DOWNLOAD_URL:-https://terraria.org/api/download/pc-dedicated-server/terraria-server-1456.zip}"
-
-load_config_file() {
-    local config_file="${1:-$CONFIG_FILE}"
-
-    if [ -f "$config_file" ]; then
-        # Read file line-by-line and export safe KEY=VALUE pairs.
-        # Do NOT 'source' the file to avoid executing command substitutions.
-        while IFS= read -r line || [ -n "$line" ]; do
-            # Trim leading/trailing whitespace
-            local __trim
-            __trim="${line%%[![:space:]]*}"
-            line="${line#"$__trim"}"
-            __trim="${line##*[![:space:]]}"
-            line="${line%"$__trim"}"
-
-            [ -z "$line" ] && continue
-            [[ "$line" == \#* ]] && continue
-
-            if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
-                local key="${BASH_REMATCH[1]}"
-                local value="${BASH_REMATCH[2]}"
-
-                # Remove surrounding quotes if present
-                if [[ "$value" == '"'*'"' ]] || [[ "$value" == "'"*"'" ]]; then
-                    value="${value:1:${#value}-2}"
-                fi
-
-                # Neutralize command substitution and backticks to avoid execution
-                value="${value//\$\(/\\$\(}"
-                value="${value//\`/\\\`}"
-
-                # Assign and export via central helper to preserve semantics
-                # and keep a single documented place for dynamic exports.
-                set_config_var "$key" "$value"
-            else
-                printf '%s\n' "Linha ignorada em ${config_file} (formato invalido): ${line}" >&2
-            fi
-        done < "$config_file"
-    fi
-}
 
 select_server_type() {
     if [ "$SERVER_TYPE" = "minecraft" ] || [ "$SERVER_TYPE" = "terraria" ]; then
@@ -334,6 +212,8 @@ ensure_alias_autoload_entry() {
     source_line="[ -f \"$alias_script\" ] && . \"$alias_script\""
 
     if [ -f "$profiled_path" ]; then
+        cleanup_stale_alias_autoload_entries "$profiled_path"
+
         if grep -Fqx "$source_line" "$profiled_path"; then
             print_step "Aliases globais ja configurados em $profiled_path"
             return 0
@@ -353,6 +233,33 @@ EOF
 
     print_success "Aliases configurados automaticamente em $profiled_path"
     print_step "Abra um novo shell de login ou faca logout/login para carregar os atalhos."
+    print_step "Opcional: carregue agora com: source $profiled_path"
+}
+
+cleanup_stale_alias_autoload_entries() {
+    local profiled_path="$1"
+    local tmp_file
+    local line
+    local alias_path
+
+    if [ ! -f "$profiled_path" ]; then
+        return 0
+    fi
+
+    tmp_file="$(mktemp)"
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        if [[ "$line" =~ ^\[\ -f\ \"([^\"]+)\"\ \]\ \&\&\ \.\ \"([^\"]+)\"$ ]]; then
+            alias_path="${BASH_REMATCH[1]}"
+            if [ ! -f "$alias_path" ]; then
+                continue
+            fi
+        fi
+        printf '%s\n' "$line" >> "$tmp_file"
+    done < "$profiled_path"
+
+    mv "$tmp_file" "$profiled_path"
+    chmod 0644 "$profiled_path"
 }
 
 remove_alias_autoload_entry() {
@@ -382,6 +289,46 @@ remove_alias_autoload_entry() {
     chmod 0644 "$profiled_path"
 }
 
+write_stack_env_file() {
+    local env_file
+
+    env_file="$(mktemp "${TMPDIR:-/tmp}/crias_stack_env.XXXXXX")"
+    chmod 600 "$env_file"
+
+    {
+        printf 'FORCE_HARDWARE_TIER=%q\n' "$FORCE_HARDWARE_TIER"
+        printf 'APPLY_SYSTEM_TUNING=%q\n' "$APPLY_SYSTEM_TUNING"
+        printf 'SYSTEM_TUNING_SCOPE=%q\n' "$SYSTEM_TUNING_SCOPE"
+        printf 'DRY_RUN=%q\n' "$DRY_RUN"
+        printf 'NON_INTERACTIVE=%q\n' "$NON_INTERACTIVE"
+
+        if [ "$SERVER_TYPE" = "minecraft" ]; then
+            printf 'MINECRAFT_USER=%q\n' "$MINECRAFT_USER"
+            printf 'MINECRAFT_SERVER_DIR=%q\n' "$MINECRAFT_SERVER_DIR"
+            printf 'MINECRAFT_PORT=%q\n' "$MINECRAFT_PORT"
+            printf 'MINECRAFT_ONLINE_MODE=%q\n' "$MINECRAFT_ONLINE_MODE"
+            printf 'MINECRAFT_MOTD=%q\n' "$MINECRAFT_MOTD"
+            printf 'MINECRAFT_VERSION=%q\n' "$MINECRAFT_VERSION"
+            printf 'MINECRAFT_LOADER=%q\n' "$MINECRAFT_LOADER"
+            printf 'MINECRAFT_INSTALL_MODPACK=%q\n' "$MINECRAFT_INSTALL_MODPACK"
+            printf 'MINECRAFT_ADRENALINE_VERSION=%q\n' "$MINECRAFT_ADRENALINE_VERSION"
+            printf 'MINECRAFT_INSTALL_QOL_MODS=%q\n' "$MINECRAFT_INSTALL_QOL_MODS"
+            printf 'ACCEPT_EULA=%q\n' "${ACCEPT_EULA:-false}"
+            printf 'MRPACK_SHA256=%q\n' "${MRPACK_SHA256:-}"
+        else
+            printf 'TERRARIA_USER=%q\n' "$TERRARIA_USER"
+            printf 'TERRARIA_SERVER_DIR=%q\n' "$TERRARIA_SERVER_DIR"
+            printf 'TERRARIA_PORT=%q\n' "$TERRARIA_PORT"
+            printf 'TERRARIA_WORLD_NAME=%q\n' "$TERRARIA_WORLD_NAME"
+            printf 'TERRARIA_MOTD=%q\n' "$TERRARIA_MOTD"
+            printf 'TERRARIA_DOWNLOAD_URL=%q\n' "$TERRARIA_DOWNLOAD_URL"
+            printf 'TERRARIA_SHA256=%q\n' "${TERRARIA_SHA256:-}"
+        fi
+    } > "$env_file"
+
+    printf '%s\n' "$env_file"
+}
+
 configure_alias_autoload_for_selected_stack() {
     local alias_script
 
@@ -400,41 +347,36 @@ configure_alias_autoload_for_selected_stack() {
 }
 
 run_selected_stack_installer() {
+    local env_file
+    local target_script
+    local entry_function
+
+    env_file="$(write_stack_env_file)"
+
     if [ "$SERVER_TYPE" = "minecraft" ]; then
-        MINECRAFT_USER="$MINECRAFT_USER" \
-        MINECRAFT_SERVER_DIR="$MINECRAFT_SERVER_DIR" \
-        MINECRAFT_PORT="$MINECRAFT_PORT" \
-        MINECRAFT_ONLINE_MODE="$MINECRAFT_ONLINE_MODE" \
-        MINECRAFT_MOTD="$MINECRAFT_MOTD" \
-        MINECRAFT_VERSION="$MINECRAFT_VERSION" \
-        MINECRAFT_LOADER="$MINECRAFT_LOADER" \
-        MINECRAFT_INSTALL_MODPACK="$MINECRAFT_INSTALL_MODPACK" \
-        MINECRAFT_ADRENALINE_VERSION="$MINECRAFT_ADRENALINE_VERSION" \
-        MINECRAFT_INSTALL_QOL_MODS="$MINECRAFT_INSTALL_QOL_MODS" \
-        ACCEPT_EULA="${ACCEPT_EULA:-false}" \
-        MRPACK_SHA256="${MRPACK_SHA256:-}" \
-        FORCE_HARDWARE_TIER="$FORCE_HARDWARE_TIER" \
-        APPLY_SYSTEM_TUNING="$APPLY_SYSTEM_TUNING" \
-        SYSTEM_TUNING_SCOPE="$SYSTEM_TUNING_SCOPE" \
-        DRY_RUN="$DRY_RUN" \
-        NON_INTERACTIVE="$NON_INTERACTIVE" \
-        bash "$SCRIPT_DIR/minecraft/install.sh"
+        target_script="$SCRIPT_DIR/minecraft/install.sh"
+        entry_function="run_minecraft_install"
+    else
+        target_script="$SCRIPT_DIR/terraria/install.sh"
+        entry_function="run_terraria_install"
+    fi
+
+    if (
+        set -euo pipefail
+        # shellcheck disable=SC1090
+        source "$env_file"
+        rm -f "$env_file"
+        # shellcheck disable=SC1090
+        source "$target_script"
+        "$entry_function"
+    ); then
+        rm -f "$env_file"
         return 0
     fi
 
-    TERRARIA_USER="$TERRARIA_USER" \
-    TERRARIA_SERVER_DIR="$TERRARIA_SERVER_DIR" \
-    TERRARIA_PORT="$TERRARIA_PORT" \
-    TERRARIA_WORLD_NAME="$TERRARIA_WORLD_NAME" \
-    TERRARIA_MOTD="$TERRARIA_MOTD" \
-    TERRARIA_DOWNLOAD_URL="$TERRARIA_DOWNLOAD_URL" \
-    TERRARIA_SHA256="${TERRARIA_SHA256:-}" \
-    FORCE_HARDWARE_TIER="$FORCE_HARDWARE_TIER" \
-    APPLY_SYSTEM_TUNING="$APPLY_SYSTEM_TUNING" \
-    SYSTEM_TUNING_SCOPE="$SYSTEM_TUNING_SCOPE" \
-    DRY_RUN="$DRY_RUN" \
-    NON_INTERACTIVE="$NON_INTERACTIVE" \
-    bash "$SCRIPT_DIR/terraria/install.sh"
+    local exit_code=$?
+    rm -f "$env_file"
+    return "$exit_code"
 }
 
 cleanup_stack_by_type() {
@@ -475,24 +417,28 @@ cleanup_stack_by_type() {
     # If user-specific crontab exists and contains the backup script, remove it.
     if command -v crontab >/dev/null 2>&1; then
         if crontab -u "$server_user_var" -l 2>/dev/null | grep -Fq "$stack_dir/backup-cron.sh"; then
-            crontab -u "$server_user_var" -l 2>/dev/null | grep -Fv "$stack_dir/backup-cron.sh" > /tmp/crias_cron.$$ || true
-            if [ -s /tmp/crias_cron.$$ ]; then
-                crontab -u "$server_user_var" /tmp/crias_cron.$$ >/dev/null 2>&1 || true
+            local tmp_cron_file
+            tmp_cron_file="$(mktemp "${TMPDIR:-/tmp}/crias_cron.XXXXXX")"
+            crontab -u "$server_user_var" -l 2>/dev/null | grep -Fv "$stack_dir/backup-cron.sh" > "$tmp_cron_file" || true
+            if [ -s "$tmp_cron_file" ]; then
+                crontab -u "$server_user_var" "$tmp_cron_file" >/dev/null 2>&1 || true
             else
                 crontab -u "$server_user_var" -r >/dev/null 2>&1 || true
             fi
-            rm -f /tmp/crias_cron.$$
+            rm -f "$tmp_cron_file"
         fi
 
         # Also attempt to remove from root crontab if present
         if crontab -l 2>/dev/null | grep -Fq "$stack_dir/backup-cron.sh"; then
-            crontab -l 2>/dev/null | grep -Fv "$stack_dir/backup-cron.sh" > /tmp/crias_cron_root.$$ || true
-            if [ -s /tmp/crias_cron_root.$$ ]; then
-                crontab /tmp/crias_cron_root.$$ >/dev/null 2>&1 || true
+            local tmp_cron_root_file
+            tmp_cron_root_file="$(mktemp "${TMPDIR:-/tmp}/crias_cron_root.XXXXXX")"
+            crontab -l 2>/dev/null | grep -Fv "$stack_dir/backup-cron.sh" > "$tmp_cron_root_file" || true
+            if [ -s "$tmp_cron_root_file" ]; then
+                crontab "$tmp_cron_root_file" >/dev/null 2>&1 || true
             else
                 crontab -r >/dev/null 2>&1 || true
             fi
-            rm -f /tmp/crias_cron_root.$$
+            rm -f "$tmp_cron_root_file"
         fi
     fi
 
@@ -552,9 +498,8 @@ main() {
 
     if is_true "$DRY_RUN"; then
         print_warning "Modo DRY_RUN ativo: nenhuma alteracao destrutiva no host sera aplicada."
-        # Keep fail-fast enabled even in DRY_RUN to catch logic errors. Individual
-        # destructive actions are still gated by dry-run checks in modules.
-        trap 'echo "[install.sh] erro detectado durante DRY_RUN (exit=$?)" >&2; echo "--- Ambiente (partial) ---" >&2; env | sort >&2; echo "--- Conteudo do CONFIG_FILE (${CONFIG_FILE:-<unset>}) ---" >&2; if [ -f "${CONFIG_FILE:-}" ]; then sed -n "1,200p" "${CONFIG_FILE}" >&2 || true; fi' ERR
+        # Keep fail-fast enabled even in DRY_RUN to catch logic errors without exposing secrets.
+        trap 'echo "[install.sh] erro em DRY_RUN (exit=$?)" >&2; echo "Funcao: ${FUNCNAME[1]:-unknown}, Linha: ${BASH_LINENO[0]}" >&2; echo "Arquivo: ${BASH_SOURCE[1]:-unknown}" >&2' ERR
     else
         check_root
         check_arch

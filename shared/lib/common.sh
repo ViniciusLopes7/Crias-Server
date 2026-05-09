@@ -57,6 +57,7 @@ is_true() {
     value="${value#"$__trim"}"
     __trim="${value##*[![:space:]]}"
     value="${value%"$__trim"}"
+    # Accepted truthy values: 1, true, yes, y, sim, s, on, enabled.
     case "${value,,}" in
         1|true|yes|y|sim|s|on|enabled)
             return 0
@@ -108,11 +109,14 @@ ask_confirm() {
         prompt_text="$prompt [y/N]: "
     fi
 
+    trap 'echo ""; print_warning "Operacao cancelada pelo usuario (SIGINT)."; return 130' INT
     if ! read -r -p "$prompt_text" answer; then
+        trap - INT
         echo ""
         print_warning "Operacao cancelada pelo usuario (EOF/SIGINT)."
         return 1
     fi
+    trap - INT
     if [ -z "$answer" ]; then
         answer="$default_ans"
     fi

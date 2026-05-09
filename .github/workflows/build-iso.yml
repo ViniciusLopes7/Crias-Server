@@ -28,6 +28,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Run Shellcheck
         uses: ludeeus/action-shellcheck@2.0.0
         with:
@@ -43,6 +45,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Run static audit
         run: bash tests/static-audit.sh
 
@@ -56,6 +60,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Run quick script tests
         run: bash tests/quick-script-tests.sh
@@ -70,6 +76,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Validate archiso profile
         run: bash tests/archiso-profile-validate.sh
@@ -83,7 +91,7 @@ jobs:
       contents: read
     container:
       image: archlinux:base-devel
-      options: --privileged
+      options: --cap-add=SYS_ADMIN --security-opt seccomp=unconfined
     steps:
       - name: Install CI dependencies
         run: |
@@ -93,6 +101,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Run install contract tests
         run: bash tests/install-contracts.sh
@@ -111,7 +121,7 @@ jobs:
       contents: read
     container:
       image: archlinux:base-devel
-      options: --privileged
+      options: --cap-add=SYS_ADMIN --security-opt seccomp=unconfined
     steps:
       - name: Install dependencies
         run: |
@@ -146,7 +156,7 @@ jobs:
       contents: read
     container:
       image: archlinux:base-devel
-      options: --privileged
+      options: --cap-add=SYS_ADMIN --security-opt seccomp=unconfined
     steps:
       - name: Install validation dependencies
         run: |
@@ -156,6 +166,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download ISO artifact
         uses: actions/download-artifact@v4
@@ -203,6 +215,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download ISO artifact
         uses: actions/download-artifact@v4

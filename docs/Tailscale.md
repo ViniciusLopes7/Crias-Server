@@ -213,8 +213,8 @@ sudo systemctl start minecraft
 # 3. Verificar firewall
 sudo iptables -L | grep 25565
 
-# 4. Se não aparecer, liberar porta
-sudo iptables -A INPUT -p tcp --dport 25565 -j ACCEPT
+# 4. Se não aparecer, liberar porta apenas na interface Tailscale
+sudo iptables -A INPUT -i tailscale0 -p tcp --dport 25565 -j ACCEPT
 ```
 
 ---

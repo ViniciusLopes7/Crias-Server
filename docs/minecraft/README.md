@@ -48,6 +48,36 @@ Aliases disponiveis:
 - mchw
 - mcreconfig
 
+## Ícone do Servidor (Server Icon)
+
+O instalador copia automaticamente um ícone padrão para o diretório do servidor durante a instalação:
+
+- **Caminho no repositório:** `assets/images/branding/server-icon.png`
+- **Destino:** `/opt/minecraft-server/server-icon.png`
+
+O Minecraft exibe este ícone no multiplayer server list se o arquivo estiver presente.
+
+### Personalização
+
+Para usar um ícone customizado:
+
+1. Prepare uma imagem PNG de **64x64 pixels**
+2. Coloque em `assets/images/branding/server-icon.png` **antes da instalação**
+3. Execute o instalador (copiará a imagem customizada)
+
+Ou, após a instalação:
+
+```bash
+cp seu_icon.png /opt/minecraft-server/server-icon.png
+sudo chown minecraft:minecraft /opt/minecraft-server/server-icon.png
+```
+
+Requisitos do Minecraft para server-icon:
+
+- Formato: PNG
+- Dimensões: 64x64 pixels
+- Tamanho máximo: ~100KB
+
 ## Arquivos relevantes em runtime
 
 - /opt/minecraft-server/runtime.env
