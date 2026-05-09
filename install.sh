@@ -57,17 +57,14 @@ capture_env_overrides() {
 }
 
 # Safely set and export a dynamic variable name.
-# Uses printf -v to create the variable without using eval/source, preserving
-# spaces and preventing command substitution, then exports it. ShellCheck may
-# warn (SC2163) about exporting a dynamic name; this function centralizes and
-# documents the pattern for auditability.
+# ShellCheck warns (SC2163) about dynamic export names, but 'export NAME=value'
+# syntax correctly handles this when NAME is a valid identifier.
 set_config_var() {
     local __key="$1"
     local __val="$2"
 
-    printf -v "${__key}" '%s' "${__val}"
     # shellcheck disable=SC2163
-    export "${__key}"
+    export "${__key}=${__val}"
 }
 
 restore_env_overrides() {
