@@ -39,6 +39,6 @@ echo "[quick-script-tests] Validando tuning do Minecraft..."
 bash tests/minecraft-tuning-test.sh
 
 echo "[quick-script-tests] Validando contrato de checksum por mod..."
-grep -Fq 'file_name_norm="${file_name//-/_}"' minecraft/install.sh
+grep -Fq "file_name_norm=\"\${file_name//-/_}\"" minecraft/install.sh
 
 echo "[quick-script-tests] OK"

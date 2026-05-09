@@ -86,7 +86,6 @@ apply_cpupower_tuning() {
     fi
 
     if command -v cpupower >/dev/null 2>&1; then
-        local available
         local available_list
         available_list=$(cpupower frequency-info -g 2>/dev/null || true)
         if [ -n "$available_list" ] && ! echo "$available_list" | grep -qw "$target_governor"; then

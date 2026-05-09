@@ -131,7 +131,7 @@ load_config_file() {
                 value="${value//\`/\\\`}"
 
                 # Assign safely to avoid word splitting and preserve spaces/newlines.
-                # Use printf -v to set the variable by name, then export it.
+                # shellcheck disable=SC2163
                 printf -v "$key" '%s' "$value"
                 export "$key"
             else
