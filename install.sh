@@ -131,9 +131,7 @@ load_config_file() {
                 value="${value//\`/\\\`}"
 
                 # Assign safely to avoid word splitting and preserve spaces/newlines.
-                # shellcheck disable=SC2163
-                printf -v "$key" '%s' "$value"
-                export "$key"
+                declare -x "$key=$value"
             else
                 printf '%s\n' "Linha ignorada em ${config_file} (formato invalido): ${line}" >&2
             fi
