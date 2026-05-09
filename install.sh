@@ -493,7 +493,7 @@ cleanup_other_stack_if_needed() {
 
 main() {
     print_header
-    load_config_file
+    load_config_file "$CONFIG_FILE"
     restore_env_overrides
 
     if is_true "$DRY_RUN"; then
