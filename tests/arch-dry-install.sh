@@ -18,24 +18,28 @@ capture_generated_alias_script() {
 
     (
         set -euo pipefail
-        DRY_RUN=true
+        # shellcheck disable=SC2034
+        export DRY_RUN=true
 
         if [ "$stack_type" = "minecraft" ]; then
-            MINECRAFT_SERVER_DIR="$server_dir"
+            # shellcheck disable=SC2034
+            export MINECRAFT_SERVER_DIR="$server_dir"
             # shellcheck source=/dev/null
             source "$ROOT_DIR/minecraft/install.sh"
         else
-            TERRARIA_SERVER_DIR="$server_dir"
+            # shellcheck disable=SC2034
+            export TERRARIA_SERVER_DIR="$server_dir"
             # shellcheck source=/dev/null
             source "$ROOT_DIR/terraria/install.sh"
         fi
 
+        # shellcheck disable=SC2329
         run_or_dry_run() {
             return 0
         }
 
+        # shellcheck disable=SC2329
         write_file_or_dry_run() {
-            local description="$1"
             local file_path="$2"
             shift 2
 
