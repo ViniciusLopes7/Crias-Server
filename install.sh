@@ -42,42 +42,53 @@ capture_env_overrides() {
     local var_name
     local has_name
     local value_name
+    local __escaped
 
     for var_name in "${OVERRIDABLE_VARS[@]}"; do
         has_name="ENV_HAS_${var_name}"
         value_name="ENV_VALUE_${var_name}"
 
         if [[ -v $var_name ]]; then
-            printf -v "$has_name" '%s' "true"
-            printf -v "$value_name" '%s' "${!var_name}"
+            __escaped=$(printf '%q' "true")
+            # shellcheck disable=SC2163
+            eval export "${has_name}=${__escaped}"
+            __escaped=$(printf '%q' "${!var_name}")
+            # shellcheck disable=SC2163
+            eval export "${value_name}=${__escaped}"
         else
-            printf -v "$has_name" '%s' "false"
+            __escaped=$(printf '%q' "false")
+            # shellcheck disable=SC2163
+            eval export "${has_name}=${__escaped}"
         fi
     done
 }
 
 # Safely set and export a dynamic variable name.
-# ShellCheck warns (SC2163) about dynamic export names, but 'export NAME=value'
-# syntax correctly handles this when NAME is a valid identifier.
+# Use printf %q to safely escape the value, then eval the assignment.
 set_config_var() {
     local __key="$1"
     local __val="$2"
+    local __escaped
 
+    __escaped=$(printf '%q' "$__val")
     # shellcheck disable=SC2163
-    export "${__key}=${__val}"
+    eval export "${__key}=${__escaped}"
 }
 
 restore_env_overrides() {
     local var_name
     local has_name
     local value_name
+    local __escaped
 
     for var_name in "${OVERRIDABLE_VARS[@]}"; do
         has_name="ENV_HAS_${var_name}"
         value_name="ENV_VALUE_${var_name}"
 
         if [ "${!has_name}" = "true" ]; then
-            printf -v "$var_name" '%s' "${!value_name}"
+            __escaped=$(printf '%q' "${!value_name}")
+            # shellcheck disable=SC2163
+            eval export "${var_name}=${__escaped}"
         fi
     done
 }
