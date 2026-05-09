@@ -79,7 +79,7 @@ Observacao: se voce usar diretorio customizado no install, os scripts de runtime
 Para rodar em modo nao interativo:
 
 ```bash
-sudo NON_INTERACTIVE=true SERVER_TYPE=minecraft ./install.sh
+sudo NON_INTERACTIVE=true ACCEPT_EULA=true SERVER_TYPE=minecraft ./install.sh
 ```
 
 Para validar pipeline sem alterar o host (dry-run):
@@ -92,6 +92,7 @@ Flags importantes no config.env:
 
 - NON_INTERACTIVE=true: desativa perguntas interativas.
 - DRY_RUN=true: evita operacoes destrutivas (pacman/useradd/systemd/cleanup).
+- Para Minecraft em modo nao interativo, aceite a EULA com ACCEPT_EULA=true.
 - O arquivo usa formato shell `CHAVE=valor`; use aspas quando o valor tiver espacos ou caracteres especiais.
 
 Downloads verificados (opcional):

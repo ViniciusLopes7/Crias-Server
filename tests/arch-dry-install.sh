@@ -34,6 +34,7 @@ MINECRAFT_VERSION="1.21.11"
 MINECRAFT_LOADER="fabric"
 MINECRAFT_INSTALL_MODPACK="true"
 MINECRAFT_INSTALL_QOL_MODS="true"
+ACCEPT_EULA="true"
 EOF
 
     if ! CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1; then
