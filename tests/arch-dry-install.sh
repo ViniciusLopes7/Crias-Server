@@ -11,6 +11,49 @@ trap 'rm -rf "$TMP_TEST_DIR"' EXIT
 # shellcheck source=/dev/null
 source "$ROOT_DIR/tests/lib/assert.sh"
 
+capture_generated_alias_script() {
+    local stack_type="$1"
+    local server_dir="$2"
+    local output_file="$3"
+
+    (
+        set -euo pipefail
+        DRY_RUN=true
+
+        if [ "$stack_type" = "minecraft" ]; then
+            MINECRAFT_SERVER_DIR="$server_dir"
+            # shellcheck source=/dev/null
+            source "$ROOT_DIR/minecraft/install.sh"
+        else
+            TERRARIA_SERVER_DIR="$server_dir"
+            # shellcheck source=/dev/null
+            source "$ROOT_DIR/terraria/install.sh"
+        fi
+
+        run_or_dry_run() {
+            return 0
+        }
+
+        write_file_or_dry_run() {
+            local description="$1"
+            local file_path="$2"
+            shift 2
+
+            if [ "$file_path" = "$server_dir/comandos.sh" ]; then
+                cat > "$output_file"
+            else
+                cat >/dev/null
+            fi
+        }
+
+        if [ "$stack_type" = "minecraft" ]; then
+            deploy_minecraft_scripts
+        else
+            deploy_terraria_scripts
+        fi
+    )
+}
+
 run_minecraft_dry_install() {
     local server_dir="$TMP_TEST_DIR/minecraft"
     local cfg_file="$TMP_TEST_DIR/minecraft.env"
@@ -57,9 +100,6 @@ EOF
     assert_bash_syntax "$ROOT_DIR/minecraft/mc-manager.sh"
     assert_bash_syntax "$ROOT_DIR/minecraft/backup-cron.sh"
     assert_bash_syntax "$ROOT_DIR/minecraft/setup-cron.sh"
-
-    assert_grep '^alias mcstart=' "$ROOT_DIR/minecraft/install.sh"
-    assert_grep '^alias mcreconfig=' "$ROOT_DIR/minecraft/install.sh"
     assert_grep "stat -c '%U'" "$ROOT_DIR/minecraft/mc-manager.sh"
 }
 
@@ -106,16 +146,23 @@ EOF
     assert_bash_syntax "$ROOT_DIR/terraria/tt-manager.sh"
     assert_bash_syntax "$ROOT_DIR/terraria/backup-cron.sh"
     assert_bash_syntax "$ROOT_DIR/terraria/setup-cron.sh"
-
-    assert_grep '^alias ttstart=' "$ROOT_DIR/terraria/install.sh"
-    assert_grep '^alias ttreconfig=' "$ROOT_DIR/terraria/install.sh"
     assert_grep "stat -c '%U'" "$ROOT_DIR/terraria/tt-manager.sh"
 }
 
 echo "[arch-dry-install] Iniciando dry-run de instalacao Minecraft..."
 run_minecraft_dry_install
 
+mc_alias_file="$TMP_TEST_DIR/minecraft-comandos.sh"
+capture_generated_alias_script minecraft "$TMP_TEST_DIR/minecraft" "$mc_alias_file"
+assert_grep "^alias mcstart='sudo systemctl start minecraft'" "$mc_alias_file"
+assert_grep "^alias mcreconfig='sudo $TMP_TEST_DIR/minecraft/mc-manager.sh reconfigure-hardware'" "$mc_alias_file"
+
 echo "[arch-dry-install] Iniciando dry-run de instalacao Terraria..."
 run_terraria_dry_install
+
+tt_alias_file="$TMP_TEST_DIR/terraria-comandos.sh"
+capture_generated_alias_script terraria "$TMP_TEST_DIR/terraria" "$tt_alias_file"
+assert_grep "^alias ttstart='sudo systemctl start terraria'" "$tt_alias_file"
+assert_grep "^alias ttreconfig='sudo $TMP_TEST_DIR/terraria/tt-manager.sh reconfigure-hardware'" "$tt_alias_file"
 
 echo "[arch-dry-install] OK"
