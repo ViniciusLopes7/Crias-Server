@@ -109,6 +109,24 @@ install_mrpack_install() {
 install_minecraft_base() {
     print_step "Instalando base do servidor Minecraft..."
 
+    # EULA acceptance: require explicit consent in non-interactive mode.
+    # This is a validation gate that must run even in DRY_RUN to enforce policy.
+    if is_true "${NON_INTERACTIVE:-false}"; then
+        if ! is_true "${ACCEPT_EULA:-false}"; then
+            print_error "ACCEPT_EULA must be set to true in non-interactive mode to accept Mojang EULA. Aborting."
+            exit 1
+        fi
+        eula_accepted="true"
+    else
+        # In interactive mode, ask user to confirm EULA acceptance.
+        if ask_confirm "Aceitar EULA da Mojang e escrever eula.txt?" "N"; then
+            eula_accepted="true"
+        else
+            print_error "EULA nao aceita. Instalacao abortada."
+            exit 1
+        fi
+    fi
+
     if is_true "$DRY_RUN"; then
         print_step "[DRY_RUN] Pulando instalacao base do Minecraft."
         return 0
@@ -126,20 +144,9 @@ install_minecraft_base() {
         mrpack-install "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
     fi
 
-    # EULA acceptance: require explicit consent in non-interactive mode.
-    if is_true "${NON_INTERACTIVE:-false}"; then
-        if ! is_true "${ACCEPT_EULA:-false}"; then
-            print_error "ACCEPT_EULA must be set to true in non-interactive mode to accept Mojang EULA. Aborting."
-            exit 1
-        fi
+    # Write EULA file (we already validated acceptance above).
+    if [ "$eula_accepted" = "true" ]; then
         echo "eula=true" > "$MINECRAFT_SERVER_DIR/eula.txt"
-    else
-        if ask_confirm "Aceitar EULA da Mojang e escrever eula.txt?" "N"; then
-            echo "eula=true" > "$MINECRAFT_SERVER_DIR/eula.txt"
-        else
-            print_error "EULA nao aceita. Instalacao abortada."
-            exit 1
-        fi
     fi
 }
 
