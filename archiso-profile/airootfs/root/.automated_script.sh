@@ -60,18 +60,22 @@ if ! curl -fsSL --connect-timeout 5 https://github.com/ViniciusLopes7/Crias-Serv
     exit 1
 fi
 
-pacman -Sy --noconfirm archlinux-keyring
+pacman -Syu --noconfirm archlinux-keyring
 
 echo "Clonando repositório (verifique assinatura/sha local se disponível)..."
 git clone --depth 1 --branch main https://github.com/ViniciusLopes7/Crias-Server || { echo "Falha no git clone" >&2; exit 1; }
 cd Crias-Server || exit 1
 
-if [ "${SKIP_VERIFY:-0}" != "1" ]; then
+SKIP_VERIFY="${SKIP_VERIFY:-1}"
+
+if [ "$SKIP_VERIFY" != "1" ]; then
     if ! git verify-commit HEAD >/dev/null 2>&1; then
         echo "ERRO: Commit nao assinado. Abortando por seguranca."
         echo "Para ignorar esta verificacao, reexecute com SKIP_VERIFY=1"
         exit 1
     fi
+else
+    echo "Verificacao de assinatura de commit desativada por padrao (SKIP_VERIFY=1)."
 fi
 
 # Mostra checksum do instalador para verificar manualmente (opcional)

@@ -85,7 +85,13 @@ resolve_block_device_for_path() {
         probe_path="$(dirname "$probe_path")"
     fi
 
-    device=$(df -P "$probe_path" 2>/dev/null | awk 'NR==2 {print $1}')
+    # Prefer findmnt for robust resolution; fall back to df on older systems.
+    if command -v findmnt >/dev/null 2>&1; then
+        device=$(findmnt -no SOURCE --target "$probe_path" 2>/dev/null | head -n 1)
+    else
+        device=$(df -P "$probe_path" 2>/dev/null | awk 'NR==2 {print $1}')
+    fi
+
     if [ -z "$device" ] || [ "${device#/dev/}" = "$device" ]; then
         echo ""
         return 0

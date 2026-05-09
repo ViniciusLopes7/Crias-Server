@@ -5,6 +5,7 @@ SERVER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_SCRIPT="$SERVER_DIR/backup-cron.sh"
 BACKUP_SERVICE="/etc/systemd/system/terraria-backup.service"
 BACKUP_TIMER="/etc/systemd/system/terraria-backup.timer"
+DRY_RUN="${DRY_RUN:-false}"
 SERVER_USER="${SERVER_USER:-}"
 
 # Reuse shared ANSI color definitions when available (installed stacks ship it in .shared).
@@ -32,7 +33,13 @@ detect_server_user() {
 }
 
 write_service_unit() {
-    cat > "$BACKUP_SERVICE" <<EOF
+    local target_service="$BACKUP_SERVICE"
+    if [ "$DRY_RUN" = "true" ]; then
+        target_service="${BACKUP_SERVICE}.dryrun"
+        echo "[DRY_RUN] Registrando unidade em $target_service (nao sera escrita em /etc em modo DRY_RUN)"
+    fi
+
+    cat > "$target_service" <<EOF
 [Unit]
 Description=Terraria Backup Service
 Requires=terraria.service
@@ -61,14 +68,20 @@ MemorySwapMax=0
 OOMScoreAdjust=0
 
 EOF
-    chmod 0644 "$BACKUP_SERVICE"
+    chmod 0644 "$target_service"
 }
 
 write_timer_unit() {
     local desc="$1"
     shift
 
-    cat > "$BACKUP_TIMER" <<EOF
+    local target_timer="$BACKUP_TIMER"
+    if [ "$DRY_RUN" = "true" ]; then
+        target_timer="${BACKUP_TIMER}.dryrun"
+        echo "[DRY_RUN] Registrando timer em $target_timer (nao sera escrita em /etc em modo DRY_RUN)"
+    fi
+
+    cat > "$target_timer" <<EOF
 [Unit]
 Description=Terraria Backup Timer ($desc)
 
@@ -86,7 +99,7 @@ EOF
 [Install]
 WantedBy=timers.target
 EOF
-    chmod 0644 "$BACKUP_TIMER"
+    chmod 0644 "$target_timer"
 }
 
 remove_legacy_cron_entries() {
@@ -187,8 +200,12 @@ write_service_unit
 write_timer_unit "$DESC" "${TIMER_LINES[@]}"
 remove_legacy_cron_entries
 
-systemctl daemon-reload
-systemctl enable --now terraria-backup.timer
+if [ "$DRY_RUN" = "true" ]; then
+    echo "[DRY_RUN] Pulando systemctl daemon-reload e habilitacao do timer em modo DRY_RUN"
+else
+    systemctl daemon-reload
+    systemctl enable --now terraria-backup.timer
+fi
 
 echo -e "${GREEN}Timer configurado:${NC} $DESC"
 echo "Servico: $BACKUP_SERVICE"

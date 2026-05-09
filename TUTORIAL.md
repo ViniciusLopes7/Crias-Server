@@ -122,16 +122,15 @@ Se precisar voltar um mundo ou configuração, siga o runbook em:
 
 ## 7. Cleanup do stack oposto
 
-Se habilitado, o instalador remove o stack nao selecionado.
+Se habilitado, o instalador executa uma desativacao segura do stack nao selecionado.
 
-Remocoes previstas:
+Por padrao o que acontece:
 
-- Servico systemd oposto
-- Usuario oposto
-- Diretorio /opt do stack oposto
-- Entradas de cron associadas
+- Desativacao (stop + disable) da unidade systemd do stack oposto.
+- Remocao do autoload de aliases gerado pelo instalador.
+- Remocao de entradas de cron criadas pelo instalador (quando aplicavel).
 
-A remocao destrutiva exige confirmacao explicita.
+Operacoes destrutivas como excluir `/opt` ou remover usuarios nao fazem parte do fluxo padrao e requerem um comando opt-in separado com confirmacao explicita.
 
 ## 8. Banner e identidade visual
 
@@ -143,9 +142,7 @@ O instalador tenta exibir um banner customizado antes do header padrão. O arqui
 
 ## 9. Estrutura sem legados
 
-Os scripts legados na raiz foram removidos para manter o repositorio limpo.
-
-Use sempre os caminhos modulares:
+Use sempre os caminhos modulares abaixo para operacao diaria e manutencao:
 
 - minecraft/start-server.sh
 - minecraft/mc-manager.sh

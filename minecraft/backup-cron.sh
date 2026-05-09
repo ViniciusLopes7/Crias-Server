@@ -74,6 +74,7 @@ enable_rcon_save_lock() {
     RCON_PASSWORD=""
 
     if ! command -v mcrcon >/dev/null 2>&1; then
+        log "AVISO: mcrcon nao encontrado. Backup seguira sem pausas de save via RCON."
         return 0
     fi
 
@@ -82,10 +83,12 @@ enable_rcon_save_lock() {
     rcon_port="$(read_server_property "rcon.port" 2>/dev/null || true)"
 
     if [ -z "$rcon_pass" ]; then
+        log "AVISO: RCON nao configurado em $SERVER_DIR/server.properties. Backup seguira em modo best-effort."
         return 0
     fi
 
     if [ -n "$rcon_enabled" ] && [ "$rcon_enabled" != "true" ]; then
+        log "AVISO: RCON desabilitado em $SERVER_DIR/server.properties. Backup seguira em modo best-effort."
         return 0
     fi
 

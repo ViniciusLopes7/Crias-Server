@@ -90,7 +90,7 @@ cmd_console() {
     local rcon_port
 
     if ! command -v mcrcon >/dev/null 2>&1; then
-        warn "Console interativo requer mcrcon. Instale: pacman -S --needed mcrcon"
+        warn "Console interativo requer mcrcon. Instale via AUR (ex: yay -S mcrcon) ou construa a partir do PKGBUILD do AUR."
         cmd_logs
         return 0
     fi

@@ -83,6 +83,22 @@ install_mrpack_install() {
         mrpack_url="https://github.com/nothub/mrpack-install/releases/latest/download/mrpack-install-linux"
     fi
 
+    # Require explicit checksum for downloads outside the package manager to
+    # reduce supply-chain risk. If MRPACK_SHA256 is not provided, abort in
+    # non-interactive mode; otherwise ask the operator to confirm.
+    if [ -z "${MRPACK_SHA256:-}" ]; then
+        if is_true "$NON_INTERACTIVE"; then
+            print_error "MRPACK_SHA256 nao definido. Em modo nao-interativo, cancela por seguranca. Defina MRPACK_SHA256 em config.env ou use AUR." 
+            exit 1
+        else
+            print_warning "MRPACK_SHA256 nao definido. Isso aumenta o risco de supply-chain ao baixar binarios diretamente." 
+            if ! ask_confirm "Continuar sem checagem de checksum para mrpack-install?" "N"; then
+                print_error "Instalacao do mrpack-install cancelada pelo usuario por falta de checksum." 
+                exit 1
+            fi
+        fi
+    fi
+
     if ! download_and_verify "$mrpack_url" /tmp/mrpack-install MRPACK_SHA256; then
         print_error "Falha ao baixar/validar mrpack-install"
         exit 1
@@ -110,7 +126,21 @@ install_minecraft_base() {
         mrpack-install "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
     fi
 
-    echo "eula=true" > "$MINECRAFT_SERVER_DIR/eula.txt"
+    # EULA acceptance: require explicit consent in non-interactive mode.
+    if is_true "${NON_INTERACTIVE:-false}"; then
+        if ! is_true "${ACCEPT_EULA:-false}"; then
+            print_error "ACCEPT_EULA must be set to true in non-interactive mode to accept Mojang EULA. Aborting."
+            exit 1
+        fi
+        echo "eula=true" > "$MINECRAFT_SERVER_DIR/eula.txt"
+    else
+        if ask_confirm "Aceitar EULA da Mojang e escrever eula.txt?" "N"; then
+            echo "eula=true" > "$MINECRAFT_SERVER_DIR/eula.txt"
+        else
+            print_error "EULA nao aceita. Instalacao abortada."
+            exit 1
+        fi
+    fi
 }
 
 download_qol_mod() {
@@ -129,7 +159,11 @@ download_qol_mod() {
     if [ -n "$mod_url" ]; then
         # Allow per-mod SHA env var like MOD_CHUNKY_SHA256
         local mod_sha_var
-        mod_sha_var="MOD_${file_name^^}_SHA256"
+        # Normalize mod name: replace hyphens with underscores so the derived
+        # env var is a valid shell identifier (hyphens are not allowed).
+        local file_name_norm
+        file_name_norm="${file_name//-/_}"
+        mod_sha_var="MOD_${file_name_norm^^}_SHA256"
         if ! download_and_verify "$mod_url" "$MINECRAFT_SERVER_DIR/mods/${file_name}.jar" "$mod_sha_var"; then
             print_warning "Falha ao baixar/validar mod: ${file_name}, pulando."
         else

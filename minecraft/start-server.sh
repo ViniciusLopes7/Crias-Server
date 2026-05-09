@@ -133,5 +133,7 @@ echo "Java: $JAVA_VERSION_RAW"
 echo "Porta: $SERVER_PORT"
 echo "=========================================="
 
-# shellcheck disable=SC2086
-exec java $JAVA_OPTS -jar "$SERVER_JAR" nogui
+# Split JAVA_OPTS into an array to preserve flags with spaces and pass them safely.
+read -r -a JAVA_OPTS_ARRAY <<< "$JAVA_OPTS"
+# shellcheck disable=SC2068
+exec java "${JAVA_OPTS_ARRAY[@]}" -jar "$SERVER_JAR" nogui

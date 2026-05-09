@@ -18,6 +18,7 @@ if [ -n "$git_short" ]; then
 else
     iso_label="CRIASNOGIT0"
 fi
+iso_label="${iso_label:0:11}"
 iso_publisher="Reino dos Crias <https://github.com/ViniciusLopes7/Crias-Server>"
 iso_application="Servidor de Games Autogerenciado (Minecraft ou Terraria) / LiveCD"
 if [ -n "$git_desc" ]; then

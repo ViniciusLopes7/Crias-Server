@@ -58,11 +58,25 @@ Aliases disponiveis:
 
 Para aumentar consistencia de backup com servidor online, o script tenta usar RCON para pausar saves durante o `tar`.
 
-Recomendado:
+Observacao sobre `mcrcon`:
+
+`mcrcon` nao e fornecido pelos repositórios oficiais do Arch Linux; ele esta disponível apenas no AUR. As instrucoes abaixo refletem isso:
+
+- Instalar via AUR (ex: `yay`):
 
 ```bash
-sudo pacman -S --needed mcrcon
+yay -S mcrcon
 ```
+
+- Ou construir manualmente a partir do PKGBUILD do AUR:
+
+```bash
+git clone https://aur.archlinux.org/mcrcon.git
+cd mcrcon
+makepkg -si
+```
+
+Se preferir evitar dependencias AUR, documente uma alternativa no runbook (ex: usar `rcon-cli` em outra linguagem ou scripts que usem a API do servidor).
 
 No `server.properties`, configure:
 

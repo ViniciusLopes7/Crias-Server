@@ -14,14 +14,17 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   lint:
+    timeout-minutes: 10
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,7 +36,10 @@ jobs:
   static_audit:
     name: Static Audit
     needs: lint
+    timeout-minutes: 10
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -43,7 +49,10 @@ jobs:
   quick_script_tests:
     name: Quick Script Tests
     needs: [lint, static_audit]
+    timeout-minutes: 15
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -54,7 +63,10 @@ jobs:
   validate_profile:
     name: Validate Archiso Profile
     needs: lint
+    timeout-minutes: 10
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -65,7 +77,10 @@ jobs:
   arch_smoke:
     name: Arch Smoke Tests
     needs: [lint, quick_script_tests]
+    timeout-minutes: 60
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     container:
       image: archlinux:base-devel
       options: --privileged
@@ -90,7 +105,10 @@ jobs:
 
   build:
     needs: [lint, quick_script_tests, validate_profile, arch_smoke]
+    timeout-minutes: 60
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     container:
       image: archlinux:base-devel
       options: --privileged
@@ -103,6 +121,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Build ISO
         run: |
@@ -120,7 +140,10 @@ jobs:
   validate_iso_artifact:
     name: Validate ISO Artifact
     needs: build
+    timeout-minutes: 30
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     container:
       image: archlinux:base-devel
       options: --privileged
@@ -173,7 +196,10 @@ jobs:
     name: QEMU Boot Smoke
     needs: [build, validate_iso_artifact]
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    timeout-minutes: 45
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -211,7 +237,10 @@ jobs:
     name: Create Tag and Release
     needs: [build, validate_iso_artifact, qemu_boot]
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    timeout-minutes: 30
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

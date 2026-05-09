@@ -163,6 +163,46 @@ EOF
     )
 }
 
+run_eula_contract() {
+    local cfg_file="$TMP_TEST_DIR/eula-contract.env"
+    local log_file="$TMP_TEST_DIR/eula-contract.log"
+
+    cat > "$cfg_file" << 'EOF'
+SERVER_TYPE="minecraft"
+NON_INTERACTIVE="true"
+DRY_RUN="true"
+INSTALL_TAILSCALE="false"
+APPLY_SYSTEM_TUNING="false"
+CLEANUP_OTHER_STACK="false"
+MINECRAFT_USER="minecraft-ci"
+MINECRAFT_SERVER_DIR="/tmp/minecraft-eula-ci"
+MINECRAFT_PORT=25565
+MINECRAFT_ONLINE_MODE="false"
+MINECRAFT_VERSION="1.21.11"
+MINECRAFT_LOADER="fabric"
+MINECRAFT_INSTALL_MODPACK="true"
+MINECRAFT_INSTALL_QOL_MODS="false"
+ACCEPT_EULA="false"
+EOF
+
+    set +e
+    CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1
+    local status=$?
+    set -e
+
+    if [ "$status" -eq 0 ]; then
+        echo "[install-contracts] Falha esperada nao ocorreu: ACCEPT_EULA obrigatorio em NON_INTERACTIVE" >&2
+        cat "$log_file" >&2
+        exit 1
+    fi
+
+    if ! grep -q 'ACCEPT_EULA must be set to true in non-interactive mode' "$log_file"; then
+        echo "[install-contracts] Mensagem esperada nao encontrada para ACCEPT_EULA" >&2
+        cat "$log_file" >&2
+        exit 1
+    fi
+}
+
 echo "[install-contracts] Validando falha rapida para configuracoes invalidas..."
 run_missing_server_type_contract
 run_invalid_server_type_contract
@@ -172,5 +212,8 @@ run_env_override_precedence_contract
 
 echo "[install-contracts] Validando parse de valores com espacos e aspas..."
 run_config_parsing_contract
+
+echo "[install-contracts] Validando aceite explicito de EULA..."
+run_eula_contract
 
 echo "[install-contracts] OK"

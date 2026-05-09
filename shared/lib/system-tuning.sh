@@ -87,9 +87,9 @@ apply_cpupower_tuning() {
 
     if command -v cpupower >/dev/null 2>&1; then
         local available
-        available="$(cpupower frequency-info -g 2>/dev/null | sed -nE 's/.*available cpufreq governors:[[:space:]]*(.*)$/\1/p' | tr ' ' '\n' | tr -d ',' | tr '\t' '\n' | tr '\n' ' ' || true)"
-        if [ -n "$available" ] && ! echo " $available " | grep -qw " $target_governor "; then
-            # Governor requested is not available on this host/kernel.
+        local available_list
+        available_list=$(cpupower frequency-info -g 2>/dev/null || true)
+        if [ -n "$available_list" ] && ! echo "$available_list" | grep -qw "$target_governor"; then
             return 0
         fi
         cpupower frequency-set -g "$target_governor" >/dev/null 2>&1 || true
@@ -171,7 +171,15 @@ vm.vfs_cache_pressure=50
 EOF
 
     systemctl daemon-reload >/dev/null 2>&1 || true
-    systemctl start systemd-zram-setup@zram0.service >/dev/null 2>&1 || true
+    # Only attempt to load zram module and start the generator service if
+    # the host appears to support zram. This avoids noisy failures on systems
+    # without the feature.
+    if modprobe -n zram >/dev/null 2>&1; then
+        modprobe zram >/dev/null 2>&1 || true
+        if systemctl list-unit-files | grep -q 'systemd-zram-setup@'; then
+            systemctl start systemd-zram-setup@zram0.service >/dev/null 2>&1 || true
+        fi
+    fi
     sysctl --system >/dev/null 2>&1 || true
 }
 

@@ -205,7 +205,7 @@ O workflow em .github/workflows/build-iso.yml agora roda:
 - dry-run de instalacao completa (Minecraft e Terraria) em container Arch Linux
 - build da ISO apenas se os testes passarem
 
-O repositório também inclui `tests/minecraft-tuning-test.sh` para validar alocação de memória e `tools/compare_reports.sh` para comparar os relatórios de auditoria em PDF quando disponíveis na workspace.
+O repositório também inclui `tests/minecraft-tuning-test.sh` para validar alocação de memória e outros contratos shell em `tests/`.
 
 ## Testes locais rapidos
 
