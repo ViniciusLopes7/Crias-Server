@@ -131,7 +131,9 @@ load_config_file() {
                 value="${value//\`/\\\`}"
 
                 # Assign safely to avoid word splitting and preserve spaces/newlines.
-                declare -x "$key=$value"
+                # Use printf -v to assign to a dynamic name, then export that name.
+                printf -v "$key" '%s' "$value"
+                export "$key"
             else
                 printf '%s\n' "Linha ignorada em ${config_file} (formato invalido): ${line}" >&2
             fi
