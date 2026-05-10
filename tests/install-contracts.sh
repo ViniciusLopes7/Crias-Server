@@ -22,7 +22,6 @@ trap 'safe_cleanup_dir "$TMP_TEST_DIR" || true' EXIT
 source "$ROOT_DIR/tests/lib/assert.sh"
 # shellcheck source=/dev/null
 source "$ROOT_DIR/shared/lib/config-parser.sh"
-
 assert_expected_failure() {
     local config_file="$1"
     local log_file="$2"
@@ -146,9 +145,9 @@ TERRARIA_WORLD_NAME="Mundo do Crias"
 EOF
 
     (
-        MINECRAFT_MOTD=""
-        TERRARIA_MOTD=""
-        TERRARIA_WORLD_NAME=""
+        unset MINECRAFT_MOTD
+        unset TERRARIA_MOTD
+        unset TERRARIA_WORLD_NAME
 
         apply_config_with_env_precedence "$cfg_file"
 

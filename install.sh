@@ -11,7 +11,11 @@ source "$SCRIPT_DIR/shared/lib/common.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/shared/lib/config-parser.sh"
 
+# Apply config with proper precedence: defaults < config.env < environment variables
+apply_config_with_env_precedence "$CONFIG_FILE"
+
 # Defaults (precedencia: defaults < config.env < variaveis de ambiente).
+# Initialize only variables that are still undefined after config loading.
 SERVER_TYPE="${SERVER_TYPE:-}"
 FORCE_HARDWARE_TIER="${FORCE_HARDWARE_TIER:-}"
 INSTALL_TAILSCALE="${INSTALL_TAILSCALE:-true}"

@@ -76,6 +76,10 @@ restore_env_overrides() {
 apply_config_with_env_precedence() {
     local config_file="${1:-}"
 
+    # Capture current environment state (idempotent for each call).
+    # This ensures proper precedence in all contexts, including:
+    # - Direct calls in tests with subshells (each subshell reacaptures)
+    # - Calls in install.sh after defaults are initialized
     capture_env_overrides
     load_config_file "$config_file"
     restore_env_overrides
