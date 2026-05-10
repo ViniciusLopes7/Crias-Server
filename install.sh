@@ -518,6 +518,14 @@ main() {
     fi
 
     install_tailscale_if_enabled
+    # Policy gate: ensure EULA acceptance for non-interactive Minecraft installs
+    if [ "$SERVER_TYPE" = "minecraft" ] && is_true "${NON_INTERACTIVE:-false}"; then
+        if ! is_true "${ACCEPT_EULA:-false}"; then
+            print_error "ACCEPT_EULA must be set to true in non-interactive mode to accept Mojang EULA. Aborting."
+            exit 1
+        fi
+    fi
+
     run_selected_stack_installer
     configure_alias_autoload_for_selected_stack
     cleanup_other_stack_if_needed
