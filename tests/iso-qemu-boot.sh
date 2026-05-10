@@ -19,6 +19,15 @@ sanitize_log_file() {
         cp "$raw_log_file" "$clean_log_file"
     fi
 }
+safe_cleanup_dir() {
+    local target_dir="${1:-}"
+
+    if [ -z "$target_dir" ] || [ "$target_dir" = "/" ]; then
+        return 1
+    fi
+
+    rm -rf -- "$target_dir"
+}
 
 validate_qemu_log() {
     local raw_log_file="$1"
@@ -54,7 +63,7 @@ if [ "${1:-}" = "--analyze-log" ]; then
 
     WORK_DIR="$(mktemp -d)"
     CLEAN_LOG_FILE="$WORK_DIR/qemu-boot.clean.log"
-    trap 'rm -rf "$WORK_DIR"' EXIT
+    trap 'safe_cleanup_dir "$WORK_DIR" || true' EXIT
 
     if ! validate_qemu_log "$ANALYZE_LOG_FILE" "$CLEAN_LOG_FILE"; then
         tail -n 120 "$ANALYZE_LOG_FILE" >&2
@@ -103,7 +112,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 WORK_DIR="$(mktemp -d)"
 LOG_FILE="$WORK_DIR/qemu-boot.log"
-trap 'rm -rf "$WORK_DIR"' EXIT
+trap 'safe_cleanup_dir "$WORK_DIR" || true' EXIT
 
 kernel_rel="$(bsdtar -tf "$ISO_FILE" | grep -E '.*/boot/x86_64/vmlinuz-linux$' | head -n 1 || true)"
 initramfs_rel="$(bsdtar -tf "$ISO_FILE" | grep -E '.*/boot/x86_64/initramfs-linux\.img$' | head -n 1 || true)"

@@ -23,13 +23,13 @@ done
 echo "[quick-script-tests] Validando placeholders criticos de boot..."
 assert_file archiso-profile/grub/grub.cfg
 assert_file archiso-profile/syslinux/syslinux.cfg
-grep -Fq '/%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux' archiso-profile/grub/grub.cfg
-grep -Fq 'archisobasedir=%INSTALL_DIR%' archiso-profile/grub/grub.cfg
-grep -Fq 'archisosearchuuid=%ARCHISO_UUID%' archiso-profile/grub/grub.cfg
+assert_grep_fixed '/%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux' archiso-profile/grub/grub.cfg
+assert_grep_fixed 'archisobasedir=%INSTALL_DIR%' archiso-profile/grub/grub.cfg
+assert_grep_fixed 'archisosearchuuid=%ARCHISO_UUID%' archiso-profile/grub/grub.cfg
 
-grep -Fq '/%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux' archiso-profile/syslinux/syslinux.cfg
-grep -Fq 'archisobasedir=%INSTALL_DIR%' archiso-profile/syslinux/syslinux.cfg
-grep -Fq 'archisosearchuuid=%ARCHISO_UUID%' archiso-profile/syslinux/syslinux.cfg
+assert_grep_fixed '/%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux' archiso-profile/syslinux/syslinux.cfg
+assert_grep_fixed 'archisobasedir=%INSTALL_DIR%' archiso-profile/syslinux/syslinux.cfg
+assert_grep_fixed 'archisosearchuuid=%ARCHISO_UUID%' archiso-profile/syslinux/syslinux.cfg
 
 echo "[quick-script-tests] Validando parser de logs do QEMU..."
 bash tests/qemu-log-parser-test.sh
@@ -44,6 +44,7 @@ echo "[quick-script-tests] Validando tuning do Minecraft..."
 bash tests/minecraft-tuning-test.sh
 
 echo "[quick-script-tests] Validando contrato de checksum por mod..."
-grep -Fq "file_name_norm=\"\${file_name//-/_}\"" minecraft/install.sh
+assert_file minecraft/install.sh
+assert_grep_fixed "file_name_norm=\"\${file_name//-/_}\"" minecraft/install.sh
 
 echo "[quick-script-tests] OK"

@@ -82,7 +82,7 @@ download_and_extract_terraria() {
         print_error "Falha ao baixar/validar o servidor Terraria."
         print_error "Defina TERRARIA_DOWNLOAD_URL em config.env com um link valido e/ou TERRARIA_SHA256 para verificação."
         rm -f "$tmp_zip"
-        rm -rf "$tmp_dir"
+        safe_remove_dir "$tmp_dir" || true
         exit 1
     fi
 
@@ -93,14 +93,14 @@ download_and_extract_terraria() {
     if [ -z "$binary_path" ]; then
         print_error "Nao foi possivel localizar TerrariaServer.bin.x86_64 no pacote baixado."
         rm -f "$tmp_zip"
-        rm -rf "$tmp_dir"
+        safe_remove_dir "$tmp_dir" || true
         exit 1
     fi
 
     if ! file "$binary_path" | grep -q 'ELF'; then
         print_error "O binario encontrado nao parece ser um executavel ELF valido."
         rm -f "$tmp_zip"
-        rm -rf "$tmp_dir"
+        safe_remove_dir "$tmp_dir" || true
         exit 1
     fi
 
@@ -110,7 +110,7 @@ download_and_extract_terraria() {
     chmod +x "$TERRARIA_SERVER_DIR/TerrariaServer.bin.x86_64"
 
     rm -f "$tmp_zip"
-    rm -rf "$tmp_dir"
+    safe_remove_dir "$tmp_dir" || true
 }
 
 configure_terraria_runtime() {

@@ -25,7 +25,17 @@ if ! command -v unsquashfs >/dev/null 2>&1; then
 fi
 
 WORK_DIR="$(mktemp -d)"
-trap 'rm -rf "$WORK_DIR"' EXIT
+safe_cleanup_dir() {
+    local target_dir="${1:-}"
+
+    if [ -z "$target_dir" ] || [ "$target_dir" = "/" ]; then
+        return 1
+    fi
+
+    rm -rf -- "$target_dir"
+}
+
+trap 'safe_cleanup_dir "$WORK_DIR" || true' EXIT
 
 echo "[iso-live-credentials-validate] Localizando squashfs na ISO..."
 squashfs_rel="$(bsdtar -tf "$ISO_FILE" | grep -E '.*/x86_64/airootfs\.sfs$' | head -n 1 || true)"

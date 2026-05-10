@@ -10,6 +10,16 @@ if [ ! -f "$DEFAULT_SERVER_DIR/server.jar" ] && [ -f "/opt/minecraft-server/serv
     DEFAULT_SERVER_DIR="/opt/minecraft-server"
 fi
 
+COMMON_LIB="$SCRIPT_DIR/.shared/common.sh"
+if [ ! -f "$COMMON_LIB" ]; then
+    COMMON_LIB="$SCRIPT_DIR/../shared/lib/common.sh"
+fi
+
+if [ -f "$COMMON_LIB" ]; then
+    # shellcheck source=/dev/null
+    source "$COMMON_LIB"
+fi
+
 SERVER_DIR="${SERVER_DIR:-$DEFAULT_SERVER_DIR}"
 SERVER_JAR="${SERVER_JAR:-server.jar}"
 SERVER_PROPERTIES="${SERVER_PROPERTIES:-$SERVER_DIR/server.properties}"
@@ -113,7 +123,7 @@ if [ ! -f "$SERVER_JAR" ]; then
     exit 1
 fi
 
-SERVER_PORT="$(grep -E '^server-port=' "$SERVER_PROPERTIES" 2>/dev/null | tail -n 1 | cut -d'=' -f2- || true)"
+SERVER_PORT="$(config_read_value "$SERVER_PROPERTIES" "server-port")"
 if ! [[ "$SERVER_PORT" =~ ^[0-9]+$ ]]; then
     SERVER_PORT=25565
 fi

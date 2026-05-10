@@ -73,6 +73,14 @@ restore_env_overrides() {
     done
 }
 
+apply_config_with_env_precedence() {
+    local config_file="${1:-}"
+
+    capture_env_overrides
+    load_config_file "$config_file"
+    restore_env_overrides
+}
+
 load_config_file() {
     local config_file="${1:-}"
 

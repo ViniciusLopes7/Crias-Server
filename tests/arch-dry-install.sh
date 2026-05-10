@@ -5,8 +5,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+safe_cleanup_dir() {
+    local target_dir="${1:-}"
+
+    if [ -z "$target_dir" ] || [ "$target_dir" = "/" ]; then
+        return 1
+    fi
+
+    rm -rf -- "$target_dir"
+}
+
 TMP_TEST_DIR="$(mktemp -d /tmp/crias-ci-dry-install-XXXXXX)"
-trap 'rm -rf "$TMP_TEST_DIR"' EXIT
+trap 'safe_cleanup_dir "$TMP_TEST_DIR" || true' EXIT
 
 # shellcheck source=/dev/null
 source "$ROOT_DIR/tests/lib/assert.sh"
@@ -63,7 +73,7 @@ run_minecraft_dry_install() {
     local cfg_file="$TMP_TEST_DIR/minecraft.env"
     local log_file="$TMP_TEST_DIR/minecraft-dry.log"
 
-    rm -rf "$server_dir"
+    safe_cleanup_dir "$server_dir" || true
 
     cat > "$cfg_file" << EOF
 SERVER_TYPE="minecraft"
@@ -112,7 +122,7 @@ run_terraria_dry_install() {
     local cfg_file="$TMP_TEST_DIR/terraria.env"
     local log_file="$TMP_TEST_DIR/terraria-dry.log"
 
-    rm -rf "$server_dir"
+    safe_cleanup_dir "$server_dir" || true
 
     cat > "$cfg_file" << EOF
 SERVER_TYPE="terraria"

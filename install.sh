@@ -11,8 +11,6 @@ source "$SCRIPT_DIR/shared/lib/common.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/shared/lib/config-parser.sh"
 
-capture_env_overrides
-
 # Defaults (precedencia: defaults < config.env < variaveis de ambiente).
 SERVER_TYPE="${SERVER_TYPE:-}"
 FORCE_HARDWARE_TIER="${FORCE_HARDWARE_TIER:-}"
@@ -493,8 +491,7 @@ cleanup_other_stack_if_needed() {
 
 main() {
     print_header
-    load_config_file "$CONFIG_FILE"
-    restore_env_overrides
+    apply_config_with_env_precedence "$CONFIG_FILE"
 
     if is_true "$DRY_RUN"; then
         print_warning "Modo DRY_RUN ativo: nenhuma alteracao destrutiva no host sera aplicada."

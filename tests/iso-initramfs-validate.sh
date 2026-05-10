@@ -25,7 +25,17 @@ if ! command -v lsinitcpio >/dev/null 2>&1; then
 fi
 
 WORK_DIR="$(mktemp -d)"
-trap 'rm -rf "$WORK_DIR"' EXIT
+safe_cleanup_dir() {
+    local target_dir="${1:-}"
+
+    if [ -z "$target_dir" ] || [ "$target_dir" = "/" ]; then
+        return 1
+    fi
+
+    rm -rf -- "$target_dir"
+}
+
+trap 'safe_cleanup_dir "$WORK_DIR" || true' EXIT
 
 echo "[iso-initramfs-validate] Localizando arquivos na ISO..."
 initramfs_rel="$(bsdtar -tf "$ISO_FILE" | grep -E '.*/boot/x86_64/initramfs-linux\.img$' | head -n 1 || true)"

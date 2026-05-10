@@ -44,12 +44,17 @@ PROPS_FILE="$SERVER_DIR/server.properties"
 RUNTIME_ENV="$SERVER_DIR/runtime.env"
 TUNING_STATE="$SERVER_DIR/hardware-profile.env"
 SHARED_DIR="$SERVER_DIR/.shared"
+COMMON_LIB="$SHARED_DIR/common.sh"
 HARDWARE_LIB="$SHARED_DIR/hardware-profile.sh"
 MC_TUNING_LIB="$SHARED_DIR/minecraft-tuning.sh"
 MANAGER_COMMON_LIB="$SHARED_DIR/manager-common.sh"
 
 if [ ! -f "$MANAGER_COMMON_LIB" ]; then
     MANAGER_COMMON_LIB="$SCRIPT_DIR/../shared/lib/manager-common.sh"
+fi
+
+if [ ! -f "$COMMON_LIB" ]; then
+    COMMON_LIB="$SCRIPT_DIR/../shared/lib/common.sh"
 fi
 
 if [ ! -f "$MANAGER_COMMON_LIB" ]; then
@@ -60,6 +65,11 @@ fi
 # shellcheck source=/dev/null
 source "$MANAGER_COMMON_LIB"
 
+if [ -f "$COMMON_LIB" ]; then
+    # shellcheck source=/dev/null
+    source "$COMMON_LIB"
+fi
+
 log() { echo "[INFO] $1"; }
 warn() { echo "[AVISO] $1"; }
 err() { echo "[ERRO] $1" >&2; }
@@ -68,13 +78,11 @@ get_prop() {
     local key="$1"
     local default_value="$2"
 
-    if [ -f "$PROPS_FILE" ]; then
-        local value
-        value=$(grep -E "^${key}=" "$PROPS_FILE" | tail -n 1 | cut -d'=' -f2-)
-        if [ -n "$value" ]; then
-            echo "$value"
-            return 0
-        fi
+    local value
+    value="$(config_read_value "$PROPS_FILE" "$key")"
+    if [ -n "$value" ]; then
+        echo "$value"
+        return 0
     fi
 
     echo "$default_value"
@@ -157,9 +165,9 @@ cmd_reconfigure_hardware() {
 
     write_minecraft_runtime_env "$RUNTIME_ENV"
 
-    server_port=$(grep -E "^server-port=" "$PROPS_FILE" | tail -n 1 | cut -d"=" -f2- || true)
-    online_mode=$(grep -E "^online-mode=" "$PROPS_FILE" | tail -n 1 | cut -d"=" -f2- || true)
-    motd=$(grep -E "^motd=" "$PROPS_FILE" | tail -n 1 | cut -d"=" -f2- || true)
+    server_port="$(config_read_value "$PROPS_FILE" "server-port")"
+    online_mode="$(config_read_value "$PROPS_FILE" "online-mode")"
+    motd="$(config_read_value "$PROPS_FILE" "motd")"
     server_port="${server_port:-25565}"
     online_mode="${online_mode:-false}"
     motd="${motd:-Servidor Minecraft}"

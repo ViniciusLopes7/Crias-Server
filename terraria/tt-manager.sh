@@ -44,12 +44,25 @@ CONFIG_FILE="$SERVER_DIR/config/serverconfig.txt"
 RUNTIME_ENV="$SERVER_DIR/runtime.env"
 TUNING_STATE="$SERVER_DIR/hardware-profile.env"
 SHARED_DIR="$SERVER_DIR/.shared"
+COMMON_LIB="$SHARED_DIR/common.sh"
 HARDWARE_LIB="$SHARED_DIR/hardware-profile.sh"
 TT_TUNING_LIB="$SHARED_DIR/terraria-tuning.sh"
 MANAGER_COMMON_LIB="$SHARED_DIR/manager-common.sh"
 
 if [ ! -f "$MANAGER_COMMON_LIB" ]; then
     MANAGER_COMMON_LIB="$SCRIPT_DIR/../shared/lib/manager-common.sh"
+fi
+
+if [ ! -f "$COMMON_LIB" ]; then
+    COMMON_LIB="$SCRIPT_DIR/../shared/lib/common.sh"
+fi
+
+if [ ! -f "$HARDWARE_LIB" ]; then
+    HARDWARE_LIB="$SCRIPT_DIR/../shared/lib/hardware-profile.sh"
+fi
+
+if [ ! -f "$TT_TUNING_LIB" ]; then
+    TT_TUNING_LIB="$SCRIPT_DIR/../shared/lib/terraria-tuning.sh"
 fi
 
 if [ ! -f "$MANAGER_COMMON_LIB" ]; then
@@ -60,6 +73,11 @@ fi
 # shellcheck source=/dev/null
 source "$MANAGER_COMMON_LIB"
 
+if [ -f "$COMMON_LIB" ]; then
+    # shellcheck source=/dev/null
+    source "$COMMON_LIB"
+fi
+
 log() { echo "[INFO] $1"; }
 warn() { echo "[AVISO] $1"; }
 err() { echo "[ERRO] $1" >&2; }
@@ -68,13 +86,11 @@ get_cfg() {
     local key="$1"
     local default_value="$2"
 
-    if [ -f "$CONFIG_FILE" ]; then
-        local value
-        value=$(grep -E "^${key}=" "$CONFIG_FILE" | tail -n 1 | cut -d'=' -f2-)
-        if [ -n "$value" ]; then
-            echo "$value"
-            return 0
-        fi
+    local value
+    value="$(config_read_value "$CONFIG_FILE" "$key")"
+    if [ -n "$value" ]; then
+        echo "$value"
+        return 0
     fi
 
     echo "$default_value"
@@ -109,14 +125,26 @@ cmd_setup_cron() {
 
 cmd_reconfigure_hardware() {
     local forced_tier="${1:-}"
+    local world_path
+    local server_port
+    local motd
+    local world_name
+
     forced_tier="${forced_tier^^}"
 
     manager_need_root "$SELF" "reconfigure-hardware" "$forced_tier"
 
-    if [ ! -f "$HARDWARE_LIB" ] || [ ! -f "$TT_TUNING_LIB" ]; then
+    if [ ! -f "$COMMON_LIB" ] || [ ! -f "$HARDWARE_LIB" ] || [ ! -f "$TT_TUNING_LIB" ]; then
         err "Bibliotecas de tuning nao encontradas em $SHARED_DIR"
         return 1
     fi
+
+    # shellcheck source=/dev/null
+    source "$COMMON_LIB"
+    # shellcheck source=/dev/null
+    source "$HARDWARE_LIB"
+    # shellcheck source=/dev/null
+    source "$TT_TUNING_LIB"
 
     case "$forced_tier" in
         ""|LOW|MID|HIGH) ;;
@@ -126,44 +154,27 @@ cmd_reconfigure_hardware() {
             ;;
     esac
 
-    # shellcheck disable=SC2016 # Intentional: script is passed literally to bash -c and expanded there
-    bash -c '
-        set -euo pipefail
-        SERVER_DIR="$1"
-        forced_tier="$2"
-        CONFIG_FILE="$3"
-        RUNTIME_ENV="$4"
-        TUNING_STATE="$5"
-        HARDWARE_LIB="$6"
-        TT_TUNING_LIB="$7"
+    detect_hardware_profile "$SERVER_DIR" "$forced_tier"
+    compute_terraria_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER"
 
-        # shellcheck source=/dev/null
-        source "$HARDWARE_LIB"
-        # shellcheck source=/dev/null
-        source "$TT_TUNING_LIB"
+    write_terraria_runtime_env "$RUNTIME_ENV"
 
-        detect_hardware_profile "$SERVER_DIR" "$forced_tier"
-        compute_terraria_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER"
+    world_path="$(get_cfg "worldpath" "")"
+    server_port="$(get_cfg "port" "")"
+    motd="$(get_cfg "motd" "")"
+    world_name="$(get_cfg "worldname" "")"
+    world_path="${world_path:-$SERVER_DIR/worlds}"
+    server_port="${server_port:-7777}"
+    motd="${motd:-Servidor Terraria gerenciado por Crias-Server}"
+    world_name="${world_name:-world}"
 
-        write_terraria_runtime_env "$RUNTIME_ENV"
+    write_terraria_server_config "$CONFIG_FILE" "$world_path" "$server_port" "$motd" "$world_name"
+    write_terraria_tuning_state "$TUNING_STATE"
 
-        world_path=$(grep -E "^worldpath=" "$CONFIG_FILE" | tail -n 1 | cut -d"=" -f2- || true)
-        server_port=$(grep -E "^port=" "$CONFIG_FILE" | tail -n 1 | cut -d"=" -f2- || true)
-        motd=$(grep -E "^motd=" "$CONFIG_FILE" | tail -n 1 | cut -d"=" -f2- || true)
-        world_name=$(grep -E "^worldname=" "$CONFIG_FILE" | tail -n 1 | cut -d"=" -f2- || true)
-        world_path="${world_path:-$SERVER_DIR/worlds}"
-        server_port="${server_port:-7777}"
-        motd="${motd:-Servidor Terraria gerenciado por Crias-Server}"
-        world_name="${world_name:-world}"
-
-        write_terraria_server_config "$CONFIG_FILE" "$world_path" "$server_port" "$motd" "$world_name"
-        write_terraria_tuning_state "$TUNING_STATE"
-
-        echo "Tier detectado: $HW_DETECTED_TIER"
-        echo "Tier aplicado: $HW_TIER"
-        echo "Max players: $TT_MAX_PLAYERS"
-        echo "NPC stream: $TT_NPC_STREAM"
-    ' bash "$SERVER_DIR" "$forced_tier" "$CONFIG_FILE" "$RUNTIME_ENV" "$TUNING_STATE" "$HARDWARE_LIB" "$TT_TUNING_LIB"
+    echo "Tier detectado: $HW_DETECTED_TIER"
+    echo "Tier aplicado: $HW_TIER"
+    echo "Max players: $TT_MAX_PLAYERS"
+    echo "NPC stream: $TT_NPC_STREAM"
 
     chown -R "${SERVER_USER}:${SERVER_USER}" "$SERVER_DIR"
 

@@ -72,6 +72,25 @@ dry_run_enabled() {
     is_true "${DRY_RUN:-false}"
 }
 
+config_read_value() {
+    local file_path="$1"
+    local key="$2"
+    local value
+
+    if [ ! -f "$file_path" ]; then
+        return 0
+    fi
+
+    value="$(awk -F= -v key="$key" '
+        $1 == key { value = substr($0, length(key) + 2) }
+        END { if (value != "") print value }
+    ' "$file_path")"
+
+    if [ -n "$value" ]; then
+        printf '%s\n' "$value"
+    fi
+}
+
 run_or_dry_run() {
     local description="$1"
     shift
@@ -164,6 +183,21 @@ check_arch() {
 
 safe_mkdir() {
     mkdir -p "$1"
+}
+
+safe_remove_dir() {
+    local target_dir="${1:-}"
+
+    if [ -z "$target_dir" ] || [ "$target_dir" = "/" ]; then
+        print_warning "safe_remove_dir recebeu caminho invalido: '$target_dir'"
+        return 1
+    fi
+
+    if [ ! -e "$target_dir" ]; then
+        return 0
+    fi
+
+    rm -rf -- "$target_dir"
 }
 
 sanitize_service_name() {
