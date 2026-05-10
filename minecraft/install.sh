@@ -58,6 +58,25 @@ validate_minecraft_inputs() {
     fi
 }
 
+validate_minecraft_eula() {
+    # Policy gate: even in DRY_RUN we must enforce explicit EULA handling.
+    if is_true "${NON_INTERACTIVE:-false}"; then
+        if ! is_true "${ACCEPT_EULA:-false}"; then
+            print_error "ACCEPT_EULA must be set to true in non-interactive mode to accept Mojang EULA. Aborting."
+            exit 1
+        fi
+        return 0
+    fi
+
+    echo "Para mais informacoes sobre a EULA da Mojang, visite:"
+    echo "https://account.mojang.com/documents/minecraft_eula"
+    echo ""
+    if ! ask_confirm "Aceitar EULA da Mojang?" "N"; then
+        print_error "EULA nao aceita. Instalacao abortada."
+        exit 1
+    fi
+}
+
 install_minecraft_dependencies() {
     if is_true "$DRY_RUN"; then
         print_step "[DRY_RUN] Pulando instalacao de dependencias do Minecraft."
@@ -395,6 +414,7 @@ run_minecraft_install() {
     print_step "Iniciando instalacao do stack Minecraft..."
 
     validate_minecraft_inputs
+    validate_minecraft_eula
 
     if is_true "$DRY_RUN"; then
         print_step "[DRY_RUN] Instalacao do Minecraft encerrada sem aplicar alteracoes."
@@ -415,23 +435,5 @@ run_minecraft_install() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    # EULA acceptance validation: must run before anything else, even in DRY_RUN mode.
-    # This is a policy gate, not a destructive action.
-    if is_true "${NON_INTERACTIVE:-false}"; then
-        if ! is_true "${ACCEPT_EULA:-false}"; then
-            print_error "ACCEPT_EULA must be set to true in non-interactive mode to accept Mojang EULA. Aborting."
-            exit 1
-        fi
-    else
-        # In interactive mode, ask user to confirm EULA acceptance.
-        echo "Para mais informacoes sobre a EULA da Mojang, visite:"
-        echo "https://account.mojang.com/documents/minecraft_eula"
-        echo ""
-        if ! ask_confirm "Aceitar EULA da Mojang?" "N"; then
-            print_error "EULA nao aceita. Instalacao abortada."
-            exit 1
-        fi
-    fi
-
     run_minecraft_install
 fi
