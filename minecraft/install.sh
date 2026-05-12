@@ -28,6 +28,8 @@ MINECRAFT_INSTALL_QOL_MODS="${MINECRAFT_INSTALL_QOL_MODS:-true}"
 FORCE_HARDWARE_TIER="${FORCE_HARDWARE_TIER:-}"
 APPLY_SYSTEM_TUNING="${APPLY_SYSTEM_TUNING:-true}"
 DRY_RUN="${DRY_RUN:-false}"
+MINECRAFT_SERVER_DIR_PREEXISTED="${MINECRAFT_SERVER_DIR_PREEXISTED:-false}"
+MINECRAFT_INSTALL_SUCCEEDED="${MINECRAFT_INSTALL_SUCCEEDED:-false}"
 
 validate_minecraft_inputs() {
     case "$MINECRAFT_LOADER" in
@@ -43,6 +45,10 @@ validate_minecraft_inputs() {
     if ! [[ "$MINECRAFT_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
         print_error "MINECRAFT_VERSION invalido: $MINECRAFT_VERSION"
         print_error "Use formato semantico (ex.: 1.21.11)."
+        exit 1
+    fi
+
+    if ! validate_port_number "MINECRAFT_PORT" "$MINECRAFT_PORT"; then
         exit 1
     fi
 
@@ -94,6 +100,7 @@ install_minecraft_dependencies() {
         tar \
         gzip \
         unzip \
+        logrotate \
         zram-generator \
         cpupower \
         lm_sensors \
@@ -108,12 +115,72 @@ create_minecraft_user_and_dirs() {
         return 0
     fi
 
+    if [ -d "$MINECRAFT_SERVER_DIR" ]; then
+        MINECRAFT_SERVER_DIR_PREEXISTED=true
+    else
+        MINECRAFT_SERVER_DIR_PREEXISTED=false
+    fi
+
     if ! id "$MINECRAFT_USER" >/dev/null 2>&1; then
         useradd -r -M -s /usr/bin/nologin -d "$MINECRAFT_SERVER_DIR" "$MINECRAFT_USER"
     fi
 
     mkdir -p "$MINECRAFT_SERVER_DIR"
     chown -R "${MINECRAFT_USER}:${MINECRAFT_USER}" "$MINECRAFT_SERVER_DIR"
+}
+
+install_minecraft_logrotate_config() {
+    local logrotate_conf="/etc/logrotate.d/crias-minecraft"
+
+    if is_true "$DRY_RUN"; then
+        print_step "[DRY_RUN] Pulando configuracao de logrotate do Minecraft."
+        return 0
+    fi
+
+    print_step "Configurando logrotate do Minecraft..."
+    mkdir -p "$(dirname "$logrotate_conf")"
+
+    write_file_or_dry_run "Gerando logrotate do Minecraft em $logrotate_conf" "$logrotate_conf" << EOF
+$MINECRAFT_SERVER_DIR/logs/*.log {
+    daily
+    rotate 14
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+}
+EOF
+}
+
+rollback_minecraft_install() {
+    local service_unit="/etc/systemd/system/minecraft.service"
+    local logrotate_conf="/etc/logrotate.d/crias-minecraft"
+
+    if is_true "$DRY_RUN"; then
+        return 0
+    fi
+
+    print_warning "Instalacao do Minecraft falhou; executando rollback best-effort."
+    rm -f "$service_unit" "$logrotate_conf" 2>/dev/null || true
+
+    if [ "$MINECRAFT_SERVER_DIR_PREEXISTED" = "false" ]; then
+        safe_remove_dir "$MINECRAFT_SERVER_DIR" || true
+    else
+        rm -f \
+            "$MINECRAFT_SERVER_DIR/start-server.sh" \
+            "$MINECRAFT_SERVER_DIR/mc-manager.sh" \
+            "$MINECRAFT_SERVER_DIR/backup-cron.sh" \
+            "$MINECRAFT_SERVER_DIR/setup-cron.sh" \
+            "$MINECRAFT_SERVER_DIR/comandos.sh" \
+            "$MINECRAFT_SERVER_DIR/runtime.env" \
+            "$MINECRAFT_SERVER_DIR/hardware-profile.env" \
+            "$MINECRAFT_SERVER_DIR/server-icon.png" \
+            "$MINECRAFT_SERVER_DIR/eula.txt" 2>/dev/null || true
+        rm -rf "$MINECRAFT_SERVER_DIR/.shared" 2>/dev/null || true
+    fi
+
+    systemctl daemon-reload >/dev/null 2>&1 || true
 }
 
 install_mrpack_install() {
@@ -413,10 +480,19 @@ apply_minecraft_system_tuning() {
 run_minecraft_install() {
     print_step "Iniciando instalacao do stack Minecraft..."
 
+    if [ -d "$MINECRAFT_SERVER_DIR" ]; then
+        MINECRAFT_SERVER_DIR_PREEXISTED=true
+    else
+        MINECRAFT_SERVER_DIR_PREEXISTED=false
+    fi
+
+    trap 'if [ "${MINECRAFT_INSTALL_SUCCEEDED:-false}" != "true" ]; then rollback_minecraft_install; fi' EXIT
+
     validate_minecraft_inputs
     validate_minecraft_eula
 
     if is_true "$DRY_RUN"; then
+        MINECRAFT_INSTALL_SUCCEEDED=true
         print_step "[DRY_RUN] Instalacao do Minecraft encerrada sem aplicar alteracoes."
         return 0
     fi
@@ -429,8 +505,10 @@ run_minecraft_install() {
     configure_minecraft_runtime
     deploy_minecraft_scripts
     install_minecraft_service
+    install_minecraft_logrotate_config
     apply_minecraft_system_tuning
 
+    MINECRAFT_INSTALL_SUCCEEDED=true
     print_success "Minecraft instalado com sucesso em $MINECRAFT_SERVER_DIR"
 }
 

@@ -91,7 +91,7 @@ APPLY_SYSTEM_TUNING="false"
 CLEANUP_OTHER_STACK="false"
 MINECRAFT_USER="minecraft-ci"
 MINECRAFT_SERVER_DIR="$mc_dir"
-MINECRAFT_PORT=25565
+MINECRAFT_PORT=45165
 MINECRAFT_ONLINE_MODE="false"
 MINECRAFT_VERSION="1.21.11"
 MINECRAFT_LOADER="fabric"
@@ -99,7 +99,7 @@ MINECRAFT_INSTALL_MODPACK="true"
 MINECRAFT_INSTALL_QOL_MODS="false"
 TERRARIA_USER="terraria-ci"
 TERRARIA_SERVER_DIR="$tt_dir"
-TERRARIA_PORT=7777
+TERRARIA_PORT=47777
 TERRARIA_WORLD_NAME="world"
 TERRARIA_MOTD="Contrato CI"
 TERRARIA_DOWNLOAD_URL="https://example.invalid/terraria.zip"
@@ -181,7 +181,7 @@ APPLY_SYSTEM_TUNING="false"
 CLEANUP_OTHER_STACK="false"
 MINECRAFT_USER="minecraft-ci"
 MINECRAFT_SERVER_DIR="/tmp/minecraft-eula-ci"
-MINECRAFT_PORT=25565
+MINECRAFT_PORT=45165
 MINECRAFT_ONLINE_MODE="false"
 MINECRAFT_VERSION="1.21.11"
 MINECRAFT_LOADER="fabric"
@@ -208,6 +208,83 @@ EOF
     fi
 }
 
+run_invalid_minecraft_port_contract() {
+    local cfg_file="$TMP_TEST_DIR/invalid-minecraft-port.env"
+    local log_file="$TMP_TEST_DIR/invalid-minecraft-port.log"
+
+    cat > "$cfg_file" << 'EOF'
+SERVER_TYPE="minecraft"
+NON_INTERACTIVE="true"
+DRY_RUN="true"
+INSTALL_TAILSCALE="false"
+APPLY_SYSTEM_TUNING="false"
+CLEANUP_OTHER_STACK="false"
+MINECRAFT_USER="minecraft-ci"
+MINECRAFT_SERVER_DIR="/tmp/minecraft-invalid-port-ci"
+MINECRAFT_PORT=70000
+MINECRAFT_ONLINE_MODE="false"
+MINECRAFT_VERSION="1.21.11"
+MINECRAFT_LOADER="fabric"
+MINECRAFT_INSTALL_MODPACK="true"
+MINECRAFT_INSTALL_QOL_MODS="false"
+ACCEPT_EULA="true"
+EOF
+
+    set +e
+    CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1
+    local status=$?
+    set -e
+
+    if [ "$status" -eq 0 ]; then
+        echo "[install-contracts] Falha esperada nao ocorreu: MINECRAFT_PORT fora da faixa" >&2
+        cat "$log_file" >&2
+        exit 1
+    fi
+
+    if ! grep -q 'MINECRAFT_PORT invalida' "$log_file"; then
+        echo "[install-contracts] Mensagem esperada nao encontrada para MINECRAFT_PORT" >&2
+        cat "$log_file" >&2
+        exit 1
+    fi
+}
+
+run_invalid_terraria_port_contract() {
+    local cfg_file="$TMP_TEST_DIR/invalid-terraria-port.env"
+    local log_file="$TMP_TEST_DIR/invalid-terraria-port.log"
+
+    cat > "$cfg_file" << 'EOF'
+SERVER_TYPE="terraria"
+NON_INTERACTIVE="true"
+DRY_RUN="true"
+INSTALL_TAILSCALE="false"
+APPLY_SYSTEM_TUNING="false"
+CLEANUP_OTHER_STACK="false"
+TERRARIA_USER="terraria-ci"
+TERRARIA_SERVER_DIR="/tmp/terraria-invalid-port-ci"
+TERRARIA_PORT=70000
+TERRARIA_WORLD_NAME="world"
+TERRARIA_MOTD="Contrato CI"
+TERRARIA_DOWNLOAD_URL="https://example.invalid/terraria.zip"
+EOF
+
+    set +e
+CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1
+    local status=$?
+    set -e
+
+    if [ "$status" -eq 0 ]; then
+        echo "[install-contracts] Falha esperada nao ocorreu: TERRARIA_PORT fora da faixa" >&2
+        cat "$log_file" >&2
+        exit 1
+    fi
+
+    if ! grep -q 'TERRARIA_PORT invalida' "$log_file"; then
+        echo "[install-contracts] Mensagem esperada nao encontrada para TERRARIA_PORT" >&2
+        cat "$log_file" >&2
+        exit 1
+    fi
+}
+
 echo "[install-contracts] Validando falha rapida para configuracoes invalidas..."
 run_missing_server_type_contract
 run_invalid_server_type_contract
@@ -220,5 +297,9 @@ run_config_parsing_contract
 
 echo "[install-contracts] Validando aceite explicito de EULA..."
 run_eula_contract
+
+echo "[install-contracts] Validando portas invalidas..."
+run_invalid_minecraft_port_contract
+run_invalid_terraria_port_contract
 
 echo "[install-contracts] OK"

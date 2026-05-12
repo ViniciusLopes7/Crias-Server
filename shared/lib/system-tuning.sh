@@ -95,10 +95,22 @@ apply_cpupower_tuning() {
         cpupower frequency-set -g "$target_governor" >/dev/null 2>&1 || true
     fi
 
-    if [ -f /etc/default/cpupower ]; then
-        sed -i -E "s|^governor=.*|governor='$target_governor'|" /etc/default/cpupower || true
-        systemctl enable cpupower >/dev/null 2>&1 || true
-    fi
+    local cpupower_conf
+    for cpupower_conf in /etc/default/cpupower-service.conf /etc/default/cpupower; do
+        if [ -f "$cpupower_conf" ]; then
+            if grep -q '^governor=' "$cpupower_conf"; then
+                sed -i -E "s|^governor=.*|governor='$target_governor'|" "$cpupower_conf" || true
+            else
+                printf "governor='%s'\n" "$target_governor" >> "$cpupower_conf"
+            fi
+        else
+            cat > "$cpupower_conf" << EOF
+governor='$target_governor'
+EOF
+        fi
+    done
+
+    systemctl enable cpupower >/dev/null 2>&1 || true
 }
 
 apply_nofile_limit() {

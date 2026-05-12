@@ -352,6 +352,7 @@ run_selected_stack_installer() {
     local env_file
     local target_script
     local entry_function
+    local exit_code
 
     env_file="$(write_stack_env_file)"
 
@@ -363,7 +364,7 @@ run_selected_stack_installer() {
         entry_function="run_terraria_install"
     fi
 
-    if (
+    (
         set -euo pipefail
         # shellcheck disable=SC1090
         source "$env_file"
@@ -371,12 +372,9 @@ run_selected_stack_installer() {
         # shellcheck disable=SC1090
         source "$target_script"
         "$entry_function"
-    ); then
-        rm -f "$env_file"
-        return 0
-    fi
+    )
 
-    local exit_code=$?
+    exit_code=$?
     rm -f "$env_file"
     return "$exit_code"
 }
@@ -527,7 +525,9 @@ main() {
         fi
     fi
 
-    run_selected_stack_installer
+    if ! run_selected_stack_installer; then
+        exit 1
+    fi
     configure_alias_autoload_for_selected_stack
     cleanup_other_stack_if_needed
 

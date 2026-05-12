@@ -116,7 +116,7 @@ cmd_console() {
         rcon_port=25575
     fi
 
-    exec mcrcon -H localhost -P "$rcon_port" -p "$rcon_pass"
+    MCRCON_PASS="$rcon_pass" exec mcrcon -H localhost -P "$rcon_port"
 }
 
 cmd_backup() {
@@ -194,6 +194,41 @@ cmd_hardware_report() {
     fi
 }
 
+cmd_health() {
+    local server_port
+    local rcon_pass
+    local rcon_port
+
+    server_port="$(get_prop "server-port" "25565")"
+    if ! [[ "$server_port" =~ ^[0-9]+$ ]]; then
+        server_port=25565
+    fi
+
+    if ! port_is_listening "$server_port"; then
+        err "Porta $server_port nao esta em escuta."
+        return 1
+    fi
+
+    rcon_pass="$(get_prop "rcon.password" "")"
+    rcon_port="$(get_prop "rcon.port" "25575")"
+    if ! [[ "$rcon_port" =~ ^[0-9]+$ ]]; then
+        rcon_port=25575
+    fi
+
+    if [ -n "$rcon_pass" ] && command -v mcrcon >/dev/null 2>&1; then
+        if MCRCON_PASS="$rcon_pass" timeout 10 mcrcon -H localhost -P "$rcon_port" "list" >/dev/null 2>&1; then
+            log "Health OK: porta $server_port e RCON responderam."
+            return 0
+        fi
+
+        err "Porta $server_port em escuta, mas RCON nao respondeu."
+        return 1
+    fi
+
+    warn "Health limitado a porta em escuta; RCON indisponivel para verificacao."
+    return 0
+}
+
 show_help() {
     cat << EOF
 Uso: $0 <comando>
@@ -205,6 +240,7 @@ Comandos:
   status                    Mostra status (systemd)
   logs                       Tail dos logs (journalctl)
     console                    Console interativo via RCON (fallback para logs)
+    health                     Verifica porta e RCON do servidor
   backup                     Executa backup imediato
   setup-cron                 Configura timer systemd de backup
   reconfigure-hardware [TIER] Recalcula tuning (TIER: LOW|MID|HIGH ou vazio)
@@ -219,6 +255,7 @@ case "${1:-}" in
     status) shift; cmd_status "$@" ;;
     logs) shift; cmd_logs "$@" ;;
     console) shift; cmd_console "$@" ;;
+    health) shift; cmd_health "$@" ;;
     backup) shift; cmd_backup "$@" ;;
     setup-cron) shift; cmd_setup_cron "$@" ;;
     reconfigure-hardware) shift; cmd_reconfigure_hardware "${1:-}" ;;

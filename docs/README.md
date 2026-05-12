@@ -13,6 +13,7 @@
 - shared/HardwareTuning.md
 - shared/Cleanup.md
 - shared/Compatibilidade.md
+- shared/SecurityAndOps.md
 
 ## Observacao sobre CI
 

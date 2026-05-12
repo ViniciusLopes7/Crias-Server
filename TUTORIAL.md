@@ -168,3 +168,9 @@ sudo /opt/terraria-server/tt-manager.sh hardware-report
 sudo journalctl -u minecraft -f
 sudo journalctl -u terraria -f
 ```
+
+## Seguranca e operacao
+
+Para os pontos operacionais que nao devem ser esquecidos no dia a dia, consulte [docs/shared/SecurityAndOps.md](docs/shared/SecurityAndOps.md).
+
+Esse guia cobre firewall, rotacao de logs, health checks e as limitacoes de AppArmor/SELinux do projeto.

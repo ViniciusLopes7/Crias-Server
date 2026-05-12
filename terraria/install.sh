@@ -25,6 +25,14 @@ TERRARIA_DOWNLOAD_URL="${TERRARIA_DOWNLOAD_URL:-https://terraria.org/api/downloa
 FORCE_HARDWARE_TIER="${FORCE_HARDWARE_TIER:-}"
 APPLY_SYSTEM_TUNING="${APPLY_SYSTEM_TUNING:-true}"
 DRY_RUN="${DRY_RUN:-false}"
+TERRARIA_SERVER_DIR_PREEXISTED="${TERRARIA_SERVER_DIR_PREEXISTED:-false}"
+TERRARIA_INSTALL_SUCCEEDED="${TERRARIA_INSTALL_SUCCEEDED:-false}"
+
+validate_terraria_inputs() {
+    if ! validate_port_number "TERRARIA_PORT" "$TERRARIA_PORT"; then
+        exit 1
+    fi
+}
 
 install_terraria_dependencies() {
     if is_true "$DRY_RUN"; then
@@ -55,12 +63,45 @@ create_terraria_user_and_dirs() {
         return 0
     fi
 
+    if [ -d "$TERRARIA_SERVER_DIR" ]; then
+        TERRARIA_SERVER_DIR_PREEXISTED=true
+    else
+        TERRARIA_SERVER_DIR_PREEXISTED=false
+    fi
+
     if ! id "$TERRARIA_USER" >/dev/null 2>&1; then
         useradd -r -M -s /usr/bin/nologin -d "$TERRARIA_SERVER_DIR" "$TERRARIA_USER"
     fi
 
     mkdir -p "$TERRARIA_SERVER_DIR" "$TERRARIA_SERVER_DIR/config" "$TERRARIA_SERVER_DIR/worlds"
     chown -R "${TERRARIA_USER}:${TERRARIA_USER}" "$TERRARIA_SERVER_DIR"
+}
+
+rollback_terraria_install() {
+    local service_unit="/etc/systemd/system/terraria.service"
+
+    if is_true "$DRY_RUN"; then
+        return 0
+    fi
+
+    print_warning "Instalacao do Terraria falhou; executando rollback best-effort."
+    rm -f "$service_unit" 2>/dev/null || true
+
+    if [ "$TERRARIA_SERVER_DIR_PREEXISTED" = "false" ]; then
+        safe_remove_dir "$TERRARIA_SERVER_DIR" || true
+    else
+        rm -f \
+            "$TERRARIA_SERVER_DIR/start-terraria.sh" \
+            "$TERRARIA_SERVER_DIR/tt-manager.sh" \
+            "$TERRARIA_SERVER_DIR/backup-cron.sh" \
+            "$TERRARIA_SERVER_DIR/setup-cron.sh" \
+            "$TERRARIA_SERVER_DIR/comandos.sh" \
+            "$TERRARIA_SERVER_DIR/runtime.env" \
+            "$TERRARIA_SERVER_DIR/hardware-profile.env" 2>/dev/null || true
+        rm -rf "$TERRARIA_SERVER_DIR/.shared" 2>/dev/null || true
+    fi
+
+    systemctl daemon-reload >/dev/null 2>&1 || true
 }
 
 download_and_extract_terraria() {
@@ -216,7 +257,18 @@ apply_terraria_system_tuning() {
 run_terraria_install() {
     print_step "Iniciando instalacao do stack Terraria..."
 
+    if [ -d "$TERRARIA_SERVER_DIR" ]; then
+        TERRARIA_SERVER_DIR_PREEXISTED=true
+    else
+        TERRARIA_SERVER_DIR_PREEXISTED=false
+    fi
+
+    trap 'if [ "${TERRARIA_INSTALL_SUCCEEDED:-false}" != "true" ]; then rollback_terraria_install; fi' EXIT
+
+    validate_terraria_inputs
+
     if is_true "$DRY_RUN"; then
+        TERRARIA_INSTALL_SUCCEEDED=true
         print_step "[DRY_RUN] Instalacao do Terraria encerrada sem aplicar alteracoes."
         return 0
     fi
@@ -229,6 +281,7 @@ run_terraria_install() {
     install_terraria_service
     apply_terraria_system_tuning
 
+    TERRARIA_INSTALL_SUCCEEDED=true
     print_success "Terraria instalado com sucesso em $TERRARIA_SERVER_DIR"
 }
 

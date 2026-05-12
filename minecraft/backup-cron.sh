@@ -49,6 +49,24 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
+backup_owner_spec() {
+    stat -c '%U:%G' "$SERVER_DIR" 2>/dev/null || true
+}
+
+adopt_backup_ownership() {
+    local target_path="$1"
+    local owner_spec
+
+    if [ "$(id -u)" -ne 0 ]; then
+        return 0
+    fi
+
+    owner_spec="$(backup_owner_spec)"
+    if [ -n "$owner_spec" ] && [ "$owner_spec" != "root:root" ] && [ -e "$target_path" ]; then
+        chown "$owner_spec" "$target_path" 2>/dev/null || true
+    fi
+}
+
 read_server_property() {
     local key="$1"
     local props_file="$SERVER_DIR/server.properties"
@@ -96,7 +114,7 @@ enable_rcon_save_lock() {
         MCRCON_PORT="$rcon_port"
     fi
 
-    if mcrcon -H "$MCRCON_HOST" -P "$MCRCON_PORT" -p "$rcon_pass" "save-off" "save-all" >/dev/null 2>&1; then
+    if MCRCON_PASS="$rcon_pass" mcrcon -H "$MCRCON_HOST" -P "$MCRCON_PORT" "save-off" "save-all" >/dev/null 2>&1; then
         RCON_SAVE_LOCK_ACTIVE=true
         RCON_PASSWORD="$rcon_pass"
         log "Saves pausados via RCON. Aguardando flush..."
@@ -111,7 +129,7 @@ disable_rcon_save_lock() {
         return 0
     fi
 
-    mcrcon -H "$MCRCON_HOST" -P "$MCRCON_PORT" -p "$RCON_PASSWORD" "save-on" >/dev/null 2>&1 || true
+    MCRCON_PASS="$RCON_PASSWORD" mcrcon -H "$MCRCON_HOST" -P "$MCRCON_PORT" "save-on" >/dev/null 2>&1 || true
     log "Saves reativados via RCON."
     RCON_SAVE_LOCK_ACTIVE=false
 }
@@ -120,7 +138,9 @@ create_backup() {
     local backup_dirs=()
 
     mkdir -p "$BACKUP_DIR"
+    adopt_backup_ownership "$BACKUP_DIR"
     exec 200>"$BACKUP_DIR/.backup.lock"
+    adopt_backup_ownership "$BACKUP_DIR/.backup.lock"
     if ! flock -n 200; then
         log "ERRO: Ja existe um backup em andamento. Abortando nova execucao."
         return 1
@@ -153,6 +173,7 @@ create_backup() {
     fi
 
     if ionice -c2 -n7 tar -I "zstd ${ZSTD_LEVEL}" -cf "$BACKUP_DIR/$BACKUP_NAME" "${backup_dirs[@]}"; then
+        adopt_backup_ownership "$BACKUP_DIR/$BACKUP_NAME"
         disable_rcon_save_lock
         log "Backup criado: $BACKUP_DIR/$BACKUP_NAME"
         return 0
@@ -164,7 +185,28 @@ create_backup() {
 }
 
 cleanup_old_backups() {
-    find "$BACKUP_DIR" -name "minecraft-backup-*.tar.zst" -type f -mtime +"$RETENTION_DAYS" -delete
+    local cutoff_timestamp
+    local backup_file
+    local backup_name
+    local backup_timestamp
+
+    cutoff_timestamp="$(date -d "$RETENTION_DAYS days ago" +%Y%m%d-%H%M%S 2>/dev/null || true)"
+    if [ -z "$cutoff_timestamp" ]; then
+        find "$BACKUP_DIR" -name "minecraft-backup-*.tar.zst" -type f -mtime +"$RETENTION_DAYS" -delete
+        return 0
+    fi
+
+    shopt -s nullglob
+    for backup_file in "$BACKUP_DIR"/minecraft-backup-*.tar.zst; do
+        backup_name="$(basename "$backup_file")"
+        backup_timestamp="${backup_name#minecraft-backup-}"
+        backup_timestamp="${backup_timestamp%.tar.zst}"
+
+        if [[ "$backup_timestamp" =~ ^[0-9]{8}-[0-9]{6}$ ]] && [[ "$backup_timestamp" < "$cutoff_timestamp" ]]; then
+            rm -f "$backup_file"
+        fi
+    done
+    shopt -u nullglob
 }
 
 is_service_active_or_skip() {

@@ -21,6 +21,9 @@ cat > "$stub_bin/mcrcon" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 echo "mcrcon:$*" >> "${MCRCON_LOG_FILE:?}"
+if [ -n "${MCRCON_PASS:-}" ]; then
+    echo "mcrcon-pass-env:set" >> "${MCRCON_LOG_FILE:?}"
+fi
 EOF
 chmod +x "$stub_bin/mcrcon"
 
@@ -73,6 +76,16 @@ fi
 
 if ! grep -q "save-on" "$mcrcon_log"; then
     echo "FAIL: mcrcon save-on nao foi chamado"
+    exit 1
+fi
+
+if grep -Eq '(^|[[:space:]])-p([[:space:]]|$)' "$mcrcon_log"; then
+    echo "FAIL: mcrcon ainda recebeu senha via argumento -p"
+    exit 1
+fi
+
+if ! grep -q "mcrcon-pass-env:set" "$mcrcon_log"; then
+    echo "FAIL: mcrcon nao recebeu senha via MCRCON_PASS"
     exit 1
 fi
 

@@ -101,6 +101,10 @@ Downloads verificados (opcional):
 - TERRARIA_SHA256: SHA256 esperado para o zip do servidor Terraria (opcional).
 - Forneca variaveis `*_SHA256` correspondentes para habilitar verificacao de checksum durante o instalador. Quando ausente, o instalador baixa e emite um aviso.
  - Per-mod SHA variables: `MOD_<NAME>_SHA256` (e.g. `MOD_CHUNKY_SHA256`) can be provided to verify individual QoL mod downloads.
+
+Guia operacional e de seguranca:
+
+- [docs/shared/SecurityAndOps.md](docs/shared/SecurityAndOps.md) cobre firewall, rotacao de logs, health checks e limite de MAC.
  
 Banner:
 

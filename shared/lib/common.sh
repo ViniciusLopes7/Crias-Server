@@ -165,6 +165,34 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+port_is_listening() {
+    local port="$1"
+
+    if ! command_exists ss; then
+        return 1
+    fi
+
+    ss -H -tln 2>/dev/null | awk -v port=":$port" '$4 ~ port { found=1 } END { exit found ? 0 : 1 }'
+}
+
+validate_port_number() {
+    local label="$1"
+    local port="$2"
+
+    if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+        print_error "$label invalida: $port"
+        print_error "Use um numero entre 1 e 65535."
+        return 1
+    fi
+
+    if port_is_listening "$port"; then
+        print_error "Porta $port ja esta em uso."
+        return 1
+    fi
+
+    return 0
+}
+
 check_root() {
     if [ "$EUID" -ne 0 ]; then
         print_error "Este script precisa ser executado como root (sudo)."

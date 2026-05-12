@@ -46,5 +46,11 @@ bash tests/minecraft-tuning-test.sh
 echo "[quick-script-tests] Validando contrato de checksum por mod..."
 assert_file minecraft/install.sh
 assert_grep_fixed "file_name_norm=\"\${file_name//-/_}\"" minecraft/install.sh
+assert_grep_fixed '/etc/default/cpupower-service.conf' shared/lib/system-tuning.sh
+assert_grep_fixed 'validate_port_number "MINECRAFT_PORT" "$MINECRAFT_PORT"' minecraft/install.sh
+assert_grep_fixed 'validate_port_number "TERRARIA_PORT" "$TERRARIA_PORT"' terraria/install.sh
+assert_grep_fixed 'install_minecraft_logrotate_config()' minecraft/install.sh
+assert_grep_fixed 'cmd_health()' minecraft/mc-manager.sh
+assert_grep_fixed 'cmd_health()' terraria/tt-manager.sh
 
 echo "[quick-script-tests] OK"

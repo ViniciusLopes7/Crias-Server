@@ -26,6 +26,8 @@ wget
 jdk21-openjdk
 tar
 gzip
+logrotate
+unzip
 zstd
 
 # System utilities

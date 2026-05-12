@@ -189,6 +189,22 @@ cmd_hardware_report() {
     fi
 }
 
+cmd_health() {
+    local server_port
+
+    server_port="$(config_read_value "$CONFIG_FILE" "port")"
+    if ! [[ "$server_port" =~ ^[0-9]+$ ]]; then
+        server_port=7777
+    fi
+
+    if ! port_is_listening "$server_port"; then
+        err "Porta $server_port nao esta em escuta."
+        return 1
+    fi
+
+    log "Health OK: porta $server_port em escuta."
+}
+
 show_help() {
     cat << EOF
 Uso: $0 <comando>
@@ -200,6 +216,7 @@ Comandos:
   status                    Mostra status (systemd)
   logs                       Tail dos logs (journalctl)
     console                    Logs em tempo real (console interativo nao suportado)
+    health                     Verifica se a porta do servidor esta em escuta
   backup                     Executa backup imediato
   setup-cron                 Configura timer systemd de backup
   reconfigure-hardware [TIER] Recalcula tuning (TIER: LOW|MID|HIGH ou vazio)
@@ -214,6 +231,7 @@ case "${1:-}" in
     status) shift; cmd_status "$@" ;;
     logs) shift; cmd_logs "$@" ;;
     console) shift; cmd_console "$@" ;;
+    health) shift; cmd_health "$@" ;;
     backup) shift; cmd_backup "$@" ;;
     setup-cron) shift; cmd_setup_cron "$@" ;;
     reconfigure-hardware) shift; cmd_reconfigure_hardware "${1:-}" ;;
