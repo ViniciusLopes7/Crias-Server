@@ -2,30 +2,6 @@
 
 # Terraria tuning helpers based on detected hardware profile.
 
-clamp_value() {
-    local value="$1"
-    local min="$2"
-    local max="$3"
-
-    # Ensure numeric
-    if ! [[ "$value" =~ ^-?[0-9]+$ ]]; then
-        echo "$min"
-        return 0
-    fi
-
-    if [ "$value" -lt "$min" ]; then
-        echo "$min"
-        return 0
-    fi
-
-    if [ "$value" -gt "$max" ]; then
-        echo "$max"
-        return 0
-    fi
-
-    echo "$value"
-}
-
 compute_terraria_tuning() {
     local total_ram_mb="$1"
     local cpu_cores="$2"

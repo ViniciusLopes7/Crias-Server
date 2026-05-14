@@ -2,30 +2,6 @@
 
 # Minecraft tuning helpers based on detected hardware profile.
 
-clamp_value() {
-    local value="$1"
-    local min="$2"
-    local max="$3"
-
-    # Ensure numeric
-    if ! [[ "$value" =~ ^-?[0-9]+$ ]]; then
-        echo "$min"
-        return 0
-    fi
-
-    if [ "$value" -lt "$min" ]; then
-        echo "$min"
-        return 0
-    fi
-
-    if [ "$value" -gt "$max" ]; then
-        echo "$max"
-        return 0
-    fi
-
-    echo "$value"
-}
-
 compute_minecraft_tuning() {
     local total_ram_mb="$1"
     local cpu_cores="$2"
@@ -177,31 +153,36 @@ write_minecraft_server_properties() {
     local online_mode="$3"
     local motd="${4:-§6§l🏰 REINO DOS CRIAS 🏰\\n§eAdrenaline + QoL §7| §aA resenha nunca morre...§r}"
 
-    write_file_or_dry_run "Gerando server.properties do Minecraft em $file_path" "$file_path" << EOF
-# Minecraft server properties
-server-port=$server_port
-server-ip=
-online-mode=$online_mode
-motd=$motd
-max-players=$MC_MAX_PLAYERS
-network-compression-threshold=256
-prevent-proxy-connections=false
+    if dry_run_enabled; then
+        print_step "[DRY_RUN] Gerando server.properties do Minecraft em $file_path"
+        return 0
+    fi
 
-view-distance=$MC_VIEW_DISTANCE
-simulation-distance=$MC_SIMULATION_DISTANCE
-
-max-tick-time=60000
-max-world-size=29999984
-sync-chunk-writes=$MC_SYNC_CHUNK_WRITES
-enable-jmx-monitoring=false
-enable-status=true
-
-entity-broadcast-range-percentage=$MC_ENTITY_BROADCAST_RANGE
-spawn-animals=true
-spawn-monsters=true
-spawn-npcs=true
-spawn-protection=0
-EOF
+    {
+        printf '%s\n' '# Minecraft server properties'
+        printf 'server-port=%s\n' "$server_port"
+        printf '%s\n' 'server-ip='
+        printf 'online-mode=%s\n' "$online_mode"
+        printf 'motd=%s\n' "$motd"
+        printf 'max-players=%s\n' "$MC_MAX_PLAYERS"
+        printf '%s\n' 'network-compression-threshold=256'
+        printf '%s\n' 'prevent-proxy-connections=false'
+        printf '\n'
+        printf 'view-distance=%s\n' "$MC_VIEW_DISTANCE"
+        printf 'simulation-distance=%s\n' "$MC_SIMULATION_DISTANCE"
+        printf '\n'
+        printf '%s\n' 'max-tick-time=60000'
+        printf '%s\n' 'max-world-size=29999984'
+        printf 'sync-chunk-writes=%s\n' "$MC_SYNC_CHUNK_WRITES"
+        printf '%s\n' 'enable-jmx-monitoring=false'
+        printf '%s\n' 'enable-status=true'
+        printf '\n'
+        printf 'entity-broadcast-range-percentage=%s\n' "$MC_ENTITY_BROADCAST_RANGE"
+        printf '%s\n' 'spawn-animals=true'
+        printf '%s\n' 'spawn-monsters=true'
+        printf '%s\n' 'spawn-npcs=true'
+        printf '%s\n' 'spawn-protection=0'
+    } > "$file_path"
 }
 
 write_minecraft_tuning_state() {

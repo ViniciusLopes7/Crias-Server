@@ -153,7 +153,7 @@ Use sempre os caminhos modulares abaixo para operacao diaria e manutencao:
 - terraria/backup-cron.sh
 - terraria/setup-cron.sh
 
-## 8. Dica de troubleshooting
+## 10. Dica de troubleshooting
 
 - Ver perfil aplicado:
 

@@ -34,7 +34,7 @@ zstd
 nano
 vim
 htop
-iotop
+iotop-c
 sudo
 zram-generator
 cpupower

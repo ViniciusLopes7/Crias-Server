@@ -14,6 +14,7 @@ CONFIG_DIR="$SERVER_DIR/config"
 RUNTIME_ENV="$SERVER_DIR/runtime.env"
 BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-}"
 BACKUP_ZSTD_LEVEL="${BACKUP_ZSTD_LEVEL:-}"
+BACKUP_DRY_RUN="${BACKUP_DRY_RUN:-false}"
 BACKUP_REQUIRE_ACTIVE_SERVICE="${BACKUP_REQUIRE_ACTIVE_SERVICE:-true}"
 BACKUP_SERVICE_NAME="${BACKUP_SERVICE_NAME:-terraria}"
 
@@ -87,6 +88,11 @@ create_backup() {
         return 1
     fi
 
+    if [ "$BACKUP_DRY_RUN" = "true" ]; then
+        log "[DRY_RUN] Backup simulado para: $(basename "$WORLDS_DIR") $(basename "$CONFIG_DIR")"
+        return 0
+    fi
+
     if ionice -c2 -n7 tar -I "zstd ${ZSTD_LEVEL}" -cf "$BACKUP_DIR/$BACKUP_NAME" "$(basename "$WORLDS_DIR")" "$(basename "$CONFIG_DIR")"; then
         adopt_backup_ownership "$BACKUP_DIR/$BACKUP_NAME"
         log "Backup criado: $BACKUP_DIR/$BACKUP_NAME"
@@ -123,6 +129,11 @@ cleanup_old_backups() {
 }
 
 is_service_active_or_skip() {
+    if [ "$BACKUP_DRY_RUN" = "true" ]; then
+        log "[DRY_RUN] Pulando verificacao de status do servico"
+        return 0
+    fi
+
     if [ "$BACKUP_REQUIRE_ACTIVE_SERVICE" != "true" ]; then
         return 0
     fi

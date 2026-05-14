@@ -117,6 +117,7 @@ load_config_file() {
 
                 value="${value//\$\(/\\$\(}"
                 value="${value//\`/\\\`}"
+                value="${value//\$\{/\\$\{}"
 
                 set_config_var "$key" "$value"
             else

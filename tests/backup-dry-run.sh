@@ -44,6 +44,14 @@ exec "$@"
 EOF
 chmod +x "$stub_bin/ionice"
 
+cat > "$stub_bin/flock" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+shift
+exit 0
+EOF
+chmod +x "$stub_bin/flock"
+
 cat > "$stub_bin/tar" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail

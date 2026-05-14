@@ -9,8 +9,12 @@
 
 iso_name="crias-server-os"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-git_desc="$(git -C "$repo_root" describe --tags --always --dirty 2>/dev/null || true)"
-git_short="$(git -C "$repo_root" rev-parse --short=6 HEAD 2>/dev/null || true)"
+git_desc=""
+git_short=""
+if command -v git >/dev/null 2>&1; then
+    git_desc="$(git -C "$repo_root" describe --tags --always --dirty 2>/dev/null || true)"
+    git_short="$(git -C "$repo_root" rev-parse --short=6 HEAD 2>/dev/null || true)"
+fi
 
 # Keep iso_label stable and <= 11 chars (classic FAT label limit).
 if [ -n "$git_short" ]; then

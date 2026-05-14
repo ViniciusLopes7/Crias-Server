@@ -175,9 +175,33 @@ port_is_listening() {
     ss -H -tln 2>/dev/null | awk -v port=":$port" '$4 ~ port { found=1 } END { exit found ? 0 : 1 }'
 }
 
+clamp_value() {
+    local value="$1"
+    local min="$2"
+    local max="$3"
+
+    if ! [[ "$value" =~ ^-?[0-9]+$ ]]; then
+        echo "$min"
+        return 0
+    fi
+
+    if [ "$value" -lt "$min" ]; then
+        echo "$min"
+        return 0
+    fi
+
+    if [ "$value" -gt "$max" ]; then
+        echo "$max"
+        return 0
+    fi
+
+    echo "$value"
+}
+
 validate_port_number() {
     local label="$1"
     local port="$2"
+    local check_availability="${3:-false}"
 
     if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
         print_error "$label invalida: $port"
@@ -185,7 +209,7 @@ validate_port_number() {
         return 1
     fi
 
-    if port_is_listening "$port"; then
+    if is_true "$check_availability" && port_is_listening "$port"; then
         print_error "Porta $port ja esta em uso."
         return 1
     fi

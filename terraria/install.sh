@@ -43,7 +43,7 @@ install_terraria_dependencies() {
     print_step "Instalando dependencias do Terraria..."
     pacman -S --needed --noconfirm \
         htop \
-        iotop \
+        iotop-c \
         nano \
         curl \
         wget \
@@ -128,7 +128,7 @@ download_and_extract_terraria() {
     fi
 
     print_step "Extraindo servidor Terraria..."
-    unzip -q -o -j "$tmp_zip" -d "$tmp_dir"
+    unzip -q -o "$tmp_zip" -d "$tmp_dir"
 
     binary_path=$(find "$tmp_dir" -type f -name "TerrariaServer.bin.x86_64" -print -quit)
     if [ -z "$binary_path" ]; then

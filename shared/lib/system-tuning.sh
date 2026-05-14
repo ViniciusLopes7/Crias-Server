@@ -103,10 +103,12 @@ apply_cpupower_tuning() {
             else
                 printf "governor='%s'\n" "$target_governor" >> "$cpupower_conf"
             fi
+            break
         else
             cat > "$cpupower_conf" << EOF
 governor='$target_governor'
 EOF
+            break
         fi
     done
 

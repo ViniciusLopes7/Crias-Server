@@ -6,6 +6,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 # shellcheck source=/dev/null
+source shared/lib/common.sh
+# shellcheck source=/dev/null
 source shared/lib/hardware-profile.sh
 # shellcheck source=/dev/null
 source shared/lib/minecraft-tuning.sh

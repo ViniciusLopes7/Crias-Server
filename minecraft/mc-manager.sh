@@ -132,7 +132,7 @@ cmd_setup_cron() {
         err "Script de setup-cron nao encontrado: $SETUP_CRON_SCRIPT"
         return 1
     fi
-    manager_need_root "$SELF" "$@"
+    manager_need_root "$SELF" "setup-cron" "$@"
     SERVER_USER="$SERVER_USER" "$SETUP_CRON_SCRIPT"
 }
 

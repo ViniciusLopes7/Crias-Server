@@ -1,6 +1,6 @@
 # Politica de Cleanup do Stack Oposto
 
-When CLEANUP_OTHER_STACK=true, o instalador executa uma desativacao segura do stack oposto.
+Quando CLEANUP_OTHER_STACK=true, o instalador executa uma desativacao segura do stack oposto.
 
 ## Comportamento do cleanup (padrao)
 

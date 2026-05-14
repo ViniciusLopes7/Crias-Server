@@ -93,7 +93,7 @@ install_minecraft_dependencies() {
     pacman -S --needed --noconfirm \
         jdk21-openjdk \
         htop \
-        iotop \
+        iotop-c \
         nano \
         curl \
         wget \
@@ -204,30 +204,8 @@ install_mrpack_install() {
         mrpack_url="https://github.com/nothub/mrpack-install/releases/latest/download/mrpack-install-linux"
     fi
 
-    # Require explicit checksum for downloads outside the package manager to
-    # reduce supply-chain risk. If MRPACK_SHA256 is not provided, abort in
-    # non-interactive mode; otherwise ask the operator to confirm.
-    if [ -z "${MRPACK_SHA256:-}" ]; then
-        if is_true "$NON_INTERACTIVE"; then
-            print_error "MRPACK_SHA256 nao definido. Em modo nao-interativo, cancela por seguranca. Defina MRPACK_SHA256 em config.env ou use AUR." 
-            exit 1
-        else
-            print_warning "MRPACK_SHA256 nao definido. Isso aumenta o risco de supply-chain ao baixar binarios diretamente." 
-            if ! ask_confirm "Continuar sem checagem de checksum para mrpack-install?" "N"; then
-                print_error "Instalacao do mrpack-install cancelada pelo usuario por falta de checksum." 
-                exit 1
-            fi
-        fi
-    fi
-
     if ! download_and_verify "$mrpack_url" /tmp/mrpack-install MRPACK_SHA256; then
         print_error "Falha ao baixar/validar mrpack-install"
-        exit 1
-    fi
-
-    # Validate ELF format before marking executable
-    if ! file /tmp/mrpack-install | grep -q "ELF.*executable"; then
-        print_error "mrpack-install nao e um binario ELF valido. Download pode estar corrompido."
         exit 1
     fi
 

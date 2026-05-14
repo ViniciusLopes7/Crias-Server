@@ -40,8 +40,17 @@ bash tests/config-parser.sh
 echo "[quick-script-tests] Validando backup dry-run do Minecraft..."
 bash tests/backup-dry-run.sh
 
+echo "[quick-script-tests] Validando backup dry-run do Terraria..."
+bash tests/terraria-backup-dry-run.sh
+
 echo "[quick-script-tests] Validando tuning do Minecraft..."
 bash tests/minecraft-tuning-test.sh
+
+echo "[quick-script-tests] Validando tuning do Terraria..."
+bash tests/terraria-tuning-test.sh
+
+echo "[quick-script-tests] Validando regressao de setup-cron (nao-root)..."
+bash tests/setup-cron-manager-test.sh
 
 echo "[quick-script-tests] Validando contrato de checksum por mod..."
 assert_file minecraft/install.sh
@@ -52,5 +61,6 @@ assert_grep_fixed "validate_port_number \"TERRARIA_PORT\" \"\$TERRARIA_PORT\"" t
 assert_grep_fixed 'install_minecraft_logrotate_config()' minecraft/install.sh
 assert_grep_fixed 'cmd_health()' minecraft/mc-manager.sh
 assert_grep_fixed 'cmd_health()' terraria/tt-manager.sh
+assert_grep_fixed 'BACKUP_DRY_RUN="${BACKUP_DRY_RUN:-false}"' terraria/backup-cron.sh
 
 echo "[quick-script-tests] OK"
