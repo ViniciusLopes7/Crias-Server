@@ -73,7 +73,7 @@ resolve_mount_source_for_path() {
 resolve_block_device_for_path() {
     local target_path="$1"
     local probe_path="$target_path"
-    local device
+    local device=""
     local pkname
     local base_device
 
@@ -193,15 +193,26 @@ classify_hardware_tier() {
 detect_hardware_profile() {
     local target_path="$1"
     local forced_tier
+    local meminfo_file="/proc/meminfo"
 
     HW_TARGET_PATH="$target_path"
     HW_FS_TYPE=$(resolve_mount_fstype_for_path "$target_path")
     HW_TARGET_DEVICE=$(resolve_block_device_for_path "$target_path")
-    HW_TOTAL_RAM_MB=$(free -m | awk '/^Mem:/{print $2}')
-    HW_AVAILABLE_RAM_MB=$(free -m | awk '/^Mem:/{print $7}')
+    if command -v free >/dev/null 2>&1; then
+        HW_TOTAL_RAM_MB=$(free -m | awk '/^Mem:/{print $2}')
+        HW_AVAILABLE_RAM_MB=$(free -m | awk '/^Mem:/{print $7}')
+        HW_SWAP_MB=$(free -m | awk '/^Swap:/{print $2}')
+    elif [ -r "$meminfo_file" ]; then
+        HW_TOTAL_RAM_MB=$(awk '/^MemTotal:/ {print int($2 / 1024)}' "$meminfo_file")
+        HW_AVAILABLE_RAM_MB=$(awk '/^MemAvailable:/ {print int($2 / 1024)}' "$meminfo_file")
+        HW_SWAP_MB=$(awk '/^SwapTotal:/ {print int($2 / 1024)}' "$meminfo_file")
+    else
+        HW_TOTAL_RAM_MB=0
+        HW_AVAILABLE_RAM_MB=0
+        HW_SWAP_MB=0
+    fi
     HW_CPU_CORES=$(nproc 2>/dev/null)
     HW_CPU_THREADS=$(grep -c '^processor' /proc/cpuinfo 2>/dev/null)
-    HW_SWAP_MB=$(free -m | awk '/^Swap:/{print $2}')
     HW_DISK_TYPE=$(detect_disk_type_for_path "$target_path")
 
     if [ -z "$HW_CPU_THREADS" ] || [ "$HW_CPU_THREADS" -le 0 ]; then

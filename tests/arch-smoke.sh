@@ -19,6 +19,8 @@ done
 
 echo "[arch-smoke] Verificando calculos de tuning por tier..."
 # shellcheck source=/dev/null
+source shared/lib/common.sh
+# shellcheck source=/dev/null
 source shared/lib/hardware-profile.sh
 # shellcheck source=/dev/null
 source shared/lib/minecraft-tuning.sh
