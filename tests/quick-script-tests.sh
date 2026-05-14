@@ -61,6 +61,6 @@ assert_grep_fixed "validate_port_number \"TERRARIA_PORT\" \"\$TERRARIA_PORT\"" t
 assert_grep_fixed 'install_minecraft_logrotate_config()' minecraft/install.sh
 assert_grep_fixed 'cmd_health()' minecraft/mc-manager.sh
 assert_grep_fixed 'cmd_health()' terraria/tt-manager.sh
-assert_grep_fixed 'BACKUP_DRY_RUN="${BACKUP_DRY_RUN:-false}"' terraria/backup-cron.sh
+assert_grep_fixed "BACKUP_DRY_RUN=\"\${BACKUP_DRY_RUN:-false}\"" terraria/backup-cron.sh
 
 echo "[quick-script-tests] OK"
