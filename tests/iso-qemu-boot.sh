@@ -177,9 +177,13 @@ else
     qemu_kernel_args+=("archisobasedir=${install_dir}")
     if [ -n "$iso_label" ]; then
         qemu_kernel_args+=("archisolabel=${iso_label}")
-    elif [ -n "$iso_uuid" ]; then
+    fi
+
+    if [ -n "$iso_uuid" ]; then
         qemu_kernel_args+=("archisosearchuuid=${iso_uuid}")
-    else
+    fi
+
+    if [ -z "$iso_label" ] && [ -z "$iso_uuid" ]; then
         echo "Nao foi possivel detectar LABEL/UUID da ISO para fallback." >&2
         exit 1
     fi

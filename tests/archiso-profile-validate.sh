@@ -88,10 +88,15 @@ fi
 
 grep -Fq '/%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux' "$GRUB_CFG"
 grep -Fq 'archisobasedir=%INSTALL_DIR%' "$GRUB_CFG"
+grep -Fq 'archisolabel=%ARCHISO_LABEL%' "$GRUB_CFG"
 grep -Fq 'archisosearchuuid=%ARCHISO_UUID%' "$GRUB_CFG"
 
 grep -Fq '/%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux' "$SYSLINUX_CFG"
 grep -Fq 'archisobasedir=%INSTALL_DIR%' "$SYSLINUX_CFG"
+grep -Fq 'archisolabel=%ARCHISO_LABEL%' "$SYSLINUX_CFG"
 grep -Fq 'archisosearchuuid=%ARCHISO_UUID%' "$SYSLINUX_CFG"
 
 echo "[archiso-profile-validate] OK"
+
+# Validate that profiledef.sh sets a sane iso_label for FAT labels
+bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/iso-label-validate.sh" || exit 1

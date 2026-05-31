@@ -41,3 +41,26 @@ O repositório nao embarca perfis AppArmor ou SELinux.
 ## Rollback
 
 Se a instalacao falhar, o rollback e best-effort: artefatos gerados sao removidos, e instalacoes novas sem diretorio preexistente podem ter o diretorio inteiro descartado.
+
+## Notas sobre `Conflicts=` em systemd
+
+Algumas unidades do projeto usam `Conflicts=` para prevenir que dois stacks (Minecraft/Terraria) rodem ao mesmo tempo.
+
+- Atenção: nem todas as chaves de unit podem ser sobrescritas por *drop-in* (`/etc/systemd/system/servicename.d/*.conf`). Em particular, para alterar `Conflicts=` é necessária a substituição completa da unit (replacement unit), ou seja, criar um novo arquivo de unidade que substitua o original.
+
+- Para editar a unit com segurança e reaplicar, recomendamos usar:
+
+```bash
+sudo systemctl edit --full NAME.service
+```
+
+Isso abre um editor com o conteúdo completo da unit onde você pode alterar `Conflicts=`. Após salvar, reexecute:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart NAME.service
+```
+
+- Alternativamente, crie uma replacement file ` /etc/systemd/system/NAME.service ` com o novo conteúdo e use `systemctl daemon-reload`.
+
+Documente qualquer alteração de unit no runbook operacional para evitar conflitos durante updates de pacote via `pacman`.

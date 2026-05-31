@@ -213,16 +213,7 @@ Modificar este comportamento requer edição manual dos arquivos .service e é *
 
 ## Documentacao
 
-Para usar imediatamente na sessao atual:
-
-```bash
-
-- docs/README.md
-- docs/minecraft/README.md
-- docs/terraria/README.md
-- docs/shared/HardwareTuning.md
-- docs/shared/Cleanup.md
-- docs/shared/Restore.md
+Consulte a documentação canônica em [docs/README.md](docs/README.md) para guias detalhados (instalação, operação, tuning e runbooks).
 
 ## CI no GitHub Actions
 

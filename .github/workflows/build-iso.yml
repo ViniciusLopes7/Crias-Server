@@ -82,6 +82,26 @@ jobs:
       - name: Validate archiso profile
         run: bash tests/archiso-profile-validate.sh
 
+  pr_boot_check:
+    name: PR: Quick Archiso Profile Check
+    if: github.event_name == 'pull_request'
+    needs: lint
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate archiso profile (quick)
+        run: |
+          bash tests/archiso-profile-validate.sh
+          bash -n tests/iso-qemu-boot.sh || true
+          bash tests/quick-script-tests.sh
+
   arch_smoke:
     name: Arch Smoke Tests
     needs: [lint, quick_script_tests]

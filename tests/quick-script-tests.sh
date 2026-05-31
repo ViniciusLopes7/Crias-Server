@@ -25,10 +25,12 @@ assert_file archiso-profile/grub/grub.cfg
 assert_file archiso-profile/syslinux/syslinux.cfg
 assert_grep_fixed '/%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux' archiso-profile/grub/grub.cfg
 assert_grep_fixed 'archisobasedir=%INSTALL_DIR%' archiso-profile/grub/grub.cfg
+assert_grep_fixed 'archisolabel=%ARCHISO_LABEL%' archiso-profile/grub/grub.cfg
 assert_grep_fixed 'archisosearchuuid=%ARCHISO_UUID%' archiso-profile/grub/grub.cfg
 
 assert_grep_fixed '/%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux' archiso-profile/syslinux/syslinux.cfg
 assert_grep_fixed 'archisobasedir=%INSTALL_DIR%' archiso-profile/syslinux/syslinux.cfg
+assert_grep_fixed 'archisolabel=%ARCHISO_LABEL%' archiso-profile/syslinux/syslinux.cfg
 assert_grep_fixed 'archisosearchuuid=%ARCHISO_UUID%' archiso-profile/syslinux/syslinux.cfg
 
 echo "[quick-script-tests] Validando parser de logs do QEMU..."

@@ -15,6 +15,10 @@
 - shared/Compatibilidade.md
 - shared/SecurityAndOps.md
 
+## Tutorial
+
+O tutorial de operação foi movido para `docs/tutorial.md`. Veja-o para um guia passo-a-passo.
+
 ## Observacao sobre CI
 
 O pipeline em .github/workflows/build-iso.yml executa testes smoke e dry-run de instalacao completa para Minecraft e Terraria em ambiente Arch Linux.

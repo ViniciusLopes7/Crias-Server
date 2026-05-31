@@ -62,6 +62,7 @@ group_file="$WORK_DIR/rootfs/etc/group"
 shadow_file="$WORK_DIR/rootfs/etc/shadow"
 legacy_customizer="$WORK_DIR/rootfs/root/customize_airootfs.sh"
 automated_script="$WORK_DIR/rootfs/root/.automated_script.sh"
+bash_profile="$WORK_DIR/rootfs/root/.bash_profile"
 
 for required_file in "$passwd_file" "$group_file" "$shadow_file"; do
     if [ ! -f "$required_file" ]; then
@@ -92,6 +93,16 @@ fi
 
 if [ ! -x "$automated_script" ]; then
     echo "Script de bootstrap nao esta executavel na ISO: /root/.automated_script.sh" >&2
+    exit 1
+fi
+
+if [ ! -f "$bash_profile" ]; then
+    echo "Autostart do live ISO ausente: /root/.bash_profile" >&2
+    exit 1
+fi
+
+if ! grep -Fq '/root/.automated_script.sh' "$bash_profile"; then
+    echo "Autostart do live ISO nao referencia /root/.automated_script.sh em /root/.bash_profile." >&2
     exit 1
 fi
 
