@@ -2,6 +2,13 @@
 
 set -euo pipefail
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Helper safe_cleanup_dir sourced do tests/lib/cleanup.sh (DRY).
+# Sourceado ANTES do --analyze-log mode que usa safe_cleanup_dir em trap.
+# shellcheck source=/dev/null
+source "$ROOT_DIR/tests/lib/cleanup.sh"
+
 usage() {
     echo "Uso: $0 <caminho-da-iso> [timeout-segundos]" >&2
     echo "Ou:  $0 --deep-smoke <caminho-da-iso> [timeout-segundos]" >&2
@@ -99,10 +106,7 @@ if [ "$MODE" = "deep" ] && ! command -v expect >/dev/null 2>&1; then
     exit 1
 fi
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
-# Helper safe_cleanup_dir sourced from tests/lib/cleanup.sh (DRY).
-source "$ROOT_DIR/tests/lib/cleanup.sh"
+ROOT_DIR_ALREADY_SET=true  # ROOT_DIR já definido no topo do script
 
 WORK_DIR="$(mktemp -d)"
 LOG_FILE="$WORK_DIR/qemu-boot.log"

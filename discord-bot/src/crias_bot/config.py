@@ -2,6 +2,7 @@
 
 Lê do ambiente (Railway injeta via variáveis) ou de .env local.
 """
+
 from __future__ import annotations
 
 import os
@@ -115,6 +116,4 @@ def _parse_int_env(name: str, default: int) -> int:
     try:
         return int(raw)
     except ValueError:
-        raise ValueError(
-            f"{name} deve ser um inteiro, obtido: {raw!r}"
-        ) from None
+        raise ValueError(f"{name} deve ser um inteiro, obtido: {raw!r}") from None

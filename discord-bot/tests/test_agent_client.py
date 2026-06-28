@@ -5,6 +5,7 @@ agente gRPC real rodando. Usam mocks onde necessário.
 
 Path setup é feito pelo conftest.py no diretório tests/.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -78,6 +79,7 @@ class TestAgentClientCache:
             assert isinstance(result, dict)
 
         import asyncio
+
         asyncio.run(run())
 
 

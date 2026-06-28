@@ -5,6 +5,7 @@ Uso:
   python -m discord-bot      # direto
   poetry run crias-bot       # via Poetry
 """
+
 from __future__ import annotations
 
 import asyncio

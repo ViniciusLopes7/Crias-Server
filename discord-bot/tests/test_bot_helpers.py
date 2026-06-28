@@ -3,6 +3,7 @@
 Estes testes validam apenas funções puras (sem side-effects Discord/gRPC).
 Para rodar: `pytest tests/test_bot_helpers.py -v`
 """
+
 from __future__ import annotations
 
 # Importa o módulo bot.py (pode falhar se discord.py não instalado).
@@ -11,6 +12,7 @@ try:
     from crias_bot.bot import _format_uptime, _partition_lines
 except ImportError:
     import pytest
+
     pytest.skip("discord.py não instalado; teste de bot.py pulado", allow_module_level=True)
 
 
@@ -47,7 +49,10 @@ class TestPartitionLines:
     def test_discord_safe_size(self):
         # Simula buffer de 50 linhas de log (média 80 chars cada = 4000 chars total)
         # com max_chars=1800 (limite seguro do Discord com codeblock).
-        lines = [f"[12:34:56] [Server thread/INFO]: log line {i:03d} with some padding" for i in range(50)]
+        lines = [
+            f"[12:34:56] [Server thread/INFO]: log line {i:03d} with some padding"
+            for i in range(50)
+        ]
         result = _partition_lines(lines, 1800)
         # Deve ter particionado em pelo menos 2 chunks
         assert len(result) >= 2

@@ -13,6 +13,7 @@ Geração do código proto:
       --grpc_python_out=grpc_gen \
       ../discord-agent/proto/crias.proto
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -97,16 +98,17 @@ class AgentClient:
                     target = self.host
                     if target.startswith("https://"):
                         # Tailscale Funnel: HTTPS com TLS.
-                        target = target[len("https://"):]
+                        target = target[len("https://") :]
                         creds = grpc.ssl_channel_credentials()
                         self._channel = grpc_aio.secure_channel(
-                            target, creds,
+                            target,
+                            creds,
                             options=[
                                 ("grpc.max_receive_message_length", 1 * 1024 * 1024),
                             ],
                         )
                     elif target.startswith("http://"):
-                        target = target[len("http://"):]
+                        target = target[len("http://") :]
                         self._channel = grpc_aio.insecure_channel(target)
                     else:
                         # Asume host:port sem esquema = insecure.
@@ -188,7 +190,9 @@ class AgentClient:
         except grpc.RpcError as e:
             raise AgentClientError(f"RestartServer falhou: {e}") from e
 
-    async def get_status(self, use_cache: bool = True, cache_ttl: float | None = None) -> dict[str, Any]:
+    async def get_status(
+        self, use_cache: bool = True, cache_ttl: float | None = None
+    ) -> dict[str, Any]:
         """Retorna status do servidor. Usa cache curto por default."""
         if use_cache and self._status_cache is not None:
             cached_resp, cached_at = self._status_cache
@@ -259,7 +263,9 @@ class AgentClient:
 
     # --- EventBus RPCs ---
 
-    async def subscribe_events(self, event_types: list[str] | None = None) -> AsyncIterator[dict[str, Any]]:
+    async def subscribe_events(
+        self, event_types: list[str] | None = None
+    ) -> AsyncIterator[dict[str, Any]]:
         """Subscreve a eventos do agente. Itera indefinidamente."""
         await self._ensure_connected()
         assert self._event_stub is not None

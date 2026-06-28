@@ -5,7 +5,6 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
-
 from crias_bot.config import BotConfig, _parse_id_list, _parse_optional_int, load_config
 
 

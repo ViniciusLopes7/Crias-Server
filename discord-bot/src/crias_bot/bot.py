@@ -11,6 +11,7 @@ Comandos:
   /mc console     Admin   Ativa/desativa stream de console no canal #console
   /mc health      Admin   Health check passivo
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -151,7 +152,9 @@ class MinecraftCog(commands.Cog):
     @group.command(name="start", description="Liga o servidor")
     async def start(self, interaction: discord.Interaction) -> None:
         if not self.bot.is_admin(interaction.user):
-            await interaction.response.send_message("❌ Sem permissão (admin necessário).", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Sem permissão (admin necessário).", ephemeral=True
+            )
             return
         await interaction.response.defer(thinking=True, ephemeral=True)
         try:
@@ -166,7 +169,9 @@ class MinecraftCog(commands.Cog):
     @group.command(name="stop", description="Desliga o servidor")
     async def stop(self, interaction: discord.Interaction) -> None:
         if not self.bot.is_admin(interaction.user):
-            await interaction.response.send_message("❌ Sem permissão (admin necessário).", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Sem permissão (admin necessário).", ephemeral=True
+            )
             return
         await interaction.response.defer(thinking=True, ephemeral=True)
         try:
@@ -181,7 +186,9 @@ class MinecraftCog(commands.Cog):
     @group.command(name="restart", description="Reinicia o servidor")
     async def restart(self, interaction: discord.Interaction) -> None:
         if not self.bot.is_admin(interaction.user):
-            await interaction.response.send_message("❌ Sem permissão (admin necessário).", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Sem permissão (admin necessário).", ephemeral=True
+            )
             return
         await interaction.response.defer(thinking=True, ephemeral=True)
         try:
@@ -251,7 +258,9 @@ class MinecraftCog(commands.Cog):
     @app_commands.describe(message="Mensagem a ser enviada")
     async def say(self, interaction: discord.Interaction, message: str) -> None:
         if not self.bot.is_moderator(interaction.user):
-            await interaction.response.send_message("❌ Sem permissão (moderador+ necessário).", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Sem permissão (moderador+ necessário).", ephemeral=True
+            )
             return
         await interaction.response.defer(thinking=True, ephemeral=True)
         try:
@@ -266,7 +275,9 @@ class MinecraftCog(commands.Cog):
     @group.command(name="health", description="Verifica saúde do servidor")
     async def health(self, interaction: discord.Interaction) -> None:
         if not self.bot.is_admin(interaction.user):
-            await interaction.response.send_message("❌ Sem permissão (admin necessário).", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Sem permissão (admin necessário).", ephemeral=True
+            )
             return
         await interaction.response.defer(thinking=True, ephemeral=True)
         try:
@@ -287,7 +298,9 @@ class MinecraftCog(commands.Cog):
     @group.command(name="console", description="Ativa/desativa stream de console no canal #console")
     async def console(self, interaction: discord.Interaction) -> None:
         if not self.bot.is_admin(interaction.user):
-            await interaction.response.send_message("❌ Sem permissão (admin necessário).", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Sem permissão (admin necessário).", ephemeral=True
+            )
             return
 
         if self.bot._console_stream_active:

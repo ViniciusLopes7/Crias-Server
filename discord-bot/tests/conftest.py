@@ -1,4 +1,5 @@
 """Pytest config — adiciona src/ ao sys.path para importar crias_bot."""
+
 import sys
 from pathlib import Path
 

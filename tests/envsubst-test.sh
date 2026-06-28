@@ -18,10 +18,11 @@ if ! command -v envsubst >/dev/null 2>&1; then
 fi
 
 # 1. Template do Minecraft
-SERVER_USER="minecraft"
-SERVER_DIR="/opt/minecraft-server"
-MEMORY_MAX_MB="4096"
-SERVICE_NAME="minecraft"
+# envsubst lê variáveis do AMBIENTE (não do shell), então precisamos exportar.
+export SERVER_USER="minecraft"
+export SERVER_DIR="/opt/minecraft-server"
+export MEMORY_MAX_MB="4096"
+export SERVICE_NAME="minecraft"
 
 OUTPUT=$(envsubst '${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB} ${SERVICE_NAME}' \
     < "$ROOT_DIR/minecraft/minecraft.service")
@@ -51,10 +52,10 @@ if echo "$OUTPUT" | grep -q '__'; then
 fi
 
 # 2. Template do Terraria
-SERVER_USER="terraria"
-SERVER_DIR="/opt/terraria-server"
-MEMORY_MAX_MB="2048"
-SERVICE_NAME="terraria"
+export SERVER_USER="terraria"
+export SERVER_DIR="/opt/terraria-server"
+export MEMORY_MAX_MB="2048"
+export SERVICE_NAME="terraria"
 
 OUTPUT=$(envsubst '${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB} ${SERVICE_NAME}' \
     < "$ROOT_DIR/terraria/terraria.service")
