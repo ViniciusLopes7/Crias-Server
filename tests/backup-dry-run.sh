@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="$ROOT_DIR/minecraft/backup-cron.sh"
 
 tmp_dir="$(mktemp -d)"
+trap 'rm -rf -- "$tmp_dir" || true' EXIT
 server_dir="$tmp_dir/server"
 mkdir -p "$server_dir/world" "$server_dir/world_nether" "$server_dir/world_the_end"
 

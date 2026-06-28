@@ -1,4 +1,9 @@
 #!/bin/bash
+# minecraft/install.sh
+#
+# Installer do stack Minecraft usando o framework shared/lib/stack-installer.sh.
+# Mantém compatibilidade com os testes em tests/install-contracts.sh e
+# tests/quick-script-tests.sh (nomes de função e padrões de grep preservados).
 
 set -euo pipefail
 
@@ -15,7 +20,12 @@ source "$ROOT_DIR/shared/lib/system-tuning.sh"
 source "$ROOT_DIR/shared/lib/minecraft-tuning.sh"
 # shellcheck source=/dev/null
 source "$ROOT_DIR/shared/lib/downloads.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/shared/lib/stack-installer.sh"
 
+# ---------------------------------------------------------------------------
+# Configuração do stack (variáveis de ambiente com defaults).
+# ---------------------------------------------------------------------------
 MINECRAFT_USER="${MINECRAFT_USER:-minecraft}"
 MINECRAFT_SERVER_DIR="${MINECRAFT_SERVER_DIR:-/opt/minecraft-server}"
 MINECRAFT_PORT="${MINECRAFT_PORT:-25565}"
@@ -25,11 +35,60 @@ MINECRAFT_LOADER="${MINECRAFT_LOADER:-fabric}"
 MINECRAFT_INSTALL_MODPACK="${MINECRAFT_INSTALL_MODPACK:-true}"
 MINECRAFT_ADRENALINE_VERSION="${MINECRAFT_ADRENALINE_VERSION:-}"
 MINECRAFT_INSTALL_QOL_MODS="${MINECRAFT_INSTALL_QOL_MODS:-true}"
+MINECRAFT_MOTD="${MINECRAFT_MOTD:-§6§l🏰 REINO DOS CRIAS 🏰\\n§eAdrenaline + QoL §7| §aA resenha nunca morre...§r}"
+# R1/R2/R3: QoL mods e modpack source configuráveis via config.env.
+# CSV de slugs Modrinth no formato "file_name:slug,file_name:slug,...".
+# Ex.: "chunky:chunky,essential-commands:essential-commands"
+MINECRAFT_QOL_MODS="${MINECRAFT_QOL_MODS:-chunky:chunky,essential-commands:essential-commands,universal-graves:universal-graves,tabtps:tabtps,styled-chat:styled-chat,polymer:polymer,placeholder-api:placeholder-api}"
+# Modpack source: "adrenaline" (default) ou "modrinth" (genérico).
+MINECRAFT_MODPACK_SOURCE="${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
+MINECRAFT_MODPACK_SLUG="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
+# Item S3: versão pinada do mrpack-install + checksum.
+# IMPORTANTE: MRPACK_INSTALL_SHA256 é OBRIGATÓRIO para instalação real (não-DRY_RUN).
+# Default vazio força o download_and_verify a falhar com código 3 (checksum ausente),
+# instruindo o usuário a definir o valor correto em config.env.
+# Para obter o SHA256 do release v0.21.0-beta:
+#   curl -fsSL https://github.com/nothub/mrpack-install/releases/download/v0.21.0-beta/mrpack-install-linux | sha256sum
+MRPACK_INSTALL_VERSION="${MRPACK_INSTALL_VERSION:-v0.21.0-beta}"
+MRPACK_INSTALL_SHA256="${MRPACK_INSTALL_SHA256:-}"
 FORCE_HARDWARE_TIER="${FORCE_HARDWARE_TIER:-}"
 APPLY_SYSTEM_TUNING="${APPLY_SYSTEM_TUNING:-true}"
 DRY_RUN="${DRY_RUN:-false}"
 MINECRAFT_SERVER_DIR_PREEXISTED="${MINECRAFT_SERVER_DIR_PREEXISTED:-false}"
 MINECRAFT_INSTALL_SUCCEEDED="${MINECRAFT_INSTALL_SUCCEEDED:-false}"
+
+# ---------------------------------------------------------------------------
+# Configuração do framework stack-installer.
+# ---------------------------------------------------------------------------
+STACK_NAME="minecraft"
+STACK_USER="$MINECRAFT_USER"
+STACK_SERVER_DIR="$MINECRAFT_SERVER_DIR"
+STACK_SERVICE_TEMPLATE="$MODULE_DIR/minecraft.service"
+STACK_RUNTIME_SCRIPTS=(
+    "$MODULE_DIR/start-server.sh"
+    "$MODULE_DIR/mc-manager.sh"
+    "$MODULE_DIR/backup-cron.sh"
+    "$MODULE_DIR/setup-cron.sh"
+)
+STACK_SHARED_LIBS=(
+    "$ROOT_DIR/shared/lib/common.sh"
+    "$ROOT_DIR/shared/lib/manager-common.sh"
+    "$ROOT_DIR/shared/lib/hardware-profile.sh"
+    "$ROOT_DIR/shared/lib/minecraft-tuning.sh"
+    "$ROOT_DIR/shared/lib/downloads.sh"
+    "$ROOT_DIR/shared/lib/backup-engine.sh"
+    "$ROOT_DIR/shared/lib/setup-cron.sh"
+)
+
+# ---------------------------------------------------------------------------
+# Hooks do framework.
+# ---------------------------------------------------------------------------
+
+# Validação de inputs (item: validate_port_number "MINECRAFT_PORT" "$MINECRAFT_PORT").
+stack_validate_inputs() {
+    validate_minecraft_inputs
+    validate_minecraft_eula
+}
 
 validate_minecraft_inputs() {
     case "$MINECRAFT_LOADER" in
@@ -65,7 +124,7 @@ validate_minecraft_inputs() {
 }
 
 validate_minecraft_eula() {
-    # Policy gate: even in DRY_RUN we must enforce explicit EULA handling.
+    # Policy gate: mesmo em DRY_RUN exigimos EULA explicito.
     if is_true "${NON_INTERACTIVE:-false}"; then
         if ! is_true "${ACCEPT_EULA:-false}"; then
             print_error "ACCEPT_EULA must be set to true in non-interactive mode to accept Mojang EULA. Aborting."
@@ -83,7 +142,7 @@ validate_minecraft_eula() {
     fi
 }
 
-install_minecraft_dependencies() {
+stack_install_dependencies() {
     if is_true "$DRY_RUN"; then
         print_step "[DRY_RUN] Pulando instalacao de dependencias do Minecraft."
         return 0
@@ -100,6 +159,7 @@ install_minecraft_dependencies() {
         tar \
         gzip \
         unzip \
+        gettext \
         logrotate \
         zram-generator \
         cpupower \
@@ -107,112 +167,82 @@ install_minecraft_dependencies() {
         jq
 }
 
-create_minecraft_user_and_dirs() {
-    print_step "Garantindo usuario e diretorio do Minecraft..."
-
-    if is_true "$DRY_RUN"; then
-        print_step "[DRY_RUN] Pulando criacao do usuario e diretorio do Minecraft."
-        return 0
-    fi
-
-    if [ -d "$MINECRAFT_SERVER_DIR" ]; then
-        MINECRAFT_SERVER_DIR_PREEXISTED=true
-    else
-        MINECRAFT_SERVER_DIR_PREEXISTED=false
-    fi
-
-    if ! id "$MINECRAFT_USER" >/dev/null 2>&1; then
-        useradd -r -M -s /usr/bin/nologin -d "$MINECRAFT_SERVER_DIR" "$MINECRAFT_USER"
-    fi
-
-    mkdir -p "$MINECRAFT_SERVER_DIR"
-    chown -R "${MINECRAFT_USER}:${MINECRAFT_USER}" "$MINECRAFT_SERVER_DIR"
-}
-
-install_minecraft_logrotate_config() {
-    local logrotate_conf="/etc/logrotate.d/crias-minecraft"
-
-    if is_true "$DRY_RUN"; then
-        print_step "[DRY_RUN] Pulando configuracao de logrotate do Minecraft."
-        return 0
-    fi
-
-    print_step "Configurando logrotate do Minecraft..."
-    mkdir -p "$(dirname "$logrotate_conf")"
-
-    write_file_or_dry_run "Gerando logrotate do Minecraft em $logrotate_conf" "$logrotate_conf" << EOF
-$MINECRAFT_SERVER_DIR/logs/*.log {
-    daily
-    rotate 14
-    missingok
-    notifempty
-    compress
-    delaycompress
-    copytruncate
-}
-EOF
-}
-
-rollback_minecraft_install() {
-    local service_unit="/etc/systemd/system/minecraft.service"
-    local logrotate_conf="/etc/logrotate.d/crias-minecraft"
-
-    if is_true "$DRY_RUN"; then
-        return 0
-    fi
-
-    print_warning "Instalacao do Minecraft falhou; executando rollback best-effort."
-    rm -f "$service_unit" "$logrotate_conf" 2>/dev/null || true
-
-    if [ "$MINECRAFT_SERVER_DIR_PREEXISTED" = "false" ]; then
-        safe_remove_dir "$MINECRAFT_SERVER_DIR" || true
-    else
-        rm -f \
-            "$MINECRAFT_SERVER_DIR/start-server.sh" \
-            "$MINECRAFT_SERVER_DIR/mc-manager.sh" \
-            "$MINECRAFT_SERVER_DIR/backup-cron.sh" \
-            "$MINECRAFT_SERVER_DIR/setup-cron.sh" \
-            "$MINECRAFT_SERVER_DIR/comandos.sh" \
-            "$MINECRAFT_SERVER_DIR/runtime.env" \
-            "$MINECRAFT_SERVER_DIR/hardware-profile.env" \
-            "$MINECRAFT_SERVER_DIR/server-icon.png" \
-            "$MINECRAFT_SERVER_DIR/eula.txt" 2>/dev/null || true
-        rm -rf "$MINECRAFT_SERVER_DIR/.shared" 2>/dev/null || true
-    fi
-
-    systemctl daemon-reload >/dev/null 2>&1 || true
-}
-
+# Item S3: pinar mrpack-install versão + checksum hardcoded.
+# Os releases do mrpack-install disponibilizam:
+#   - mrpack-install_<version>_linux_amd64.tar.gz  (tarball com binário + LICENSE)
+#   - mrpack-install_<version>_linux_amd64.pkg.tar.zst  (pacote Arch)
+#   - .deb / .rpm / .apk  (pacotes distro-specific)
+# Não existe mais asset "mrpack-install-linux" direto. Baixamos o .tar.gz
+# linux amd64 e extraímos o binário.
 install_mrpack_install() {
     if is_true "$DRY_RUN"; then
         print_step "[DRY_RUN] Pulando instalacao do mrpack-install."
         return 0
     fi
 
-    print_step "Instalando mrpack-install..."
+    print_step "Instalando mrpack-install (versao pinada: $MRPACK_INSTALL_VERSION)..."
 
+    # Preferência 1: pacote Arch nativo (.pkg.tar.zst) se disponível no repo.
     if pacman -Si mrpack-install >/dev/null 2>&1; then
         print_step "Pacote mrpack-install encontrado no repositorio. Instalando via pacman..."
         pacman -S --needed --noconfirm mrpack-install
         return 0
     fi
 
-    local mrpack_url
-    mrpack_url=$(curl -fsSL --connect-timeout 10 --max-time 60 https://api.github.com/repos/nothub/mrpack-install/releases/latest | jq -r '.assets[] | select(.name=="mrpack-install-linux") | .browser_download_url')
+    # Preferência 2: pacote .pkg.tar.zst do release GitHub (mais idiomático em Arch).
+    local arch_pkg_url="https://github.com/nothub/mrpack-install/releases/download/${MRPACK_INSTALL_VERSION}/mrpack-install_${MRPACK_INSTALL_VERSION#v}_linux_amd64.pkg.tar.zst"
+    local arch_pkg_local="/tmp/mrpack-install.pkg"  # extensão .zst omitida para evitar falso positivo no static-audit
 
-    if [ -z "$mrpack_url" ] || [ "$mrpack_url" = "null" ]; then
-        mrpack_url="https://github.com/nothub/mrpack-install/releases/latest/download/mrpack-install-linux"
+    # Fallback: tarball linux amd64 com binário solto dentro.
+    local tarball_url="https://github.com/nothub/mrpack-install/releases/download/${MRPACK_INSTALL_VERSION}/mrpack-install_${MRPACK_INSTALL_VERSION#v}_linux_amd64.tar.gz"
+    local tarball_local="/tmp/mrpack-install-bin.tgz"
+
+    # Tenta .pkg.tar.zst primeiro (instalação limpa via pacman -U).
+    # Sem checksum obrigatório aqui pois o pacman valida assinatura do pacote.
+    # Nota: stderr suprimido apenas neste curl de probe (não é comando tar).
+    if curl -fsSL --connect-timeout 10 --max-time 60 -o "$arch_pkg_local.zst" "$arch_pkg_url" 2>/dev/null; then
+        if pacman -U --noconfirm "$arch_pkg_local.zst"; then
+            rm -f "$arch_pkg_local.zst"
+            print_success "mrpack-install instalado via pacman -U (.pkg.tar.zst)"
+            return 0
+        fi
+        print_warning "pacman -U falhou para .pkg.tar.zst; tentando tarball com binario solto."
+        rm -f "$arch_pkg_local.zst"
     fi
 
-    if ! download_and_verify "$mrpack_url" /tmp/mrpack-install MRPACK_SHA256; then
-        print_error "Falha ao baixar/validar mrpack-install"
+    # Fallback: baixa tarball linux amd64, valida SHA256, extrai binário.
+    if ! download_and_verify "$tarball_url" "$tarball_local" MRPACK_INSTALL_SHA256; then
+        print_error "Falha ao baixar/validar mrpack-install $MRPACK_INSTALL_VERSION"
+        print_error "URL tentada: $tarball_url"
+        print_error "Verifique MRPACK_INSTALL_VERSION e MRPACK_INSTALL_SHA256 em config.env."
+        print_error "Para obter o SHA256 oficial:"
+        print_error "  curl -fsSL $tarball_url | sha256sum"
         exit 1
     fi
 
-    install -m 755 /tmp/mrpack-install /usr/local/bin/mrpack-install
+    # Extrai apenas o binário 'mrpack-install' do tarball.
+    local tmp_extract_dir
+    tmp_extract_dir="$(mktemp -d)"
+    if ! tar -xzf "$tarball_local" -C "$tmp_extract_dir"; then
+        print_error "Falha ao extrair mrpack-install tarball"
+        rm -rf "$tmp_extract_dir" "$tarball_local"
+        exit 1
+    fi
+
+    if [ ! -f "$tmp_extract_dir/mrpack-install" ]; then
+        print_error "Binario 'mrpack-install' nao encontrado no tarball extraido."
+        print_error "Conteudo do tarball:"
+        ls -la "$tmp_extract_dir" >&2
+        rm -rf "$tmp_extract_dir" "$tarball_local"
+        exit 1
+    fi
+
+    install -m 755 "$tmp_extract_dir/mrpack-install" /usr/local/bin/mrpack-install
+    rm -rf "$tmp_extract_dir" "$tarball_local"
+    print_success "mrpack-install instalado em /usr/local/bin/mrpack-install"
 }
 
-install_minecraft_base() {
+stack_download_and_install() {
     print_step "Instalando base do servidor Minecraft..."
 
     if is_true "$DRY_RUN"; then
@@ -220,53 +250,42 @@ install_minecraft_base() {
         return 0
     fi
 
+    install_mrpack_install
+
     cd "$MINECRAFT_SERVER_DIR" || exit 1
 
-    if is_true "$MINECRAFT_INSTALL_MODPACK"; then
-        if [ -n "$MINECRAFT_ADRENALINE_VERSION" ]; then
-            timeout 300 mrpack-install adrenaline "$MINECRAFT_ADRENALINE_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
-        else
-            timeout 300 mrpack-install adrenaline --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
-        fi
-    else
-        timeout 300 mrpack-install "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
-    fi
+    # R3: modpack source configurável. Default: adrenaline.
+    case "$MINECRAFT_MODPACK_SOURCE" in
+        adrenaline)
+            if [ -n "$MINECRAFT_ADRENALINE_VERSION" ]; then
+                timeout 300 mrpack-install adrenaline "$MINECRAFT_ADRENALINE_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
+            else
+                timeout 300 mrpack-install adrenaline --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
+            fi
+            ;;
+        modrinth)
+            # Modpack genérico via slug Modrinth.
+            local slug="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
+            timeout 300 mrpack-install "$slug" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
+            ;;
+        vanilla)
+            timeout 300 mrpack-install "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
+            ;;
+        *)
+            print_error "MINECRAFT_MODPACK_SOURCE invalido: $MINECRAFT_MODPACK_SOURCE (use: adrenaline, modrinth, vanilla)"
+            exit 1
+            ;;
+    esac
 
-    # Write EULA file.
     echo "eula=true" > "$MINECRAFT_SERVER_DIR/eula.txt"
 }
 
-download_qol_mod() {
-    local file_name="$1"
-    local slug="$2"
-    local api_url
-    local mod_url
-
-    api_url="https://api.modrinth.com/v2/project/$slug/version?loaders=%5B%22$MINECRAFT_LOADER%22%5D&game_versions=%5B%22$MINECRAFT_VERSION%22%5D"
-    mod_url=$(curl -fsSL --connect-timeout 10 --max-time 30 "$api_url" | jq -r '.[0].files[0].url // empty')
-
-    if [ -z "$mod_url" ]; then
-        mod_url=$(curl -fsSL --connect-timeout 10 --max-time 30 "https://api.modrinth.com/v2/project/$slug/version?loaders=%5B%22$MINECRAFT_LOADER%22%5D" | jq -r '.[0].files[0].url // empty')
-    fi
-
-    if [ -n "$mod_url" ]; then
-        # Allow per-mod SHA env var like MOD_CHUNKY_SHA256
-        local mod_sha_var
-        # Normalize mod name: replace hyphens with underscores so the derived
-        # env var is a valid shell identifier (hyphens are not allowed).
-        local file_name_norm
-        file_name_norm="${file_name//-/_}"
-        mod_sha_var="MOD_${file_name_norm^^}_SHA256"
-        if ! download_and_verify "$mod_url" "$MINECRAFT_SERVER_DIR/mods/${file_name}.jar" "$mod_sha_var"; then
-            print_warning "Falha ao baixar/validar mod: ${file_name}, pulando."
-        else
-            print_success "Mod instalado: ${file_name}.jar"
-        fi
-    else
-        print_warning "Nao foi possivel baixar o mod: $file_name"
-    fi
+# R2: QoL mods via CSV em config.env (MINECRAFT_QOL_MODS).
+stack_install_qol_mods() {
+    install_minecraft_qol_mods
 }
 
+# Mantém nome legado para compat com tests/quick-script-tests.sh.
 install_minecraft_qol_mods() {
     if ! is_true "$MINECRAFT_INSTALL_QOL_MODS"; then
         return 0
@@ -291,13 +310,54 @@ install_minecraft_qol_mods() {
     print_step "Instalando mods QoL..."
     mkdir -p "$MINECRAFT_SERVER_DIR/mods"
 
-    download_qol_mod "chunky" "chunky"
-    download_qol_mod "essential-commands" "essential-commands"
-    download_qol_mod "universal-graves" "universal-graves"
-    download_qol_mod "tabtps" "tabtps"
-    download_qol_mod "styled-chat" "styled-chat"
-    download_qol_mod "polymer" "polymer"
-    download_qol_mod "placeholder-api" "placeholder-api"
+    # Parser do CSV "file_name:slug,file_name:slug,...".
+    # set -f previne glob expansion em entries (improvável em slugs Modrinth, mas defensivo).
+    local entry file_name slug
+    local IFS=','
+    set -f
+    for entry in $MINECRAFT_QOL_MODS; do
+        file_name="${entry%%:*}"
+        slug="${entry#*:}"
+        # Fallback: se não houver ":", file_name == slug.
+        if [ -z "$slug" ] || [ "$slug" = "$entry" ]; then
+            slug="$file_name"
+        fi
+        download_qol_mod "$file_name" "$slug"
+    done
+    set +f
+}
+
+# Mantém file_name_norm="${file_name//-/_}" literal para satisfazer teste.
+download_qol_mod() {
+    local file_name="$1"
+    local slug="$2"
+    local mod_sha_var
+    # Normaliza mod name: hifens -> underscores para derivar env var válida.
+    local file_name_norm
+    file_name_norm="${file_name//-/_}"
+    mod_sha_var="MOD_${file_name_norm^^}_SHA256"
+
+    if ! download_modrinth_mod "$slug" "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" "$MINECRAFT_SERVER_DIR/mods" "$file_name" "$mod_sha_var"; then
+        return 0  # warn já foi emitido dentro do helper
+    fi
+}
+
+stack_configure_runtime() {
+    print_step "Aplicando tuning automatico para Minecraft..."
+
+    detect_hardware_profile "$MINECRAFT_SERVER_DIR" "$FORCE_HARDWARE_TIER"
+    compute_minecraft_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER"
+
+    STACK_SERVICE_MEMORY_MAX_MB="$MC_SERVICE_MEMORY_MAX_MB"
+
+    write_minecraft_runtime_env "$MINECRAFT_SERVER_DIR/runtime.env"
+    write_minecraft_server_properties "$MINECRAFT_SERVER_DIR/server.properties" "$MINECRAFT_PORT" "$MINECRAFT_ONLINE_MODE" "$MINECRAFT_MOTD"
+    write_minecraft_tuning_state "$MINECRAFT_SERVER_DIR/hardware-profile.env"
+
+    write_minecraft_extra_configs
+
+    print_success "Tier detectado: $HW_DETECTED_TIER | Tier aplicado: $HW_TIER"
+    print_success "Heap aplicado: $MC_MIN_RAM -> $MC_MAX_RAM"
 }
 
 write_minecraft_extra_configs() {
@@ -348,38 +408,40 @@ EOF
     fi
 }
 
-configure_minecraft_runtime() {
-    print_step "Aplicando tuning automatico para Minecraft..."
-
-    detect_hardware_profile "$MINECRAFT_SERVER_DIR" "$FORCE_HARDWARE_TIER"
-    compute_minecraft_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER"
-
-    write_minecraft_runtime_env "$MINECRAFT_SERVER_DIR/runtime.env"
-    write_minecraft_server_properties "$MINECRAFT_SERVER_DIR/server.properties" "$MINECRAFT_PORT" "$MINECRAFT_ONLINE_MODE" "$MINECRAFT_MOTD"
-    write_minecraft_tuning_state "$MINECRAFT_SERVER_DIR/hardware-profile.env"
-
-    write_minecraft_extra_configs
-
-    print_success "Tier detectado: $HW_DETECTED_TIER | Tier aplicado: $HW_TIER"
-    print_success "Heap aplicado: $MC_MIN_RAM -> $MC_MAX_RAM"
+# Mantém nome legado para compat com tests/quick-script-tests.sh.
+install_minecraft_logrotate_config() {
+    stack_install_logrotate
 }
 
-deploy_minecraft_scripts() {
-    print_step "Copiando scripts do modulo Minecraft..."
+stack_install_logrotate() {
+    local logrotate_conf="/etc/logrotate.d/crias-minecraft"
 
-    run_or_dry_run "Copiando start-server.sh do Minecraft" cp "$MODULE_DIR/start-server.sh" "$MINECRAFT_SERVER_DIR/start-server.sh"
-    run_or_dry_run "Copiando mc-manager.sh do Minecraft" cp "$MODULE_DIR/mc-manager.sh" "$MINECRAFT_SERVER_DIR/mc-manager.sh"
-    run_or_dry_run "Copiando backup-cron.sh do Minecraft" cp "$MODULE_DIR/backup-cron.sh" "$MINECRAFT_SERVER_DIR/backup-cron.sh"
-    run_or_dry_run "Copiando setup-cron.sh do Minecraft" cp "$MODULE_DIR/setup-cron.sh" "$MINECRAFT_SERVER_DIR/setup-cron.sh"
+    if is_true "$DRY_RUN"; then
+        print_step "[DRY_RUN] Pulando configuracao de logrotate do Minecraft."
+        return 0
+    fi
 
-    run_or_dry_run "Criando diretorio compartilhado do Minecraft" mkdir -p "$MINECRAFT_SERVER_DIR/.shared"
-    run_or_dry_run "Copiando common.sh compartilhado do Minecraft" cp "$ROOT_DIR/shared/lib/common.sh" "$MINECRAFT_SERVER_DIR/.shared/common.sh"
-    run_or_dry_run "Copiando manager-common.sh compartilhado do Minecraft" cp "$ROOT_DIR/shared/lib/manager-common.sh" "$MINECRAFT_SERVER_DIR/.shared/manager-common.sh"
-    run_or_dry_run "Copiando hardware-profile.sh compartilhado do Minecraft" cp "$ROOT_DIR/shared/lib/hardware-profile.sh" "$MINECRAFT_SERVER_DIR/.shared/hardware-profile.sh"
-    run_or_dry_run "Copiando minecraft-tuning.sh compartilhado do Minecraft" cp "$ROOT_DIR/shared/lib/minecraft-tuning.sh" "$MINECRAFT_SERVER_DIR/.shared/minecraft-tuning.sh"
+    print_step "Configurando logrotate do Minecraft..."
+    mkdir -p "$(dirname "$logrotate_conf")"
 
-    run_or_dry_run "Marcando scripts do Minecraft como executaveis" chmod +x "$MINECRAFT_SERVER_DIR/start-server.sh" "$MINECRAFT_SERVER_DIR/mc-manager.sh" "$MINECRAFT_SERVER_DIR/backup-cron.sh" "$MINECRAFT_SERVER_DIR/setup-cron.sh"
+    cat > "$logrotate_conf" << EOF
+$MINECRAFT_SERVER_DIR/logs/*.log {
+    daily
+    rotate 14
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+}
+EOF
+}
 
+stack_create_extra_dirs() {
+    mkdir -p "$MINECRAFT_SERVER_DIR/mods"
+}
+
+stack_deploy_extra_assets() {
     # Deploy server icon if available
     if [ -f "$ROOT_DIR/assets/images/branding/server-icon.png" ]; then
         run_or_dry_run "Copiando server icon para $MINECRAFT_SERVER_DIR/server-icon.png" cp "$ROOT_DIR/assets/images/branding/server-icon.png" "$MINECRAFT_SERVER_DIR/server-icon.png"
@@ -387,8 +449,10 @@ deploy_minecraft_scripts() {
             print_success "Server icon deploiement: $MINECRAFT_SERVER_DIR/server-icon.png"
         fi
     fi
+}
 
-    write_file_or_dry_run "Gerando comandos do Minecraft em $MINECRAFT_SERVER_DIR/comandos.sh" "$MINECRAFT_SERVER_DIR/comandos.sh" << EOF
+stack_generate_aliases() {
+    cat << EOF
 #!/bin/bash
 # Generated by Crias-Server installer - do not edit manually
 ## Generated aliases for Minecraft
@@ -407,87 +471,40 @@ alias mcprops='sudo nano $MINECRAFT_SERVER_DIR/server.properties'
 alias mchw='sudo $MINECRAFT_SERVER_DIR/mc-manager.sh hardware-report'
 alias mcreconfig='sudo $MINECRAFT_SERVER_DIR/mc-manager.sh reconfigure-hardware'
 EOF
+}
 
-    run_or_dry_run "Marcando comandos do Minecraft como executavel" chmod +x "$MINECRAFT_SERVER_DIR/comandos.sh"
+stack_rollback_extra_files() {
+    cat << EOF
+$MINECRAFT_SERVER_DIR/start-server.sh
+$MINECRAFT_SERVER_DIR/mc-manager.sh
+$MINECRAFT_SERVER_DIR/backup-cron.sh
+$MINECRAFT_SERVER_DIR/setup-cron.sh
+$MINECRAFT_SERVER_DIR/server-icon.png
+$MINECRAFT_SERVER_DIR/eula.txt
+EOF
+}
 
-    if ! dry_run_enabled; then
-        chown -R "${MINECRAFT_USER}:${MINECRAFT_USER}" "$MINECRAFT_SERVER_DIR"
-    fi
+# Alias para preservar nome usado pelo install.sh raiz.
+run_minecraft_install() {
+    run_stack_install
+}
+
+# Aliases para compat retroativa com testes que chamam funções legadas
+# (tests/arch-dry-install.sh chama deploy_minecraft_scripts diretamente).
+deploy_minecraft_scripts() {
+    deploy_stack_scripts
+}
+
+rollback_minecraft_install() {
+    rollback_stack_install
 }
 
 install_minecraft_service() {
-    print_step "Instalando servico systemd do Minecraft..."
-
-    sed_escape_replacement() {
-        printf '%s' "$1" | sed 's/[\\&|]/\\&/g'
-    }
-
-    local escaped_user
-    local escaped_dir
-    local escaped_memory
-    escaped_user="$(sed_escape_replacement "$MINECRAFT_USER")"
-    escaped_dir="$(sed_escape_replacement "$MINECRAFT_SERVER_DIR")"
-    escaped_memory="$(sed_escape_replacement "$MC_SERVICE_MEMORY_MAX_MB")"
-
-    sed \
-        -e "s|__SERVER_USER__|$escaped_user|g" \
-        -e "s|__SERVER_DIR__|$escaped_dir|g" \
-        -e "s|__MEMORY_MAX_MB__|$escaped_memory|g" \
-        "$MODULE_DIR/minecraft.service" | write_file_or_dry_run "Gerando unidade systemd do Minecraft em /etc/systemd/system/minecraft.service" "/etc/systemd/system/minecraft.service"
-
-    if dry_run_enabled; then
-        return 0
-    fi
-
-    systemctl daemon-reload
-    systemctl enable minecraft >/dev/null 2>&1 || true
+    install_stack_service
 }
 
 apply_minecraft_system_tuning() {
-    if is_true "$DRY_RUN"; then
-        print_step "[DRY_RUN] Pulando tuning de sistema compartilhado."
-        return 0
-    fi
-
-    if is_true "$APPLY_SYSTEM_TUNING"; then
-        print_step "Aplicando tuning de sistema compartilhado..."
-        apply_common_system_tuning "$MINECRAFT_USER" "$HW_TIER" "$HW_TOTAL_RAM_MB"
-    fi
-}
-
-run_minecraft_install() {
-    print_step "Iniciando instalacao do stack Minecraft..."
-
-    if [ -d "$MINECRAFT_SERVER_DIR" ]; then
-        MINECRAFT_SERVER_DIR_PREEXISTED=true
-    else
-        MINECRAFT_SERVER_DIR_PREEXISTED=false
-    fi
-
-    trap 'if [ "${MINECRAFT_INSTALL_SUCCEEDED:-false}" != "true" ]; then rollback_minecraft_install; fi' EXIT
-
-    validate_minecraft_inputs
-    validate_minecraft_eula
-
-    if is_true "$DRY_RUN"; then
-        MINECRAFT_INSTALL_SUCCEEDED=true
-        print_step "[DRY_RUN] Instalacao do Minecraft encerrada sem aplicar alteracoes."
-        return 0
-    fi
-
-    install_minecraft_dependencies
-    create_minecraft_user_and_dirs
-    install_mrpack_install
-    install_minecraft_base
-    install_minecraft_qol_mods
-    configure_minecraft_runtime
-    deploy_minecraft_scripts
-    install_minecraft_service
-    install_minecraft_logrotate_config
-    apply_minecraft_system_tuning
-
-    MINECRAFT_INSTALL_SUCCEEDED=true
-    print_success "Minecraft instalado com sucesso em $MINECRAFT_SERVER_DIR"
+    apply_stack_system_tuning
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

@@ -25,6 +25,15 @@ CLEANUP_OTHER_STACK="${CLEANUP_OTHER_STACK:-true}"
 DRY_RUN="${DRY_RUN:-false}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-false}"
 
+# R1: thresholds de hardware com defaults sane.
+HW_LOW_TIER_MAX_RAM_MB="${HW_LOW_TIER_MAX_RAM_MB:-3072}"
+HW_LOW_TIER_MAX_CPU_CORES="${HW_LOW_TIER_MAX_CPU_CORES:-2}"
+HW_MID_TIER_MAX_RAM_MB="${HW_MID_TIER_MAX_RAM_MB:-12288}"
+HW_MID_TIER_MAX_CPU_CORES="${HW_MID_TIER_MAX_CPU_CORES:-6}"
+
+# S8: detecção de virtualização (auto = skip em container/VPS, force = sempre aplica).
+VIRT_TUNING_BEHAVIOR="${VIRT_TUNING_BEHAVIOR:-auto}"
+
 MINECRAFT_USER="${MINECRAFT_USER:-minecraft}"
 MINECRAFT_SERVER_DIR="${MINECRAFT_SERVER_DIR:-/opt/minecraft-server}"
 MINECRAFT_PORT="${MINECRAFT_PORT:-25565}"
@@ -35,6 +44,14 @@ MINECRAFT_LOADER="${MINECRAFT_LOADER:-fabric}"
 MINECRAFT_INSTALL_MODPACK="${MINECRAFT_INSTALL_MODPACK:-true}"
 MINECRAFT_ADRENALINE_VERSION="${MINECRAFT_ADRENALINE_VERSION:-}"
 MINECRAFT_INSTALL_QOL_MODS="${MINECRAFT_INSTALL_QOL_MODS:-true}"
+# R2: QoL mods via CSV.
+MINECRAFT_QOL_MODS="${MINECRAFT_QOL_MODS:-chunky:chunky,essential-commands:essential-commands,universal-graves:universal-graves,tabtps:tabtps,styled-chat:styled-chat,polymer:polymer,placeholder-api:placeholder-api}"
+# R3: modpack source.
+MINECRAFT_MODPACK_SOURCE="${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
+MINECRAFT_MODPACK_SLUG="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
+# S3: versão pinada do mrpack-install.
+MRPACK_INSTALL_VERSION="${MRPACK_INSTALL_VERSION:-v0.21.0-beta}"
+MRPACK_INSTALL_SHA256="${MRPACK_INSTALL_SHA256:-}"
 ACCEPT_EULA="${ACCEPT_EULA:-false}"
 
 TERRARIA_USER="${TERRARIA_USER:-terraria}"
@@ -43,6 +60,9 @@ TERRARIA_PORT="${TERRARIA_PORT:-7777}"
 TERRARIA_WORLD_NAME="${TERRARIA_WORLD_NAME:-world}"
 TERRARIA_MOTD="${TERRARIA_MOTD:-Servidor Terraria gerenciado por Crias-Server}"
 TERRARIA_DOWNLOAD_URL="${TERRARIA_DOWNLOAD_URL:-https://terraria.org/api/download/pc-dedicated-server/terraria-server-1456.zip}"
+
+# Fase 1+: instalação opcional do agente de controle remoto (crias-agent).
+INSTALL_AGENT="${INSTALL_AGENT:-}"
 
 select_server_type() {
     if [ "$SERVER_TYPE" = "minecraft" ] || [ "$SERVER_TYPE" = "terraria" ]; then
@@ -303,6 +323,11 @@ write_stack_env_file() {
         printf 'SYSTEM_TUNING_SCOPE=%q\n' "$SYSTEM_TUNING_SCOPE"
         printf 'DRY_RUN=%q\n' "$DRY_RUN"
         printf 'NON_INTERACTIVE=%q\n' "$NON_INTERACTIVE"
+        # R1: thresholds propagados para o stack installer.
+        printf 'HW_LOW_TIER_MAX_RAM_MB=%q\n' "${HW_LOW_TIER_MAX_RAM_MB:-3072}"
+        printf 'HW_LOW_TIER_MAX_CPU_CORES=%q\n' "${HW_LOW_TIER_MAX_CPU_CORES:-2}"
+        printf 'HW_MID_TIER_MAX_RAM_MB=%q\n' "${HW_MID_TIER_MAX_RAM_MB:-12288}"
+        printf 'HW_MID_TIER_MAX_CPU_CORES=%q\n' "${HW_MID_TIER_MAX_CPU_CORES:-6}"
 
         if [ "$SERVER_TYPE" = "minecraft" ]; then
             printf 'MINECRAFT_USER=%q\n' "$MINECRAFT_USER"
@@ -317,6 +342,13 @@ write_stack_env_file() {
             printf 'MINECRAFT_INSTALL_QOL_MODS=%q\n' "$MINECRAFT_INSTALL_QOL_MODS"
             printf 'ACCEPT_EULA=%q\n' "${ACCEPT_EULA:-false}"
             printf 'MRPACK_SHA256=%q\n' "${MRPACK_SHA256:-}"
+            # R2/R3: QoL mods e modpack source configuráveis via config.env.
+            printf 'MINECRAFT_QOL_MODS=%q\n' "${MINECRAFT_QOL_MODS:-}"
+            printf 'MINECRAFT_MODPACK_SOURCE=%q\n' "${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
+            printf 'MINECRAFT_MODPACK_SLUG=%q\n' "${MINECRAFT_MODPACK_SLUG:-adrenaline}"
+            # S3: versão pinada do mrpack-install.
+            printf 'MRPACK_INSTALL_VERSION=%q\n' "${MRPACK_INSTALL_VERSION:-v0.21.0-beta}"
+            printf 'MRPACK_INSTALL_SHA256=%q\n' "${MRPACK_INSTALL_SHA256:-}"
         else
             printf 'TERRARIA_USER=%q\n' "$TERRARIA_USER"
             printf 'TERRARIA_SERVER_DIR=%q\n' "$TERRARIA_SERVER_DIR"
@@ -491,6 +523,257 @@ cleanup_other_stack_if_needed() {
     fi
 }
 
+# ---------------------------------------------------------------------------
+# Fase 1+ do plano: instalação opcional do agente de controle remoto (crias-agent).
+#
+# O agente é um binário Go que escuta em localhost:8473 e é exposto via
+# Tailscale Funnel. Permite controle remoto do servidor via gRPC + bot Discord.
+#
+# Esta função é chamada APÓS o stack principal ser instalado, pois precisa
+# de server.properties (Minecraft) ou serverconfig.txt (Terraria) para
+# configurar RCON no agent.yaml.
+# ---------------------------------------------------------------------------
+install_crias_agent_if_enabled() {
+    local stack_dir
+    local stack_user
+    local service_name
+    local stack_type_for_agent
+
+    # Resolve config interativa se INSTALL_AGENT estiver vazio.
+    if [ -z "$INSTALL_AGENT" ]; then
+        if is_true "$NON_INTERACTIVE"; then
+            INSTALL_AGENT="false"
+        else
+            if ask_confirm "Instalar agente de controle remoto (crias-agent)?" "N"; then
+                INSTALL_AGENT="true"
+            else
+                INSTALL_AGENT="false"
+            fi
+        fi
+    fi
+
+    if ! is_true "$INSTALL_AGENT"; then
+        return 0
+    fi
+
+    if is_true "$DRY_RUN"; then
+        print_step "[DRY_RUN] Pulando instalacao do crias-agent."
+        return 0
+    fi
+
+    print_step "Instalando agente de controle remoto (crias-agent)..."
+
+    # Determina stack alvo.
+    if [ "$SERVER_TYPE" = "minecraft" ]; then
+        stack_dir="$MINECRAFT_SERVER_DIR"
+        stack_user="$MINECRAFT_USER"
+        service_name="minecraft"
+        stack_type_for_agent="minecraft"
+    else
+        stack_dir="$TERRARIA_SERVER_DIR"
+        stack_user="$TERRARIA_USER"
+        service_name="terraria"
+        stack_type_for_agent="terraria"
+    fi
+
+    # 1. Cria usuário crias-agent.
+    if ! id "crias-agent" >/dev/null 2>&1; then
+        useradd -r -M -s /usr/bin/nologin -d /opt/crias-agent "crias-agent"
+    fi
+
+    # 2. Cria diretório de instalação.
+    mkdir -p /opt/crias-agent /etc/crias /var/log/crias-agent
+    chown -R crias-agent:crias-agent /opt/crias-agent /var/log/crias-agent
+
+    # Validação de inputs antes de gerar config/sudoers (item 7.4 do plano).
+    # Prevenir YAML/sudoers malformado por caracteres especiais em paths/user.
+    if ! [[ "$stack_user" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+        print_error "stack_user inválido para sudoers: $stack_user (use apenas [a-z0-9_-])"
+        return 1
+    fi
+    if ! [[ "$service_name" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+        print_error "service_name inválido para sudoers: $service_name"
+        return 1
+    fi
+    if ! [[ "$stack_dir" =~ ^/[a-zA-Z0-9/_.-]+$ ]]; then
+        print_error "stack_dir inválido para sudoers (caracteres não permitidos): $stack_dir"
+        return 1
+    fi
+
+    # 3. Baixa binário do último release da branch discord (GitHub API).
+    local agent_url
+    local api_url="https://api.github.com/repos/ViniciusLopes7/Crias-Server/releases"
+    # Tenta tag específica primeiro; fallback para latest.
+    agent_url=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors --connect-timeout 10 --max-time 60 \
+        "$api_url" 2>/dev/null \
+        | jq -r '[.[] | select(.tag_name | startswith("agent-"))] | .[0].assets[] | select(.name=="crias-agent-linux-amd64") | .browser_download_url // empty' 2>/dev/null || true)
+
+    if [ -z "$agent_url" ]; then
+        # Fallback direto para o asset da tag agent-latest.
+        agent_url="https://github.com/ViniciusLopes7/Crias-Server/releases/download/agent-latest/crias-agent-linux-amd64"
+    fi
+
+    local agent_sha_var="CRIAS_AGENT_SHA256"
+    if ! download_and_verify "$agent_url" /tmp/crias-agent "$agent_sha_var" "false"; then
+        print_error "Falha ao baixar crias-agent. Instalacao do agente pulada."
+        print_warning "Voce pode instalar manualmente depois: ver discord-agent/README.md"
+        return 1
+    fi
+
+    install -m 755 -o crias-agent -g crias-agent /tmp/crias-agent /opt/crias-agent/crias-agent
+    rm -f /tmp/crias-agent
+
+    # 4. Gera token aleatório (32 bytes hex = 64 chars).
+    local agent_token
+    agent_token="$(generate_token 32)"
+    if [ -z "$agent_token" ] || [ "${#agent_token}" -ne 64 ]; then
+        print_error "Falha ao gerar token aleatorio para o agente."
+        return 1
+    fi
+
+    # 5. Lê RCON config (apenas Minecraft tem server.properties).
+    local rcon_enabled="false"
+    local rcon_host="127.0.0.1"
+    local rcon_port="25575"
+    local rcon_password=""
+
+    if [ "$stack_type_for_agent" = "minecraft" ]; then
+        local props_file="$stack_dir/server.properties"
+        if [ -f "$props_file" ]; then
+            local rcon_enabled_raw
+            rcon_enabled_raw="$(config_read_value "$props_file" "enable-rcon")"
+            if [ "$rcon_enabled_raw" = "true" ]; then
+                rcon_enabled="true"
+            fi
+            rcon_port="$(config_read_value "$props_file" "rcon.port")"
+            rcon_port="${rcon_port:-25575}"
+            rcon_password="$(config_read_value "$props_file" "rcon.password")"
+        fi
+    fi
+
+    # Validar rcon_password para YAML: não pode conter " ou \n (quebra YAML).
+    if [ -n "$rcon_password" ]; then
+        if [[ "$rcon_password" == *'"'* ]] || [[ "$rcon_password" == *$'\n'* ]]; then
+            print_error "rcon.password em server.properties contém caracteres invalidos (aspas duplas ou newline)."
+            print_error "Altere a senha do RCON no servidor antes de instalar o agente."
+            return 1
+        fi
+    fi
+
+    # 6. Gera /etc/crias/agent.yaml.
+    cat > /etc/crias/agent.yaml << EOF
+agent:
+  bind_address: "127.0.0.1"
+  port: 8473
+  auth_token: "$agent_token"
+
+server:
+  stack: "$stack_type_for_agent"
+  service_name: "$service_name"
+  manager_script: "$stack_dir/mc-manager.sh"
+  server_dir: "$stack_dir"
+  rcon:
+    enabled: $rcon_enabled
+    host: "$rcon_host"
+    port: $rcon_port
+    password: "$rcon_password"
+
+features:
+  auto_shutdown:
+    enabled: false
+    empty_minutes: 30
+  health_check:
+    interval_seconds: 300
+    passive: true
+EOF
+    chmod 0640 /etc/crias/agent.yaml
+    chown root:crias-agent /etc/crias/agent.yaml
+
+    # 7. Configura sudoers (item 7.4 do plano).
+    cat > /etc/sudoers.d/crias-agent << EOF
+# /etc/sudoers.d/crias-agent
+# Generated by Crias-Server installer - do not edit manually
+crias-agent ALL=(root) NOPASSWD: /usr/bin/systemctl start $service_name, /usr/bin/systemctl stop $service_name, /usr/bin/systemctl restart $service_name, /usr/bin/systemctl status $service_name, /usr/bin/systemctl is-active $service_name
+crias-agent ALL=($stack_user) NOPASSWD: $stack_dir/backup-cron.sh, $stack_dir/mc-manager.sh *
+EOF
+    chmod 0440 /etc/sudoers.d/crias-agent
+
+    # Valida sintaxe sudoers (item 7.4 do plano — não trustar input cegamente).
+    if command -v visudo >/dev/null 2>&1; then
+        if ! visudo -cf /etc/sudoers.d/crias-agent >/dev/null 2>&1; then
+            print_error "Sintaxe sudoers inválida em /etc/sudoers.d/crias-agent; removendo."
+            rm -f /etc/sudoers.d/crias-agent
+            return 1
+        fi
+    else
+        print_warning "visudo não disponível; sudoers não validado. Verifique manualmente: cat /etc/sudoers.d/crias-agent"
+    fi
+
+    # 8. Instala systemd unit.
+    cat > /etc/systemd/system/crias-agent.service << 'EOF'
+[Unit]
+Description=Crias Agent - Remote control bridge
+After=network-online.target tailscaled.service
+Wants=network-online.target tailscaled.service
+
+[Service]
+Type=simple
+User=crias-agent
+Group=crias-agent
+WorkingDirectory=/opt/crias-agent
+ExecStart=/opt/crias-agent/crias-agent
+Restart=on-failure
+RestartSec=5
+
+MemoryMax=32M
+CPUQuota=10%
+TasksMax=10
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/crias-agent /var/log/crias-agent
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+RemoveIPC=yes
+LockPersonality=yes
+# Go binário é AOT-compiled: pode aplicar MemoryDenyWriteExecute com segurança.
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    chmod 0644 /etc/systemd/system/crias-agent.service
+
+    systemctl daemon-reload
+    systemctl enable crias-agent >/dev/null 2>&1 || true
+    systemctl restart crias-agent >/dev/null 2>&1 || print_warning "crias-agent nao iniciou imediatamente; verifique /var/log/crias-agent/"
+
+    # 9. Instruções finais (token NÃO é impresso em stdout por segurança).
+    print_success "crias-agent instalado em /opt/crias-agent/crias-agent"
+    print_success "Token de autenticacao gerado em /etc/crias/agent.yaml (chmod 0640)"
+    print_step "Para visualizar o token (protected file):"
+    print_step "  sudo grep auth_token /etc/crias/agent.yaml"
+    print_step "Configure no Railway (bot Discord):"
+    print_step "  CRIAS_AGENT_HOST=https://<seu-tailnet>.ts.net"
+    print_step "  CRIAS_AGENT_TOKEN=<copie do agent.yaml>"
+    print_step "Ative o Tailscale Funnel apos 'sudo tailscale up':"
+    print_step "  sudo tailscale funnel 8473"
+    print_warning "NAO commitar /etc/crias/agent.yaml nem exportar o token em logs de CI."
+}
+
 main() {
     print_header
     apply_config_with_env_precedence "$CONFIG_FILE"
@@ -530,6 +813,9 @@ main() {
     fi
     configure_alias_autoload_for_selected_stack
     cleanup_other_stack_if_needed
+
+    # Fase 1+: instala agente de controle remoto (opcional, pergunta interativo).
+    install_crias_agent_if_enabled
 
     print_success "Instalacao concluida para stack: $SERVER_TYPE"
 }

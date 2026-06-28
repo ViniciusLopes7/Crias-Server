@@ -1,120 +1,185 @@
 # Stack Minecraft
 
-## Componentes
+Documentação específica do stack Minecraft. Para visão geral, veja [../README.md](../README.md).
 
-- minecraft/install.sh
-- minecraft/start-server.sh
-- minecraft/mc-manager.sh
-- minecraft/backup-cron.sh
-- minecraft/setup-cron.sh
-- minecraft/minecraft.service
+## Componentes instalados
 
-## Comandos principais
+| Arquivo | Função |
+|---------|--------|
+| `/opt/minecraft-server/start-server.sh` | Launcher runtime (JAVA_OPTS como array, valida Java 21+) |
+| `/opt/minecraft-server/mc-manager.sh` | CLI de gerenciamento (start/stop/status/console/backup/health/...) |
+| `/opt/minecraft-server/backup-cron.sh` | Backup com RCON save-lock + zstd + flock |
+| `/opt/minecraft-server/setup-cron.sh` | Configura timer systemd de backup |
+| `/opt/minecraft-server/minecraft.service` | Unit systemd (gerada via envsubst com hardening) |
+| `/opt/minecraft-server/server.properties` | Config do servidor (gerado pelo installer) |
+| `/opt/minecraft-server/runtime.env` | Tuning aplicado (heap, GC, G1 region size) |
+| `/opt/minecraft-server/hardware-profile.env` | Perfil de hardware detectado + tier |
+| `/opt/minecraft-server/server-icon.png` | Ícone do servidor (64x64 PNG) |
+| `/opt/minecraft-server/comandos.sh` | Aliases de shell (autoload via `/etc/profile.d/`) |
+
+## Operação diária
+
+### Comandos principais
 
 ```bash
-sudo systemctl start minecraft
-sudo systemctl stop minecraft
-sudo /opt/minecraft-server/mc-manager.sh status
-sudo /opt/minecraft-server/mc-manager.sh console
-sudo /opt/minecraft-server/mc-manager.sh backup
-sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware
+sudo systemctl start minecraft                              # iniciar
+sudo systemctl stop minecraft                               # parar (graceful)
+sudo systemctl restart minecraft                            # reiniciar
+sudo systemctl status minecraft                             # status systemd
+sudo /opt/minecraft-server/mc-manager.sh status             # status + hardware
+sudo /opt/minecraft-server/mc-manager.sh console            # console RCON interativo
+sudo /opt/minecraft-server/mc-manager.sh backup             # backup imediato
+sudo /opt/minecraft-server/mc-manager.sh health             # porta + RCON
+sudo /opt/minecraft-server/mc-manager.sh hardware-report    # perfil aplicado
+sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware        # recalibrar tier
+sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware HIGH   # forçar tier
+sudo /opt/minecraft-server/setup-cron.sh                    # configurar timer de backup
 ```
 
-## Aliases de comandos
+### Aliases de shell
 
-O instalador gera o arquivo abaixo com aliases prontos para operacao diaria e configura autoload automaticamente via /etc/profile.d/crias-server.sh:
-
-- /opt/minecraft-server/comandos.sh
-
-As entradas sao idempotentes (nao duplicam em reinstalacoes).
-
-Para usar imediatamente na sessao atual:
+O installer gera `/opt/minecraft-server/comandos.sh` e adiciona autoload em `/etc/profile.d/crias-server.sh`. Para usar imediatamente:
 
 ```bash
 source /etc/profile.d/crias-server.sh
 ```
 
-Aliases disponiveis:
+| Alias | Equivalente |
+|-------|-------------|
+| `mcstart` | `sudo systemctl start minecraft` |
+| `mcstop` | `sudo systemctl stop minecraft` |
+| `mcrestart` | `sudo systemctl restart minecraft` |
+| `mcstatus` | `sudo mc-manager.sh status` |
+| `mclogs` | `sudo journalctl -u minecraft -f` |
+| `mcconsole` | `sudo mc-manager.sh console` |
+| `mcbackup` | `sudo mc-manager.sh backup` |
+| `mcsetupcron` | `sudo mc-manager.sh setup-cron` |
+| `mcdir` | `cd /opt/minecraft-server` |
+| `mcprops` | `sudo nano /opt/minecraft-server/server.properties` |
+| `mchw` | `sudo mc-manager.sh hardware-report` |
+| `mcreconfig` | `sudo mc-manager.sh reconfigure-hardware` |
 
-- mcstart
-- mcstop
-- mcrestart
-- mcstatus
-- mclogs
-- mcconsole
-- mcbackup
-- mcdir
-- mcprops
-- mchw
-- mcreconfig
+## Server Icon
 
-## Ícone do Servidor (Server Icon)
+O installer copia automaticamente `assets/images/branding/server-icon.png` para `/opt/minecraft-server/server-icon.png`. Requisitos do Minecraft:
 
-O instalador copia automaticamente um ícone padrão para o diretório do servidor durante a instalação:
+- Formato: PNG
+- Dimensões: **64x64 pixels**
+- Tamanho máximo: ~100 KB
 
-- **Caminho no repositório:** `assets/images/branding/server-icon.png`
-- **Destino:** `/opt/minecraft-server/server-icon.png`
-
-O Minecraft exibe este ícone no multiplayer server list se o arquivo estiver presente.
-
-### Personalização
-
-Para usar um ícone customizado:
-
-1. Prepare uma imagem PNG de **64x64 pixels**
-2. Coloque em `assets/images/branding/server-icon.png` **antes da instalação**
-3. Execute o instalador (copiará a imagem customizada)
-
-Ou, após a instalação:
+Para customizar, substitua `assets/images/branding/server-icon.png` **antes** da instalação, ou após instalar:
 
 ```bash
-cp seu_icon.png /opt/minecraft-server/server-icon.png
+sudo cp seu_icon.png /opt/minecraft-server/server-icon.png
 sudo chown minecraft:minecraft /opt/minecraft-server/server-icon.png
 ```
 
-Requisitos do Minecraft para server-icon:
+## Backup com RCON save-lock
 
-- Formato: PNG
-- Dimensões: 64x64 pixels
-- Tamanho máximo: ~100KB
+Para garantir backups consistentes com servidor online, o `backup-cron.sh` usa RCON para pausar saves durante o `tar`:
 
-## Arquivos relevantes em runtime
+1. `save-off` + `save-all` (pausa saves, força flush)
+2. Aguarda 3s para flush completar
+3. `tar -I zstd` dos diretórios `world/`, `world_nether/`, `world_the_end/`
+4. `save-on` (reativa saves)
 
-- /opt/minecraft-server/runtime.env
-- /opt/minecraft-server/hardware-profile.env
-- /opt/minecraft-server/server.properties
+### Pré-requisitos: mcrcon
 
-## Backups consistentes (producao)
-
-Para aumentar consistencia de backup com servidor online, o script tenta usar RCON para pausar saves durante o `tar`.
-
-Observacao sobre `mcrcon`:
-
-`mcrcon` nao e fornecido pelos repositórios oficiais do Arch Linux; ele esta disponível apenas no AUR. As instrucoes abaixo refletem isso:
-
-- Instalar via AUR (ex: `yay`):
+`mcrcon` não está nos repositórios oficiais do Arch Linux. Instale via AUR:
 
 ```bash
 yay -S mcrcon
-```
-
-- Ou construir manualmente a partir do PKGBUILD do AUR:
-
-```bash
+# ou construir manualmente:
 git clone https://aur.archlinux.org/mcrcon.git
-cd mcrcon
-makepkg -si
+cd mcrcon && makepkg -si
 ```
 
-Se preferir evitar dependencias AUR, documente uma alternativa no runbook (ex: usar `rcon-cli` em outra linguagem ou scripts que usem a API do servidor).
+### Configurar RCON no server.properties
 
-No `server.properties`, configure:
+O installer **não** configura RCON automaticamente (você precisa definir a senha). Edite `/opt/minecraft-server/server.properties`:
 
-```bash
+```properties
 enable-rcon=true
-rcon.password=sua_senha_segura
+rcon.password=sua_senha_segura_aqui
 rcon.port=25575
 ```
 
-Com RCON ativo, o backup executa `save-off` + `save-all`, aguarda flush e depois `save-on`.
-Sem RCON, o backup roda em modo best-effort.
+Depois reinicie o servidor: `sudo systemctl restart minecraft`.
+
+> **Atenção:** se `rcon.password` contiver aspas duplas (`"`) ou newlines, o `crias-agent` não conseguirá gerar o `agent.yaml` válido. Use senha alfanumérica.
+
+### Sem RCON
+
+Se `mcrcon` não estiver disponível ou RCON desabilitado, o backup roda em modo **best-effort** (sem pausar saves) — pode haver inconsistência rara em chunks salvos no momento do `tar`.
+
+## Mods
+
+Veja [mods.md](mods.md) para guias detalhados de:
+
+- **Chunky** — pré-geração de chunks
+- **Essential Commands** — home, tpa, spawn, rtp, back, nickname
+- **Universal Graves** — tumba ao morrer
+- **TabTPS** — monitor de TPS/MSPT
+- **Styled Chat + Placeholder API** — customização de chat + títulos
+
+Para listar a lista de mods instalados (CSV configurável em `config.env`):
+
+```bash
+grep MINECRAFT_QOL_MODS config.env
+```
+
+## Arquivos de runtime relevantes
+
+| Arquivo | O que contém |
+|---------|--------------|
+| `/opt/minecraft-server/runtime.env` | `MIN_RAM`, `MAX_RAM`, `GC_MAX_PAUSE`, `G1_REGION_SIZE`, `BACKUP_RETENTION_DAYS`, `BACKUP_ZSTD_LEVEL` |
+| `/opt/minecraft-server/hardware-profile.env` | `HW_TOTAL_RAM_MB`, `HW_CPU_CORES`, `HW_DISK_TYPE`, `HW_TIER`, todos os `MC_*` |
+| `/opt/minecraft-server/server.properties` | Config padrão do Minecraft (porta, MOTD, view-distance, max-players, etc.) |
+
+## Troubleshooting
+
+### Servidor não inicia
+
+```bash
+sudo journalctl -u minecraft -n 50 --no-pager
+sudo /opt/minecraft-server/mc-manager.sh health
+```
+
+Causas comuns:
+- Java 21+ não instalado: `sudo pacman -S jdk21-openjdk`
+- Porta 25565 em uso: `sudo ss -tlnp | grep 25565`
+- `eula.txt` faltando: `echo "eula=true" > /opt/minecraft-server/eula.txt`
+
+### OutOfMemoryError
+
+Heap está em `/opt/minecraft-server/runtime.env` (`MIN_RAM`, `MAX_RAM`). Reduza via `reconfigure-hardware`:
+
+```bash
+sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware LOW
+sudo systemctl restart minecraft
+```
+
+### Backup falha
+
+```bash
+# Verificar se RCON está respondendo
+sudo /opt/minecraft-server/mc-manager.sh health
+
+# Verificar último backup
+ls -lh /opt/minecraft-server/backups/
+
+# Ver logs do timer systemd
+sudo journalctl -u minecraft-backup.service -n 50
+```
+
+### Console interativo não abre
+
+Requer `mcrcon` instalado (AUR). Veja a seção "Backup com RCON save-lock" acima para instruções de instalação.
+
+## Veja também
+
+- [mods.md](mods.md) — Guias dos mods QoL
+- [../tutorial.md](../tutorial.md) — Tutorial de operação passo-a-passo
+- [../tailscale.md](../tailscale.md) — Conexão via Tailscale
+- [../restore.md](../restore.md) — Restore de backups
+- [../security.md](../security.md) — Firewall, logs, hardening

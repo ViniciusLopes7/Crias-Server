@@ -1,6 +1,9 @@
 #!/bin/bash
-
-# Minecraft runtime launcher with dynamic hardware-based runtime.env.
+# minecraft/start-server.sh
+#
+# Launcher runtime do Minecraft com tuning dinâmico baseado em runtime.env.
+# JAVA_OPTS construído como array nativo (item 6.4 do plano) para preservar
+# flags com espaços (ex.: -javaagent:/path com space.jar).
 
 set -euo pipefail
 
@@ -76,31 +79,36 @@ if [ "$min_ram_mb" -ge "$max_ram_mb" ]; then
     MAX_RAM="${max_ram_mb}M"
 fi
 
-JAVA_OPTS=""
-JAVA_OPTS="$JAVA_OPTS -Xms${MIN_RAM}"
-JAVA_OPTS="$JAVA_OPTS -Xmx${MAX_RAM}"
-JAVA_OPTS="$JAVA_OPTS -XX:+UseG1GC"
-JAVA_OPTS="$JAVA_OPTS -XX:+ParallelRefProcEnabled"
-JAVA_OPTS="$JAVA_OPTS -XX:MaxGCPauseMillis=${GC_MAX_PAUSE}"
-JAVA_OPTS="$JAVA_OPTS -XX:+DisableExplicitGC"
-JAVA_OPTS="$JAVA_OPTS -XX:G1HeapRegionSize=${G1_REGION_SIZE}"
-JAVA_OPTS="$JAVA_OPTS -XX:G1NewSizePercent=30"
-JAVA_OPTS="$JAVA_OPTS -XX:G1MaxNewSizePercent=40"
-JAVA_OPTS="$JAVA_OPTS -XX:G1ReservePercent=20"
-JAVA_OPTS="$JAVA_OPTS -XX:G1HeapWastePercent=5"
-JAVA_OPTS="$JAVA_OPTS -XX:G1MixedGCLiveThresholdPercent=90"
-JAVA_OPTS="$JAVA_OPTS -XX:G1RSetUpdatingPauseTimePercent=5"
-JAVA_OPTS="$JAVA_OPTS -XX:SurvivorRatio=32"
-JAVA_OPTS="$JAVA_OPTS -XX:MaxTenuringThreshold=1"
-JAVA_OPTS="$JAVA_OPTS -XX:InitiatingHeapOccupancyPercent=15"
-JAVA_OPTS="$JAVA_OPTS -XX:+UseCompressedOops"
-JAVA_OPTS="$JAVA_OPTS -XX:+UseStringDeduplication"
-JAVA_OPTS="$JAVA_OPTS -XX:+PerfDisableSharedMem"
-JAVA_OPTS="$JAVA_OPTS -XX:+AlwaysPreTouch"
+# ---------------------------------------------------------------------------
+# JAVA_OPTS como array nativo (item 6.4 do plano).
+# Substitui o pattern antigo de string concatenada + read -a split,
+# que quebrava com paths contendo espaços.
+# ---------------------------------------------------------------------------
+JAVA_OPTS=()
+JAVA_OPTS+=("-Xms${MIN_RAM}")
+JAVA_OPTS+=("-Xmx${MAX_RAM}")
+JAVA_OPTS+=("-XX:+UseG1GC")
+JAVA_OPTS+=("-XX:+ParallelRefProcEnabled")
+JAVA_OPTS+=("-XX:MaxGCPauseMillis=${GC_MAX_PAUSE}")
+JAVA_OPTS+=("-XX:+DisableExplicitGC")
+JAVA_OPTS+=("-XX:G1HeapRegionSize=${G1_REGION_SIZE}")
+JAVA_OPTS+=("-XX:G1NewSizePercent=30")
+JAVA_OPTS+=("-XX:G1MaxNewSizePercent=40")
+JAVA_OPTS+=("-XX:G1ReservePercent=20")
+JAVA_OPTS+=("-XX:G1HeapWastePercent=5")
+JAVA_OPTS+=("-XX:G1MixedGCLiveThresholdPercent=90")
+JAVA_OPTS+=("-XX:G1RSetUpdatingPauseTimePercent=5")
+JAVA_OPTS+=("-XX:SurvivorRatio=32")
+JAVA_OPTS+=("-XX:MaxTenuringThreshold=1")
+JAVA_OPTS+=("-XX:InitiatingHeapOccupancyPercent=15")
+JAVA_OPTS+=("-XX:+UseCompressedOops")
+JAVA_OPTS+=("-XX:+UseStringDeduplication")
+JAVA_OPTS+=("-XX:+PerfDisableSharedMem")
+JAVA_OPTS+=("-XX:+AlwaysPreTouch")
 if [ "$JAVA_PREFER_IPV4_STACK" = "true" ]; then
-    JAVA_OPTS="$JAVA_OPTS -Djava.net.preferIPv4Stack=true"
+    JAVA_OPTS+=("-Djava.net.preferIPv4Stack=true")
 fi
-JAVA_OPTS="$JAVA_OPTS -Dfabric.log.disable-ansi=true"
+JAVA_OPTS+=("-Dfabric.log.disable-ansi=true")
 
 cd "$SERVER_DIR" || exit 1
 
@@ -143,7 +151,5 @@ echo "Java: $JAVA_VERSION_RAW"
 echo "Porta: $SERVER_PORT"
 echo "=========================================="
 
-# Split JAVA_OPTS into an array to preserve flags with spaces and pass them safely.
-read -r -a JAVA_OPTS_ARRAY <<< "$JAVA_OPTS"
-# shellcheck disable=SC2068
-exec java "${JAVA_OPTS_ARRAY[@]}" -jar "$SERVER_JAR" nogui
+# Executa java com array nativo (preserva flags com espaços corretamente).
+exec java "${JAVA_OPTS[@]}" -jar "$SERVER_JAR" nogui

@@ -1,0 +1,28 @@
+# discord-agent/.gitignore
+
+# Binários compilados.
+build/
+*.exe
+*.test
+*.out
+
+# Dependências Go.
+vendor/
+
+# Arquivos de configuração com secrets locais (NUNCA commitar).
+agent.local.yaml
+*.local.env
+
+# Cobertura de testes.
+coverage.txt
+coverage.html
+
+# Arquivos gerados pelo protoc (regenerados via make proto).
+internal/proto/*.pb.go
+
+# Editores.
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store

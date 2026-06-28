@@ -1,0 +1,87 @@
+# .github/workflows/build-bot.yml
+#
+# CI do discord-bot. Roda lint + testes em Python 3.11/3.12.
+
+name: Build Bot
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'discord-bot/**'
+      - '.github/workflows/build-bot.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'discord-bot/**'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Lint & Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        python-version: [ '3.11', '3.12' ]
+    defaults:
+      run:
+        working-directory: discord-bot
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: '1.8.0'
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Cache Poetry venv
+        uses: actions/cache@v4
+        with:
+          path: discord-bot/.venv
+          key: ${{ runner.os }}-python-${{ matrix.python-version }}-poetry-${{ hashFiles('discord-bot/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-python-${{ matrix.python-version }}-poetry-
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Generate protobuf code
+        run: |
+          mkdir -p src/crias_bot/grpc_gen
+          poetry run python -m grpc_tools.protoc \
+              -I ../discord-agent/proto \
+              --python_out=src/crias_bot/grpc_gen \
+              --grpc_python_out=src/crias_bot/grpc_gen \
+              ../discord-agent/proto/crias.proto
+          # Fix import path (protoc gera import absoluto; precisamos relativo ao pacote).
+          sed -i 's/^import crias_pb2 as crias__pb2/from crias_bot.grpc_gen import crias_pb2 as crias__pb2/' \
+              src/crias_bot/grpc_gen/crias_pb2_grpc.py
+          touch src/crias_bot/grpc_gen/__init__.py
+
+      - name: Lint (ruff)
+        run: poetry run ruff check src/ tests/
+
+      - name: Type check (mypy)
+        run: poetry run mypy src/crias_bot/
+        continue-on-error: true  # mypy é non-blocking no CI inicial
+
+      - name: Test (pytest)
+        run: poetry run pytest -v --cov=crias_bot --cov-report=term-missing
+
+  docker-build:
+    name: Docker build (smoke test)
+    runs-on: ubuntu-22.04
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        working-directory: discord-bot
+        run: docker build -t crias-bot:ci .

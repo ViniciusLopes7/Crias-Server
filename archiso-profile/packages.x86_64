@@ -42,3 +42,6 @@ lm_sensors
 git
 bash-completion
 jq
+# Necessário para envsubst (substituição de variáveis em templates .service)
+# Item S5 do plano de arquitetura.
+gettext

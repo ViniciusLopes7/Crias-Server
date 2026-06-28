@@ -157,7 +157,8 @@ detect_disk_type_for_path() {
     fi
 
     if [ -r "/sys/block/$base_device/queue/rotational" ]; then
-        rotational=$(cat "/sys/block/$base_device/queue/rotational" 2>/dev/null)
+        # read -r evita fork/exec de cat (mais eficiente para arquivos /sys pequenos).
+        read -r rotational < "/sys/block/$base_device/queue/rotational" 2>/dev/null || rotational=""
         if [ "$rotational" = "1" ]; then
             echo "HDD"
             return 0
@@ -181,9 +182,15 @@ classify_hardware_tier() {
         return 0
     fi
 
-    if [ "$total_ram_mb" -lt 3072 ] || [ "$cpu_cores" -le 2 ]; then
+    # Item R1: thresholds lidos de config.env (com defaults sane).
+    local low_ram="${HW_LOW_TIER_MAX_RAM_MB:-3072}"
+    local low_cpu="${HW_LOW_TIER_MAX_CPU_CORES:-2}"
+    local mid_ram="${HW_MID_TIER_MAX_RAM_MB:-12288}"
+    local mid_cpu="${HW_MID_TIER_MAX_CPU_CORES:-6}"
+
+    if [ "$total_ram_mb" -lt "$low_ram" ] || [ "$cpu_cores" -le "$low_cpu" ]; then
         echo "LOW"
-    elif [ "$total_ram_mb" -lt 12288 ] || [ "$cpu_cores" -le 6 ]; then
+    elif [ "$total_ram_mb" -lt "$mid_ram" ] || [ "$cpu_cores" -le "$mid_cpu" ]; then
         echo "MID"
     else
         echo "HIGH"
@@ -215,6 +222,11 @@ detect_hardware_profile() {
     HW_CPU_THREADS=$(grep -c '^processor' /proc/cpuinfo 2>/dev/null)
     HW_DISK_TYPE=$(detect_disk_type_for_path "$target_path")
 
+    # Fallbacks defensivos: se nproc ou /proc/cpuinfo falham (containers exóticos),
+    # usa 1 core como mínimo.
+    if [ -z "$HW_CPU_CORES" ] || ! [[ "$HW_CPU_CORES" =~ ^[0-9]+$ ]] || [ "$HW_CPU_CORES" -le 0 ]; then
+        HW_CPU_CORES=1
+    fi
     if [ -z "$HW_CPU_THREADS" ] || [ "$HW_CPU_THREADS" -le 0 ]; then
         HW_CPU_THREADS="$HW_CPU_CORES"
     fi

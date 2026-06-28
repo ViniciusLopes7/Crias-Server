@@ -1,0 +1,135 @@
+# .github/workflows/build-agent.yml
+#
+# CI do crias-agent. Builda o binário Go para linux/amd64 e
+# linux/arm64, roda testes, e anexa o binário em releases com tag agent-*.
+
+name: Build Agent
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'discord-agent/**'
+      - '.github/workflows/build-agent.yml'
+    tags: [ 'agent-*' ]
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'discord-agent/**'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Lint & Test
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: discord-agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: discord-agent/go.sum
+
+      - name: Download deps
+        run: go mod download
+
+      - name: Install protoc + plugins
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Generate proto
+        run: make proto
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -v -race -timeout 60s ./...
+
+  build:
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-22.04
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+    defaults:
+      run:
+        working-directory: discord-agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: discord-agent/go.sum
+
+      - name: Install protoc + plugins
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Generate proto
+        run: make proto
+
+      - name: Build
+        env:
+          CGO_ENABLED: 0
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          VERSION="${GITHUB_REF_NAME:-${GITHUB_SHA::7}}"
+          go build \
+            -ldflags "-s -w -X main.version=${VERSION}" \
+            -o build/crias-agent-${{ matrix.goos }}-${{ matrix.goarch }} \
+            ./cmd/crias-agent
+
+      - name: Generate SHA256 checksum
+        run: |
+          cd build
+          sha256sum crias-agent-${{ matrix.goos }}-${{ matrix.goarch }} > crias-agent-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crias-agent-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: discord-agent/build/crias-agent-${{ matrix.goos }}-${{ matrix.goarch }}*
+          retention-days: 30
+
+  release:
+    name: Release (on tag)
+    runs-on: ubuntu-22.04
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/agent-')
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: artifacts/*
+          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}

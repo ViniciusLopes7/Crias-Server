@@ -1,4 +1,10 @@
 #!/bin/bash
+# minecraft/mc-manager.sh
+#
+# CLI de gerenciamento do Minecraft. Centraliza log()/warn()/err() em
+# shared/lib/common.sh (item 6.4 do plano) e gera show_help dinamicamente
+# via declare -F.
+
 set -euo pipefail
 
 resolve_self() {
@@ -31,10 +37,12 @@ SERVER_USER="${SERVER_USER:-minecraft}"
 
 if [ -d "$SERVER_DIR" ]; then
     if ! id "$SERVER_USER" >/dev/null 2>&1; then
-        detected_owner=$(stat -c '%U' "$SERVER_DIR" 2>/dev/null || true)
+        # detected_owner é temporário; script é top-level (não há `local` em escopo global).
+        detected_owner=$(stat -c '%U' "$SERVER_DIR" 2>/dev/null || true) || detected_owner=""
         if [ -n "$detected_owner" ]; then
             SERVER_USER="$detected_owner"
         fi
+        unset detected_owner
     fi
 fi
 
@@ -70,9 +78,8 @@ if [ -f "$COMMON_LIB" ]; then
     source "$COMMON_LIB"
 fi
 
-log() { echo "[INFO] $1"; }
-warn() { echo "[AVISO] $1"; }
-err() { echo "[ERRO] $1" >&2; }
+# log()/warn()/err() centralizados em common.sh (item 6.4 do plano).
+# Não redefinimos localmente para evitar divergência de formato.
 
 get_prop() {
     local key="$1"
@@ -138,6 +145,7 @@ cmd_setup_cron() {
 
 cmd_reconfigure_hardware() {
     local forced_tier="${1:-}"
+    local server_port online_mode motd
     forced_tier="${forced_tier^^}"
 
     manager_need_root "$SELF" "reconfigure-hardware" "$forced_tier"
@@ -229,23 +237,35 @@ cmd_health() {
     return 0
 }
 
+# ---------------------------------------------------------------------------
+# show_help gerado dinamicamente via declare -F (item 6.4 do plano).
+# ---------------------------------------------------------------------------
 show_help() {
     cat << EOF
 Uso: $0 <comando>
 
-Comandos:
-  start                     Inicia o servico (systemd)
-  stop                      Para o servico (systemd)
-  restart                   Reinicia o servico (systemd)
-  status                    Mostra status (systemd)
-  logs                       Tail dos logs (journalctl)
-    console                    Console interativo via RCON (fallback para logs)
-    health                     Verifica porta e RCON do servidor
-  backup                     Executa backup imediato
-  setup-cron                 Configura timer systemd de backup
-  reconfigure-hardware [TIER] Recalcula tuning (TIER: LOW|MID|HIGH ou vazio)
-  hardware-report            Exibe perfil/tuning aplicado
+Comandos disponiveis:
 EOF
+    # Lista funções cmd_* dinamicamente e mapeia para descrição.
+    local fn
+    while IFS= read -r fn; do
+        local cmd="${fn#cmd_}"
+        local desc=""
+        case "$cmd" in
+            start)                      desc="Inicia o servico (systemd)" ;;
+            stop)                       desc="Para o servico (systemd)" ;;
+            restart)                    desc="Reinicia o servico (systemd)" ;;
+            status)                     desc="Mostra status (systemd)" ;;
+            logs)                       desc="Tail dos logs (journalctl)" ;;
+            console)                    desc="Console interativo via RCON (fallback para logs)" ;;
+            health)                     desc="Verifica porta e RCON do servidor" ;;
+            backup)                     desc="Executa backup imediato" ;;
+            setup-cron)                 desc="Configura timer systemd de backup" ;;
+            reconfigure-hardware)       desc="Recalcula tuning (TIER: LOW|MID|HIGH ou vazio)" ;;
+            hardware-report)            desc="Exibe perfil/tuning aplicado" ;;
+        esac
+        printf '  %-30s %s\n' "$cmd" "$desc"
+    done < <(declare -F | awk '{print $3}' | grep -E '^cmd_' | sort)
 }
 
 case "${1:-}" in

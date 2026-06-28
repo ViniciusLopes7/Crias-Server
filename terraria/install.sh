@@ -1,4 +1,9 @@
 #!/bin/bash
+# terraria/install.sh
+#
+# Installer do stack Terraria usando o framework shared/lib/stack-installer.sh.
+# Mantém compatibilidade com os testes em tests/install-contracts.sh e
+# tests/quick-script-tests.sh (nomes de função e padrões de grep preservados).
 
 set -euo pipefail
 
@@ -15,7 +20,12 @@ source "$ROOT_DIR/shared/lib/system-tuning.sh"
 source "$ROOT_DIR/shared/lib/terraria-tuning.sh"
 # shellcheck source=/dev/null
 source "$ROOT_DIR/shared/lib/downloads.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/shared/lib/stack-installer.sh"
 
+# ---------------------------------------------------------------------------
+# Configuração do stack.
+# ---------------------------------------------------------------------------
 TERRARIA_USER="${TERRARIA_USER:-terraria}"
 TERRARIA_SERVER_DIR="${TERRARIA_SERVER_DIR:-/opt/terraria-server}"
 TERRARIA_PORT="${TERRARIA_PORT:-7777}"
@@ -28,13 +38,44 @@ DRY_RUN="${DRY_RUN:-false}"
 TERRARIA_SERVER_DIR_PREEXISTED="${TERRARIA_SERVER_DIR_PREEXISTED:-false}"
 TERRARIA_INSTALL_SUCCEEDED="${TERRARIA_INSTALL_SUCCEEDED:-false}"
 
+# ---------------------------------------------------------------------------
+# Configuração do framework stack-installer.
+# ---------------------------------------------------------------------------
+STACK_NAME="terraria"
+STACK_USER="$TERRARIA_USER"
+STACK_SERVER_DIR="$TERRARIA_SERVER_DIR"
+STACK_SERVICE_TEMPLATE="$MODULE_DIR/terraria.service"
+STACK_RUNTIME_SCRIPTS=(
+    "$MODULE_DIR/start-terraria.sh"
+    "$MODULE_DIR/tt-manager.sh"
+    "$MODULE_DIR/backup-cron.sh"
+    "$MODULE_DIR/setup-cron.sh"
+)
+STACK_SHARED_LIBS=(
+    "$ROOT_DIR/shared/lib/common.sh"
+    "$ROOT_DIR/shared/lib/manager-common.sh"
+    "$ROOT_DIR/shared/lib/hardware-profile.sh"
+    "$ROOT_DIR/shared/lib/terraria-tuning.sh"
+    "$ROOT_DIR/shared/lib/downloads.sh"
+    "$ROOT_DIR/shared/lib/backup-engine.sh"
+    "$ROOT_DIR/shared/lib/setup-cron.sh"
+)
+
+# ---------------------------------------------------------------------------
+# Hooks do framework.
+# ---------------------------------------------------------------------------
+
+stack_validate_inputs() {
+    validate_terraria_inputs
+}
+
 validate_terraria_inputs() {
     if ! validate_port_number "TERRARIA_PORT" "$TERRARIA_PORT"; then
         exit 1
     fi
 }
 
-install_terraria_dependencies() {
+stack_install_dependencies() {
     if is_true "$DRY_RUN"; then
         print_step "[DRY_RUN] Pulando instalacao de dependencias do Terraria."
         return 0
@@ -50,58 +91,18 @@ install_terraria_dependencies() {
         tar \
         gzip \
         unzip \
+        gettext \
         zram-generator \
         cpupower \
         lm_sensors
 }
 
-create_terraria_user_and_dirs() {
-    print_step "Garantindo usuario e diretorio do Terraria..."
-
-    if is_true "$DRY_RUN"; then
-        print_step "[DRY_RUN] Pulando criacao do usuario e diretorio do Terraria."
-        return 0
-    fi
-
-    if [ -d "$TERRARIA_SERVER_DIR" ]; then
-        TERRARIA_SERVER_DIR_PREEXISTED=true
-    else
-        TERRARIA_SERVER_DIR_PREEXISTED=false
-    fi
-
-    if ! id "$TERRARIA_USER" >/dev/null 2>&1; then
-        useradd -r -M -s /usr/bin/nologin -d "$TERRARIA_SERVER_DIR" "$TERRARIA_USER"
-    fi
-
-    mkdir -p "$TERRARIA_SERVER_DIR" "$TERRARIA_SERVER_DIR/config" "$TERRARIA_SERVER_DIR/worlds"
-    chown -R "${TERRARIA_USER}:${TERRARIA_USER}" "$TERRARIA_SERVER_DIR"
+stack_create_extra_dirs() {
+    mkdir -p "$TERRARIA_SERVER_DIR/config" "$TERRARIA_SERVER_DIR/worlds"
 }
 
-rollback_terraria_install() {
-    local service_unit="/etc/systemd/system/terraria.service"
-
-    if is_true "$DRY_RUN"; then
-        return 0
-    fi
-
-    print_warning "Instalacao do Terraria falhou; executando rollback best-effort."
-    rm -f "$service_unit" 2>/dev/null || true
-
-    if [ "$TERRARIA_SERVER_DIR_PREEXISTED" = "false" ]; then
-        safe_remove_dir "$TERRARIA_SERVER_DIR" || true
-    else
-        rm -f \
-            "$TERRARIA_SERVER_DIR/start-terraria.sh" \
-            "$TERRARIA_SERVER_DIR/tt-manager.sh" \
-            "$TERRARIA_SERVER_DIR/backup-cron.sh" \
-            "$TERRARIA_SERVER_DIR/setup-cron.sh" \
-            "$TERRARIA_SERVER_DIR/comandos.sh" \
-            "$TERRARIA_SERVER_DIR/runtime.env" \
-            "$TERRARIA_SERVER_DIR/hardware-profile.env" 2>/dev/null || true
-        rm -rf "$TERRARIA_SERVER_DIR/.shared" 2>/dev/null || true
-    fi
-
-    systemctl daemon-reload >/dev/null 2>&1 || true
+stack_download_and_install() {
+    download_and_extract_terraria
 }
 
 download_and_extract_terraria() {
@@ -119,9 +120,10 @@ download_and_extract_terraria() {
     tmp_zip=$(mktemp /tmp/terraria-server-XXXXXX.zip)
     tmp_dir=$(mktemp -d)
 
+    # Item S2: SHA256 obrigatório por default (TERRARIA_SHA256 em config.env).
     if ! download_and_verify "$TERRARIA_DOWNLOAD_URL" "$tmp_zip" TERRARIA_SHA256; then
         print_error "Falha ao baixar/validar o servidor Terraria."
-        print_error "Defina TERRARIA_DOWNLOAD_URL em config.env com um link valido e/ou TERRARIA_SHA256 para verificação."
+        print_error "Defina TERRARIA_DOWNLOAD_URL em config.env com um link valido e TERRARIA_SHA256 (64 hex) com o checksum oficial."
         rm -f "$tmp_zip"
         safe_remove_dir "$tmp_dir" || true
         exit 1
@@ -154,11 +156,13 @@ download_and_extract_terraria() {
     safe_remove_dir "$tmp_dir" || true
 }
 
-configure_terraria_runtime() {
+stack_configure_runtime() {
     print_step "Aplicando tuning automatico para Terraria..."
 
     detect_hardware_profile "$TERRARIA_SERVER_DIR" "$FORCE_HARDWARE_TIER"
     compute_terraria_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER"
+
+    STACK_SERVICE_MEMORY_MAX_MB="$TT_SERVICE_MEMORY_MAX_MB"
 
     write_terraria_runtime_env "$TERRARIA_SERVER_DIR/runtime.env"
     write_terraria_server_config \
@@ -173,23 +177,8 @@ configure_terraria_runtime() {
     print_success "Max players aplicado: $TT_MAX_PLAYERS"
 }
 
-deploy_terraria_scripts() {
-    print_step "Copiando scripts do modulo Terraria..."
-
-    run_or_dry_run "Copiando start-terraria.sh do Terraria" cp "$MODULE_DIR/start-terraria.sh" "$TERRARIA_SERVER_DIR/start-terraria.sh"
-    run_or_dry_run "Copiando tt-manager.sh do Terraria" cp "$MODULE_DIR/tt-manager.sh" "$TERRARIA_SERVER_DIR/tt-manager.sh"
-    run_or_dry_run "Copiando backup-cron.sh do Terraria" cp "$MODULE_DIR/backup-cron.sh" "$TERRARIA_SERVER_DIR/backup-cron.sh"
-    run_or_dry_run "Copiando setup-cron.sh do Terraria" cp "$MODULE_DIR/setup-cron.sh" "$TERRARIA_SERVER_DIR/setup-cron.sh"
-
-    run_or_dry_run "Criando diretorio compartilhado do Terraria" mkdir -p "$TERRARIA_SERVER_DIR/.shared"
-    run_or_dry_run "Copiando common.sh compartilhado do Terraria" cp "$ROOT_DIR/shared/lib/common.sh" "$TERRARIA_SERVER_DIR/.shared/common.sh"
-    run_or_dry_run "Copiando manager-common.sh compartilhado do Terraria" cp "$ROOT_DIR/shared/lib/manager-common.sh" "$TERRARIA_SERVER_DIR/.shared/manager-common.sh"
-    run_or_dry_run "Copiando hardware-profile.sh compartilhado do Terraria" cp "$ROOT_DIR/shared/lib/hardware-profile.sh" "$TERRARIA_SERVER_DIR/.shared/hardware-profile.sh"
-    run_or_dry_run "Copiando terraria-tuning.sh compartilhado do Terraria" cp "$ROOT_DIR/shared/lib/terraria-tuning.sh" "$TERRARIA_SERVER_DIR/.shared/terraria-tuning.sh"
-
-    run_or_dry_run "Marcando scripts do Terraria como executaveis" chmod +x "$TERRARIA_SERVER_DIR/start-terraria.sh" "$TERRARIA_SERVER_DIR/tt-manager.sh" "$TERRARIA_SERVER_DIR/backup-cron.sh" "$TERRARIA_SERVER_DIR/setup-cron.sh"
-
-    write_file_or_dry_run "Gerando comandos do Terraria em $TERRARIA_SERVER_DIR/comandos.sh" "$TERRARIA_SERVER_DIR/comandos.sh" << EOF
+stack_generate_aliases() {
+    cat << EOF
 #!/bin/bash
 # Generated by Crias-Server installer - do not edit manually
 ## Generated aliases for Terraria
@@ -206,83 +195,41 @@ alias ttdir='cd $TERRARIA_SERVER_DIR'
 alias tthw='sudo $TERRARIA_SERVER_DIR/tt-manager.sh hardware-report'
 alias ttreconfig='sudo $TERRARIA_SERVER_DIR/tt-manager.sh reconfigure-hardware'
 EOF
+}
 
-    run_or_dry_run "Marcando comandos do Terraria como executavel" chmod +x "$TERRARIA_SERVER_DIR/comandos.sh"
+stack_rollback_extra_files() {
+    cat << EOF
+$TERRARIA_SERVER_DIR/start-terraria.sh
+$TERRARIA_SERVER_DIR/tt-manager.sh
+$TERRARIA_SERVER_DIR/backup-cron.sh
+$TERRARIA_SERVER_DIR/setup-cron.sh
+$TERRARIA_SERVER_DIR/comandos.sh
+$TERRARIA_SERVER_DIR/runtime.env
+$TERRARIA_SERVER_DIR/hardware-profile.env
+EOF
+}
 
-    if ! dry_run_enabled; then
-        chown -R "${TERRARIA_USER}:${TERRARIA_USER}" "$TERRARIA_SERVER_DIR"
-    fi
+# Alias para preservar nome usado pelo install.sh raiz.
+run_terraria_install() {
+    run_stack_install
+}
+
+# Aliases para compat retroativa com testes que chamam funções legadas
+# (tests/arch-dry-install.sh chama deploy_terraria_scripts diretamente).
+deploy_terraria_scripts() {
+    deploy_stack_scripts
+}
+
+rollback_terraria_install() {
+    rollback_stack_install
 }
 
 install_terraria_service() {
-    print_step "Instalando servico systemd do Terraria..."
-
-    sed_escape_replacement() {
-        printf '%s' "$1" | sed 's/[\\&|]/\\&/g'
-    }
-
-    local escaped_user
-    local escaped_dir
-    local escaped_memory
-    escaped_user="$(sed_escape_replacement "$TERRARIA_USER")"
-    escaped_dir="$(sed_escape_replacement "$TERRARIA_SERVER_DIR")"
-    escaped_memory="$(sed_escape_replacement "$TT_SERVICE_MEMORY_MAX_MB")"
-
-    sed \
-        -e "s|__SERVER_USER__|$escaped_user|g" \
-        -e "s|__SERVER_DIR__|$escaped_dir|g" \
-        -e "s|__MEMORY_MAX_MB__|$escaped_memory|g" \
-        "$MODULE_DIR/terraria.service" | write_file_or_dry_run "Gerando unidade systemd do Terraria em /etc/systemd/system/terraria.service" "/etc/systemd/system/terraria.service"
-
-    if dry_run_enabled; then
-        return 0
-    fi
-
-    systemctl daemon-reload
-    systemctl enable terraria >/dev/null 2>&1 || true
+    install_stack_service
 }
 
 apply_terraria_system_tuning() {
-    if is_true "$DRY_RUN"; then
-        print_step "[DRY_RUN] Pulando tuning de sistema compartilhado."
-        return 0
-    fi
-
-    if is_true "$APPLY_SYSTEM_TUNING"; then
-        print_step "Aplicando tuning de sistema compartilhado..."
-        apply_common_system_tuning "$TERRARIA_USER" "$HW_TIER" "$HW_TOTAL_RAM_MB"
-    fi
-}
-
-run_terraria_install() {
-    print_step "Iniciando instalacao do stack Terraria..."
-
-    if [ -d "$TERRARIA_SERVER_DIR" ]; then
-        TERRARIA_SERVER_DIR_PREEXISTED=true
-    else
-        TERRARIA_SERVER_DIR_PREEXISTED=false
-    fi
-
-    trap 'if [ "${TERRARIA_INSTALL_SUCCEEDED:-false}" != "true" ]; then rollback_terraria_install; fi' EXIT
-
-    validate_terraria_inputs
-
-    if is_true "$DRY_RUN"; then
-        TERRARIA_INSTALL_SUCCEEDED=true
-        print_step "[DRY_RUN] Instalacao do Terraria encerrada sem aplicar alteracoes."
-        return 0
-    fi
-
-    install_terraria_dependencies
-    create_terraria_user_and_dirs
-    download_and_extract_terraria
-    configure_terraria_runtime
-    deploy_terraria_scripts
-    install_terraria_service
-    apply_terraria_system_tuning
-
-    TERRARIA_INSTALL_SUCCEEDED=true
-    print_success "Terraria instalado com sucesso em $TERRARIA_SERVER_DIR"
+    apply_stack_system_tuning
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

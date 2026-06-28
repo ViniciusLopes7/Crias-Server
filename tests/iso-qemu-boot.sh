@@ -19,15 +19,6 @@ sanitize_log_file() {
         cp "$raw_log_file" "$clean_log_file"
     fi
 }
-safe_cleanup_dir() {
-    local target_dir="${1:-}"
-
-    if [ -z "$target_dir" ] || [ "$target_dir" = "/" ]; then
-        return 1
-    fi
-
-    rm -rf -- "$target_dir"
-}
 
 validate_qemu_log() {
     local raw_log_file="$1"
@@ -109,6 +100,9 @@ if [ "$MODE" = "deep" ] && ! command -v expect >/dev/null 2>&1; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Helper safe_cleanup_dir sourced from tests/lib/cleanup.sh (DRY).
+source "$ROOT_DIR/tests/lib/cleanup.sh"
 
 WORK_DIR="$(mktemp -d)"
 LOG_FILE="$WORK_DIR/qemu-boot.log"
@@ -264,7 +258,9 @@ fi
 
 set -e
 
-cp "$LOG_FILE" "$ROOT_DIR/qemu-boot.log" || true
+# Copia log para tests/fixtures/ (já em .gitignore) em vez de repo root,
+# para não poluir working tree do git.
+cp "$LOG_FILE" "$ROOT_DIR/tests/fixtures/qemu-boot-last.log" || true
 
 CLEAN_LOG_FILE="$WORK_DIR/qemu-boot.clean.log"
 if ! validate_qemu_log "$LOG_FILE" "$CLEAN_LOG_FILE"; then

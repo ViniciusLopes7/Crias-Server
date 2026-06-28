@@ -1,303 +1,175 @@
-# Guia de Conexão - Linux e Windows
-## Como conectar ao servidor Minecraft
+# Conexão via Tailscale
 
----
+Guia de conexão ao servidor via Tailscale (VPN mesh) e Tailscale Funnel (HTTPS público para o `crias-agent`).
 
-## 📋 Métodos de Conexão
+## Por que Tailscale?
 
-### Método 1: Tailscale (RECOMENDADO) ⭐
-
-**Vantagens:**
 - ✅ Não precisa abrir portas no roteador
-- ✅ Conexão criptografada e segura
-- ✅ IP fixo (não muda)
-- ✅ Funciona de qualquer lugar
+- ✅ Conexão criptografada WireGuard
+- ✅ IP fixo (100.x.x.x) — não muda
+- ✅ Funciona de qualquer lugar (NAT traversal)
 - ✅ Fácil de compartilhar com amigos
 
----
+## 1. Configurar Tailscale no servidor
 
-#### No Servidor (Notebook com Arch)
+O instalador oferece instalar Tailscale automaticamente (`INSTALL_TAILSCALE=true`, default). Se pulou:
 
 ```bash
-# 1. Verificar se Tailscale está instalado
-which tailscale
-
-# 2. Se não estiver, instalar
 sudo pacman -S tailscale
-
-# 3. Habilitar e iniciar serviço
 sudo systemctl enable --now tailscaled
-
-# 4. Conectar à sua conta Tailscale
 sudo tailscale up
+# → abre link no navegador, faça login (Google/Microsoft/GitHub)
+# → autorize o dispositivo
 
-# 5. Siga as instruções na tela:
-#    - Copie o link que aparecer
-#    - Abra no navegador
-#    - Faça login (Google/Microsoft/GitHub)
-#    - Autorize o dispositivo
-
-# 6. Verificar IP do Tailscale
+# Verificar IP do Tailscale (anote — é o endereço do servidor)
 sudo tailscale ip -4
-# Exemplo de saída: 100.64.123.45
-# ANOTE ESTE IP! É o endereço do seu servidor.
+# Exemplo: 100.64.123.45
 ```
 
----
+## 2. Conectar jogadores ao servidor
 
-#### No Seu PC (Linux)
+Cada jogador precisa instalar Tailscale no PC e entrar na **mesma rede Tailscale** (mesma conta ou conta convidada).
 
-##### Ubuntu/Debian
-
-```bash
-# 1. Instalar Tailscale
-curl -fsSL https://tailscale.com/install.sh | sh
-
-# 2. Iniciar serviço
-sudo systemctl enable --now tailscaled
-
-# 3. Conectar com a MESMA conta usada no servidor
-sudo tailscale up
-
-# 4. Verificar conexão
-sudo tailscale status
-# Deve mostrar o servidor na lista!
-```
-
-##### Arch Linux
+### Linux
 
 ```bash
-# 1. Instalar Tailscale
+# Arch
 sudo pacman -S tailscale
-
-# 2. Iniciar serviço
-sudo systemctl enable --now tailscaled
-
-# 3. Conectar
-sudo tailscale up
-
-# 4. Verificar
-sudo tailscale status
-```
-
-##### Fedora
-
-```bash
-# 1. Instalar Tailscale
+# Ubuntu/Debian
+curl -fsSL https://tailscale.com/install.sh | sh
+# Fedora
 sudo dnf install tailscale
 
-# 2. Iniciar serviço
+# Ativar
 sudo systemctl enable --now tailscaled
-
-# 3. Conectar
-sudo tailscale up
-
-# 4. Verificar
-sudo tailscale status
-```
-
----
-
-#### No Seu PC (Windows)
-
-1. Acesse o site oficial do Tailscale: [tailscale.com/download/windows](https://tailscale.com/download/windows)
-2. Clique em **"Download Tailscale for Windows"** e baixe o instalador.
-3. Execute o instalador baixado.
-4. Após a instalação, o Tailscale aparecerá na bandeja do sistema (perto do relógio, no canto inferior direito).
-5. Clique no ícone do Tailscale e selecione **"Log in"**.
-6. Uma página abrirá no navegador. Faça login com a **MESMA conta** que você usou no servidor Linux.
-7. Após o login, clique no ícone do Tailscale novamente. Você verá seus dispositivos na lista, incluindo o servidor!
-
----
-
-#### No Minecraft (Qualquer SO)
-
-1. Abra o Minecraft Launcher
-2. Inicie o jogo na versão **1.21.11** (com Fabric se tiver mods)
-3. Clique em **"Multiplayer"**
-4. Clique em **"Add Server"**
-5. Preencha:
-   - **Server Name:** Meu Servidor (ou qualquer nome)
-   - **Server Address:** `100.64.123.45:25565` (use o IP do seu servidor)
-6. Clique em **"Done"**
-7. Clique no servidor na lista
-8. Clique em **"Join Server"**
-
-✅ **Pronto!** Você está conectado!
-
----
-
-### Método 2: IP Local (Mesma Rede WiFi/Cabo)
-
-**Quando usar:** PC e servidor na mesma rede local.
-
-#### No Servidor
-
-```bash
-# Descobrir IP local
-ip addr show | grep "inet " | grep -v "127.0.0.1" | head -1
-# Exemplo de saída: inet 192.168.1.50/24
-# IP é: 192.168.1.50
-```
-
-#### No Minecraft
-
-- **Server Address:** `192.168.1.50:25565` (use o IP do seu servidor)
-
----
-
-### Método 3: IP Público (Port Forwarding)
-
-⚠️ **Aviso:** Menos seguro! Prefira Tailscale.
-
-#### Descobrir IP Público
-
-```bash
-# No servidor
-curl ifconfig.me
-# Exemplo: 203.0.113.45
-```
-
-#### Configurar Roteador
-
-1. Acesse `192.168.1.1` no navegador (geralmente)
-2. Login: `admin` / senha do roteador
-3. Procure **"Port Forwarding"** ou **"Virtual Servers"**
-4. Adicione regra:
-   - **Nome:** Minecraft
-   - **Porta Externa:** 25565
-   - **Porta Interna:** 25565
-   - **IP Interno:** 192.168.1.50 (IP do servidor)
-   - **Protocolo:** TCP
-5. Salve
-
-#### No Minecraft
-
-- **Server Address:** `203.0.113.45:25565` (use seu IP público)
-
----
-
-## 🔧 Troubleshooting
-
-### Problema: "Can't resolve hostname"
-
-**Causa:** IP incorreto ou Tailscale desconectado.
-
-**Solução:**
-```bash
-# No servidor
-sudo tailscale status
-# Deve mostrar "Connected"
-
-# Se não estiver conectado:
 sudo tailscale up
 ```
 
----
+### Windows / macOS
 
-### Problema: "Connection timed out"
+Baixe em <https://tailscale.com/download> e faça login com a mesma conta.
 
-**Causas possíveis:**
-1. Servidor não está rodando
-2. Firewall bloqueando
-3. Porta incorreta
+### Conectar ao Minecraft
 
-**Solução:**
-```bash
-# 1. Verificar se servidor está rodando
-sudo systemctl status minecraft
+No launcher do Minecraft, adicione servidor com o IP do Tailscale:
 
-# 2. Se não estiver, iniciar
-sudo systemctl start minecraft
-
-# 3. Verificar firewall
-sudo iptables -L | grep 25565
-
-# 4. Se não aparecer, liberar porta apenas na interface Tailscale
-sudo iptables -A INPUT -i tailscale0 -p tcp --dport 25565 -j ACCEPT
+```
+100.64.123.45
 ```
 
----
+(ou `100.64.123.45:25565` se precisar especificar porta)
 
-### Problema: "Outdated server"
+### Conectar ao Terraria
 
-**Causa:** Versão do Minecraft diferente do servidor.
+No Terraria, digite o IP do Tailscale na tela de multiplayer.
 
-**Solução:**
-- Servidor é 1.21.11
-- Use Minecraft 1.21.11 no launcher
+## 3. Compartilhar acesso com amigos
 
----
-
-### Problema: Tailscale não conecta
+Para convidar amigos que não estão na sua conta Tailscale:
 
 ```bash
-# 1. Verificar serviço
-sudo systemctl status tailscaled
+# Opção A: convidar via Tailscale admin console
+# → acesse https://login.tailscale.com/admin/machines
+# → clique em "Share" no dispositivo servidor
+# → digite o email do amigo
 
-# 2. Se parado, iniciar
-sudo systemctl start tailscaled
-
-# 3. Tentar conectar novamente
-sudo tailscale up
-
-# 4. Se falhar, reautenticar
-sudo tailscale up --force-reauth
+# Opção B: usar Tailscale Funnel (público — veja abaixo)
 ```
 
----
+## 4. Tailscale Funnel (para o `crias-agent`)
 
-## 📝 Comandos Úteis do Tailscale
+Se você instalou o `crias-agent` (`INSTALL_AGENT=true`), precisa expô-lo publicamente para o bot Discord (no Railway) conseguir conectar. O **Tailscale Funnel** faz proxy HTTPS sem precisar de VPN no bot.
 
 ```bash
-# Ver status detalhado
+# Ativar Funnel na porta do agente (8473)
+sudo tailscale funnel 8473
+```
+
+Isso expõe `https://<seu-host>.<seu-tailnet>.ts.net` publicamente. O bot Discord conecta neste endpoint HTTPS.
+
+> **Atenção:** o Funnel é público. Qualquer pessoa com a URL pode tentar conectar — mas o agente exige token de autenticação (`x-api-token`) em cada RPC. Sem o token, requisições são rejeitadas com `codes.Unauthenticated`.
+
+### Configurar no Railway
+
+No painel do Railway, defina:
+- `CRIAS_AGENT_HOST=https://<seu-host>.<seu-tailnet>.ts.net`
+- `CRIAS_AGENT_TOKEN=<copie de /etc/crias/agent.yaml>`
+
+Para ver o token (após `install.sh`):
+```bash
+sudo grep auth_token /etc/crias/agent.yaml
+```
+
+## 5. Verificar status
+
+```bash
+# Status geral
 sudo tailscale status
 
-# Ver IP do dispositivo
+# IP do servidor
 sudo tailscale ip -4
 
 # Listar dispositivos na rede
 sudo tailscale status | grep -v "^#"
 
-# Desconectar
-sudo tailscale down
-
-# Reconectar
-sudo tailscale up
-
-# Ver logs
+# Logs do daemon
 sudo journalctl -u tailscaled -f
-
-# Atualizar Tailscale
-sudo pacman -Syu tailscale  # Arch
-sudo apt update && sudo apt upgrade tailscale  # Ubuntu/Debian
 ```
 
----
+## 6. Troubleshooting
 
-## 🎯 Resumo Rápido
+### "Can't connect to server"
 
-| Método | Quando Usar | Segurança | Dificuldade |
+```bash
+# 1. Servidor está rodando?
+sudo systemctl status minecraft
+
+# 2. Tailscale conectado dos dois lados?
+sudo tailscale status
+
+# 3. IP correto no launcher?
+sudo tailscale ip -4
+
+# 4. Porta liberada?
+sudo ss -tlnp | grep 25565
+```
+
+### Tailscale não conecta
+
+```bash
+sudo systemctl status tailscaled
+sudo systemctl restart tailscaled
+sudo tailscale up --force-reauth
+```
+
+### Funnel não funciona
+
+```bash
+# Verificar status do Funnel
+sudo tailscale funnel status
+
+# Funnel requer conta Tailscale ativa e node aprovado no admin console
+# Veja: https://login.tailscale.com/admin/settings/features
+```
+
+## 7. Alternativas ao Tailscale
+
+Se não quiser usar Tailscale:
+
+- **IP local**: só funciona na mesma rede (LAN). Simples mas limitado.
+- **IP público + port forwarding**: abre porta no roteador. Funciona mas é menos seguro.
+- **Cloudflare Tunnel**: alternativa ao Tailscale Funnel para expor o `crias-agent`. Requer config adicional.
+
+| Método | Quando usar | Segurança | Dificuldade |
 |--------|-------------|-----------|-------------|
 | **Tailscale** | Sempre que possível | ⭐⭐⭐⭐⭐ | Fácil |
-| **IP Local** | Mesma rede apenas | ⭐⭐⭐ | Muito Fácil |
-| **IP Público** | Último recurso | ⭐⭐ | Difícil |
+| IP local | Mesma rede apenas | ⭐⭐⭐ | Muito fácil |
+| IP público | Último recurso | ⭐⭐ | Média |
+| Cloudflare Tunnel | Alternativa ao Funnel | ⭐⭐⭐⭐ | Média |
 
----
+## Veja também
 
-## 💡 Dicas
-
-1. **Sempre use Tailscale** quando possível - é o método mais seguro
-2. **Anote o IP do Tailscale** do servidor - ele não muda
-3. **Compartilhe o IP** com amigos que estiverem na mesma rede Tailscale
-4. **Teste a conexão** antes de chamar amigos para jogar
-
----
-
-## 📞 Precisa de Ajuda?
-
-**Verifique:**
-1. Servidor está rodando: `sudo systemctl status minecraft`
-2. Tailscale conectado: `sudo tailscale status`
-3. IP correto: `sudo tailscale ip -4`
-4. Porta 25565 liberada: `sudo ss -tulpn | grep 25565`
+- [tutorial.md](tutorial.md) — Tutorial de operação
+- [../README.md](../README.md) — README principal (controle remoto via Discord)
+- [../discord-agent/README.md](../discord-agent/README.md) — Agente Go (gRPC)
+- [../discord-bot/README.md](../discord-bot/README.md) — Bot Discord

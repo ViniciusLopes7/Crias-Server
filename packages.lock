@@ -1,0 +1,31 @@
+# packages.lock
+#
+# Item S1 do plano: pinagem de versões de pacotes pacman críticos.
+#
+# Este arquivo lista pacotes do Arch Linux com versões mínimas/fixas
+# que o installer verifica antes de prosseguir. Pacotes sem versão fixa
+# usam `pacman -S --needed` (instala se faltante, sem upgrade forçado).
+#
+# Formato:
+#   <package_name> <min_version>   # mínimo (>=min_version)
+#   <package_name> =<version>      # exata (==version)
+#   <package_name>                 # qualquer versão
+#
+# Para atualizar versões pinadas, edite este arquivo e rode:
+#   sudo pacman -Syu --needed <package_name>
+#
+# Lista de pacotes críticos para o funcionamento do Crias-Server:
+jdk21-openjdk           21.0.0
+curl                    8.0.0
+wget                    1.21.0
+tar                     1.35
+gzip                    1.12
+unzip                   6.0
+zstd                    1.5.0
+gettext                 0.21
+logrotate               3.20
+zram-generator          0.3
+cpupower                6.0
+lm_sensors              3.6
+jq                      1.7
+tailscale               1.60

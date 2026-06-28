@@ -54,6 +54,18 @@ bash tests/terraria-tuning-test.sh
 echo "[quick-script-tests] Validando regressao de setup-cron (nao-root)..."
 bash tests/setup-cron-manager-test.sh
 
+echo "[quick-script-tests] Validando framework stack-installer + backup-engine..."
+bash tests/stack-installer-test.sh
+
+echo "[quick-script-tests] Validando envsubst nos templates .service..."
+bash tests/envsubst-test.sh
+
+echo "[quick-script-tests] Validando config-parser com = em valores..."
+bash tests/config-parser-eq-test.sh
+
+echo "[quick-script-tests] Validando hook de instalação do agente..."
+bash tests/agent-install-hook-test.sh
+
 echo "[quick-script-tests] Validando contrato de checksum por mod..."
 assert_file minecraft/install.sh
 assert_grep_fixed "file_name_norm=\"\${file_name//-/_}\"" minecraft/install.sh

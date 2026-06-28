@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package crias.v1;
+
+option go_package = "github.com/ViniciusLopes7/Crias-Server/discord-agent/internal/proto;criasv1";
+
+// ServerControl expõe comandos de controle do servidor de jogo (Minecraft/Terraria).
+// O agente não replica lógica — delega para mc-manager.sh / tt-manager.sh e systemctl.
+service ServerControl {
+  // StartServer inicia o serviço systemd do stack ativo.
+  rpc StartServer(StartRequest) returns (StartResponse);
+  // StopServer para o serviço (graceful, manda KillSignal=SIGINT).
+  rpc StopServer(StopRequest) returns (StopResponse);
+  // RestartServer reinicia o serviço.
+  rpc RestartServer(RestartRequest) returns (RestartResponse);
+  // GetStatus retorna status consolidado: systemd active + RCON players (se disponível).
+  rpc GetStatus(GetStatusRequest) returns (StatusResponse);
+  // GetHealth verifica porta em escuta + RCON (passivo, não reinicia).
+  rpc GetHealth(GetHealthRequest) returns (HealthResponse);
+  // SendRconCommand executa comando RCON arbitrário whitelistado.
+  rpc SendRconCommand(SendRconCommandRequest) returns (SendRconCommandResponse);
+  // StreamConsole abre stream de journalctl -u <service> -f.
+  rpc StreamConsole(StreamConsoleRequest) returns (stream ConsoleLine);
+}
+
+// EventBus expõe eventos emitidos pelo agente (player joined/left, server start/stop, etc.).
+service EventBus {
+  // SubscribeEvents abre stream bidi: cliente recebe ServerEvent push.
+  rpc SubscribeEvents(SubscribeEventsRequest) returns (stream ServerEvent);
+}
+
+// --- ServerControl messages ---
+
+message StartRequest {
+  // Opcional: se true, força restart se já estiver ativo.
+  bool force = 1;
+}
+
+message StartResponse {
+  bool ok = 1;
+  string message = 2;
+  string service_name = 3;
+}
+
+message StopRequest {
+  // Opcional: timeout em segundos para graceful stop.
+  int32 timeout_seconds = 1;
+}
+
+message StopResponse {
+  bool ok = 1;
+  string message = 2;
+  string service_name = 3;
+}
+
+message RestartRequest {}
+
+message RestartResponse {
+  bool ok = 1;
+  string message = 2;
+  string service_name = 3;
+}
+
+message GetStatusRequest {}
+
+message StatusResponse {
+  bool service_active = 1;
+  string service_name = 2;
+  string stack = 3;            // "minecraft" | "terraria"
+  int32 player_count = 4;
+  repeated string players = 5;
+  int64 uptime_seconds = 6;
+  string hardware_tier = 7;
+  int64 memory_used_mb = 8;
+  int64 memory_max_mb = 9;
+  string version = 10;          // versão do agente
+  int32 max_players = 11;       // capacidade máxima do servidor (RCON "list")
+}
+
+message GetHealthRequest {}
+
+message HealthResponse {
+  bool healthy = 1;
+  string service_name = 2;
+  bool port_listening = 3;
+  int32 port = 4;
+  bool rcon_responsive = 5;
+  string message = 6;
+}
+
+message SendRconCommandRequest {
+  string command = 1;          // ex.: "say Hello from Discord"
+}
+
+message SendRconCommandResponse {
+  bool ok = 1;
+  string output = 2;           // resposta raw do RCON
+  string error = 3;
+}
+
+message StreamConsoleRequest {
+  int32 tail_lines = 1;        // quantas linhas de histórico mostrar antes do -f
+}
+
+message ConsoleLine {
+  string line = 1;
+  int64 timestamp_unix = 2;
+}
+
+// --- EventBus messages ---
+
+message SubscribeEventsRequest {
+  // Opcional: filtrar por tipos de evento. Vazio = todos.
+  repeated string event_types = 1;
+}
+
+message ServerEvent {
+  string event_id = 1;         // UUID único
+  string event_type = 2;       // "ServerStarted", "ServerStopped", "PlayerJoined", "PlayerLeft", "HealthWarning", "ConsoleOutput"
+  int64 timestamp_unix = 3;
+  string service_name = 4;
+  string stack = 5;
+  map<string, string> metadata = 6;  // dados específicos do evento (player name, reason, etc.)
+}

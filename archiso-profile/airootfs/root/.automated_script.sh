@@ -10,7 +10,7 @@ wait_for_network() {
     # On Arch live ISO, NetworkManager may take a moment to become active.
     if command -v systemctl >/dev/null 2>&1; then
         echo "Aguardando NetworkManager..."
-        for _i in $(seq 1 20); do
+        for _i in {1..20}; do
             if systemctl is-active --quiet NetworkManager; then
                 break
             fi
@@ -60,20 +60,32 @@ if ! curl -fsSL --connect-timeout 5 https://github.com/ViniciusLopes7/Crias-Serv
     exit 1
 fi
 
-pacman -S --noconfirm archlinux-keyring
+# Item S1 do plano: --needed evita reinstalar se já presente na ISO.
+pacman -S --needed --noconfirm archlinux-keyring
 
 echo "Clonando repositório (verifique assinatura/sha local se disponível)..."
-git clone --depth 1 --branch main https://github.com/ViniciusLopes7/Crias-Server || { echo "Falha no git clone" >&2; exit 1; }
+# Item supply chain: --branch main é volátil; recommendation é pinnar tag específica
+# via CRIAS_REPO_REF (default "main"). Para auditar release específica:
+#   CRIAS_REPO_REF=v1.0.0 ./install.sh
+CRIAS_REPO_REF="${CRIAS_REPO_REF:-main}"
+git clone --depth 1 --branch "$CRIAS_REPO_REF" https://github.com/ViniciusLopes7/Crias-Server || { echo "Falha no git clone" >&2; exit 1; }
 cd Crias-Server || exit 1
 
-SKIP_VERIFY="${SKIP_VERIFY:-1}"
+# Item supply chain: verificação GPG de commit. Default ON (SKIP_VERIFY=0 = verifica).
+# Para desativar (não recomendado): SKIP_VERIFY=1 ./install.sh
+SKIP_VERIFY="${SKIP_VERIFY:-0}"
 
 if [ "$SKIP_VERIFY" != "1" ]; then
     if ! git verify-commit HEAD >/dev/null 2>&1; then
-        echo "Aviso: commit nao assinado ou nao verificavel."
+        echo "AVISO: commit não assinado ou chave pública não importada." >&2
+        echo "Para importar chave do maintainer:" >&2
+        echo "  gpg --receive-keys <KEY_ID>" >&2
+        echo "Para pular verificação (NÃO RECOMENDADO):" >&2
+        echo "  SKIP_VERIFY=1" >&2
+        # Continua com warning em vez de abortar — mantém UX mas documenta risco.
     fi
 else
-    echo "Verificacao de assinatura de commit desativada por padrao (SKIP_VERIFY=1)."
+    echo "AVISO: verificação de assinatura desativada (SKIP_VERIFY=1)." >&2
 fi
 
 # Optional checksum validation for install.sh

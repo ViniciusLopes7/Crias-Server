@@ -1,8 +1,7 @@
 #!/bin/bash
 
 # Shared host-level tuning based on detected hardware.
-
-set -u
+# NOTA: não usar `set -u` em libs sourced — caller decide política de erro.
 
 set_scheduler_if_supported() {
     local device="$1"
@@ -44,7 +43,8 @@ apply_block_device_tuning() {
         return 0
     fi
 
-    rotational=$(cat "/sys/block/$device/queue/rotational" 2>/dev/null)
+    # read -r é mais eficiente que cat (sem fork/exec) para ler arquivo /sys pequeno.
+    read -r rotational < "/sys/block/$device/queue/rotational" 2>/dev/null || rotational=""
 
     if [[ "$device" == nvme* ]]; then
         set_readahead_kb "$device" 1024

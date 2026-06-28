@@ -7,10 +7,10 @@ Conflicts=terraria.service
 
 [Service]
 Type=simple
-User=__SERVER_USER__
-Group=__SERVER_USER__
-WorkingDirectory=__SERVER_DIR__
-ExecStart=__SERVER_DIR__/start-server.sh
+User=${SERVER_USER}
+Group=${SERVER_USER}
+WorkingDirectory=${SERVER_DIR}
+ExecStart=${SERVER_DIR}/start-server.sh
 # Prefer SIGINT to give the JVM a chance to shutdown cleanly.
 KillSignal=SIGINT
 TimeoutStopSec=120
@@ -18,23 +18,41 @@ Restart=on-failure
 RestartSec=15
 LimitNOFILE=65536
 LimitNPROC=4096
-MemoryMax=__MEMORY_MAX_MB__M
+MemoryMax=${MEMORY_MAX_MB}M
 MemorySwapMax=0
 Nice=-5
 IOSchedulingClass=best-effort
 IOSchedulingPriority=0
 OOMScoreAdjust=-800
+
+# --- Hardening systemd (itens S6/S7 + checklist 6.2) ---
+# Nota: Minecraft roda em JVM (JIT). Por isso:
+#   - MemoryDenyWriteExecute=yes NAO e aplicavel (quebra JIT).
+#   - SystemCallFilter=@system-service e mantido pois OpenJDK 17+ e compativel.
+#   - PrivateUsers=true NAO e aplicavel (pode quebrar bind de portas).
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 NoNewPrivileges=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
+ProtectKernelLogs=true
 ProtectControlGroups=true
+ProtectClock=yes
+ProtectHostname=yes
 RestrictSUIDSGID=true
 RestrictRealtime=true
+RestrictNamespaces=true
+RemoveIPC=yes
+LockPersonality=yes
+# Remove todas as capabilities — JVM nao precisa de nenhuma.
+CapabilityBoundingSet=
+AmbientCapabilities=
+# Filtra syscalls perigosas (ptrace, module, rawio, etc.)
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
 UMask=0027
-ReadWritePaths=__SERVER_DIR__
+ReadWritePaths=${SERVER_DIR}
 
 [Install]
 WantedBy=multi-user.target

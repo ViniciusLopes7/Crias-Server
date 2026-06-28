@@ -5,15 +5,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-safe_cleanup_dir() {
-    local target_dir="${1:-}"
-
-    if [ -z "$target_dir" ] || [ "$target_dir" = "/" ]; then
-        return 1
-    fi
-
-    rm -rf -- "$target_dir"
-}
+# Helper safe_cleanup_dir sourced from tests/lib/cleanup.sh (DRY)
+source "$ROOT_DIR/tests/lib/cleanup.sh"
 
 TMP_TEST_DIR="$(mktemp -d /tmp/crias-ci-dry-install-XXXXXX)"
 trap 'safe_cleanup_dir "$TMP_TEST_DIR" || true' EXIT

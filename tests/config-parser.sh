@@ -5,23 +5,26 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=/dev/null
 source "$REPO_ROOT/shared/lib/config-parser.sh"
 
-TMPDIR="$(mktemp -d)"
-CFG="$TMPDIR/test.env"
+# Renomeado de TMPDIR para TEST_TMPDIR para não sobrescrever a variável de
+# ambiente global $TMPDIR (que subprocessos consultam).
+TEST_TMPDIR="$(mktemp -d)"
+trap 'rm -rf -- "$TEST_TMPDIR" || true' EXIT
+CFG="$TEST_TMPDIR/test.env"
 
 cat > "$CFG" <<'EOF'
 # normal
 GOOD_VAL=hello
 QUOTE_VAL="a b c"
 # malicious attempts
-MALICIOUS=$(touch "$TMPDIR/pwned")
-BACKTICK=`touch "$TMPDIR/pwn2"`
+MALICIOUS=$(touch "$TEST_TMPDIR/pwned")
+BACKTICK=`touch "$TEST_TMPDIR/pwn2"`
 SHELL_EXP="$(echo pwn3)"
 EMPTY_LINE=
 INVALID LINE
 EOF
 
 # Ensure no pwn files exist before
-if [ -e "$TMPDIR/pwned" ] || [ -e "$TMPDIR/pwn2" ] || [ -e "$TMPDIR/pwn3" ]; then
+if [ -e "$TEST_TMPDIR/pwned" ] || [ -e "$TEST_TMPDIR/pwn2" ] || [ -e "$TEST_TMPDIR/pwn3" ]; then
   echo "Precondition failed: pwn files already exist"
   exit 2
 fi
@@ -41,9 +44,9 @@ if [ "${QUOTE_VAL:-}" != "a b c" ]; then
 fi
 
 # Ensure malicious commands did not run
-if [ -e "$TMPDIR/pwned" ] || [ -e "$TMPDIR/pwn2" ] || [ -e "$TMPDIR/pwn3" ]; then
+if [ -e "$TEST_TMPDIR/pwned" ] || [ -e "$TEST_TMPDIR/pwn2" ] || [ -e "$TEST_TMPDIR/pwn3" ]; then
   echo "FAIL: malicious command substitution executed"
-  ls -la "$TMPDIR"
+  ls -la $TEST_TMPDIR
   exit 1
 fi
 

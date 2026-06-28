@@ -1,1 +1,51 @@
+# Logs
 Logs/
+*.log
+
+# Python (discord-bot)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Go (discord-agent)
+discord-agent/build/
+discord-agent/vendor/
+discord-agent/internal/proto/*.pb.go
+*.exe
+*.test
+*.out
+
+# Env files
+.env
+.env.local
+.env.production
+*.local.env
+agent.local.yaml
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+.DS_Store
+
+# OS
+Thumbs.db
+
+# Artefatos de build locais
+out/
+release-assets/
+tmp/
+
+# Logs de QEMU gerados por tests/iso-qemu-boot.sh
+tests/fixtures/qemu-boot-last.log

@@ -1,0 +1,31 @@
+# discord-agent/agent.example.yaml
+#
+# Exemplo de configuração do crias-agent. Copie para /etc/crias/agent.yaml
+# e ajuste os valores. O install.sh da branch main gera este arquivo
+# automaticamente quando INSTALL_AGENT=true.
+#
+# IMPORTANTE: nunca commitar agent.yaml com secrets reais. Use este exemplo.
+
+agent:
+  bind_address: "127.0.0.1"  # 0.0.0.0 se exposto direto; recomendado 127.0.0.1 + Tailscale Funnel
+  port: 8473
+  auth_token: "CHANGE_ME_TO_RANDOM_64_HEX_CHARS"  # gerado pelo install.sh via openssl rand -hex 32
+
+server:
+  stack: "minecraft"  # "minecraft" | "terraria"
+  service_name: "minecraft"
+  manager_script: "/opt/minecraft-server/mc-manager.sh"
+  server_dir: "/opt/minecraft-server"
+  rcon:
+    enabled: true
+    host: "127.0.0.1"
+    port: 25575
+    password: "CHANGE_ME_FROM_SERVER_PROPERTIES"  # lido de server.properties pelo install.sh
+
+features:
+  auto_shutdown:
+    enabled: false  # default desligado; bot Discord pode ativar via comando
+    empty_minutes: 30  # desliga servidor se 0 players por 30 min
+  health_check:
+    interval_seconds: 300  # 5 min
+    passive: true  # só notifica, não reinicia automaticamente

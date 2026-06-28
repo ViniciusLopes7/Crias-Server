@@ -18,7 +18,10 @@ if [ -n "$bad_curls" ]; then
 fi
 
 echo "Checking for tar commands with stderr suppressed to /dev/null..."
-bad_tar=$(grep -RInE "${scan_excludes[@]}" --exclude-dir=tests "^[[:space:]]*[^#]*\btar\b[^#]*2>/dev/null" . || true)
+# Match only tar invocations (not URLs containing .tar.gz in arguments of other commands).
+# Pattern: line starts with optional whitespace, then `tar ` (with trailing space) as command,
+# followed by anything, then `2>/dev/null`.
+bad_tar=$(grep -RInE "${scan_excludes[@]}" --exclude-dir=tests "^[[:space:]]*[^#]*\btar [^#]*2>/dev/null" . || true)
 if [ -n "$bad_tar" ]; then
   echo "ERROR: Found tar commands redirecting stderr to /dev/null:" >&2
   printf "%s\n" "$bad_tar" >&2

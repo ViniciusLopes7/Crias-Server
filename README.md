@@ -4,241 +4,223 @@
     <img src="assets/images/branding/EscudoCrias.png" alt="Escudo Crias" width="220" />
 </p>
 
-Instalador modular para servidor de jogos em Arch Linux, com escolha inicial entre Minecraft e Terraria, tuning automatico por hardware e desativacao nao destrutiva do stack nao selecionado.
+Instalador modular para servidor de jogos em Arch Linux, com escolha inicial entre Minecraft e Terraria, tuning automático por hardware, hardening systemd, controle remoto via bot Discord e CI/CD completo (build ISO + binário Go + bot Python).
 
 ## Principais recursos
 
-- Escolha inicial de stack: Minecraft ou Terraria.
-- Estrutura modular por pasta: cada stack isolado.
-- Camada compartilhada com deteccao de hardware (CPU/RAM/disco).
-- Tuning automatico por tier (LOW/MID/HIGH) com override manual opcional.
-- Comando de recalibracao de hardware apos instalacao.
-- Limpeza nao destrutiva do stack oposto com confirmacao explicita.
-- Modo nao interativo e DRY_RUN para testes de instalacao em CI.
-
-## Estrutura do projeto
-
-```text
-.
-|-- install.sh
-|-- config.env
-|-- assets/
-|   `-- images/
-|       `-- branding/
-|           |-- EscudoCrias.png
-|           |-- TronoCrias.png
-|           `-- server-icon.png
-|-- shared/
-|   `-- lib/
-|       |-- common.sh
-|       |-- hardware-profile.sh
-|       |-- system-tuning.sh
-|       |-- minecraft-tuning.sh
-|       `-- terraria-tuning.sh
-|-- minecraft/
-|   |-- install.sh
-|   |-- start-server.sh
-|   |-- mc-manager.sh
-|   |-- backup-cron.sh
-|   |-- setup-cron.sh
-|   `-- minecraft.service
-|-- terraria/
-|   |-- install.sh
-|   |-- start-terraria.sh
-|   |-- tt-manager.sh
-|   |-- backup-cron.sh
-|   |-- setup-cron.sh
-|   `-- terraria.service
-`-- docs/
-    |-- README.md
-    |-- minecraft/
-    |-- terraria/
-    `-- shared/
-```
+- **Stack único por host**: Minecraft ou Terraria (systemd `Conflicts=` impede ambos rodando simultaneamente).
+- **Tuning automático por hardware**: detecta RAM/CPU/disco e aplica tier LOW/MID/HIGH (override manual via `FORCE_HARDWARE_TIER`).
+- **Hardening systemd**: `ProtectSystem=strict`, `NoNewPrivileges`, `CapabilityBoundingSet=`, `SystemCallFilter=@system-service` em todos os templates `.service`.
+- **Supply chain seguro**: SHA256 obrigatório em downloads, `mrpack-install` pinado em versão específica, `packages.lock` com versões mínimas de pacotes pacman.
+- **Backup com RCON save-lock** (Minecraft): `save-off` + `save-all` antes do `tar`, `save-on` depois.
+- **Controle remoto via Discord** (opcional): agente Go (`crias-agent`) + bot Python (`discord-bot`) com slash commands `/mc start|stop|status|players|say|console|health`.
+- **CI/CD**: 3 workflows GitHub Actions (build ISO + build agent + build bot), release automático com checksums e assinatura GPG opcional.
+- **Modo não-interativo e DRY_RUN** para testes em CI.
 
 ## Quick Start
 
-1. Ajuste configuracoes iniciais em config.env (opcional).
-2. Execute o instalador:
+### Instalação interativa (recomendado)
 
 ```bash
 chmod +x install.sh
 sudo ./install.sh
 ```
 
-3. No passo 1 do instalador, escolha:
-   - Minecraft
-   - Terraria
+O instalador pergunta:
+1. Qual stack instalar (Minecraft ou Terraria)
+2. Revisar opções globais (Tailscale, tuning de sistema, cleanup do stack oposto)
+3. Parâmetros específicos do jogo (porta, versão, modpack, etc.)
+4. Se quer instalar o agente de controle remoto (`crias-agent`)
 
-4. Aguarde instalacao de dependencias, stack escolhido e tuning automatico.
-
-Observacao: se voce usar diretorio customizado no install, os scripts de runtime seguem esse caminho automaticamente.
-
-## Execucao automatizada (CI / sem prompts)
-
-Para rodar em modo nao interativo:
+### Instalação não-interativa (CI/automação)
 
 ```bash
-sudo -E NON_INTERACTIVE=true ACCEPT_EULA=true SERVER_TYPE=minecraft ./install.sh
+sudo -E NON_INTERACTIVE=true \
+        ACCEPT_EULA=true \
+        SERVER_TYPE=minecraft \
+        INSTALL_AGENT=true \
+        ./install.sh
 ```
 
-Para validar pipeline sem alterar o host (dry-run):
+### Validação em DRY_RUN (sem alterar o host)
 
 ```bash
 sudo -E NON_INTERACTIVE=true DRY_RUN=true SERVER_TYPE=terraria ./install.sh
 ```
 
-Flags importantes no config.env:
+Flags importantes em `config.env`:
+- `NON_INTERACTIVE=true` — desativa prompts (exige `SERVER_TYPE` definido).
+- `DRY_RUN=true` — evita operações destrutivas (pacman/useradd/systemd/cleanup).
+- `ACCEPT_EULA=true` — necessário para Minecraft em modo não-interativo.
+- `INSTALL_AGENT=true` — instala o `crias-agent` (controle remoto via Discord).
 
-- NON_INTERACTIVE=true: desativa perguntas interativas.
-- DRY_RUN=true: evita operacoes destrutivas (pacman/useradd/systemd/cleanup).
-- Para Minecraft em modo nao interativo, aceite a EULA com ACCEPT_EULA=true.
-- O arquivo usa formato shell `CHAVE=valor`; use aspas quando o valor tiver espacos ou caracteres especiais.
+## Estrutura do projeto
 
-Downloads verificados (opcional):
-
-- MRPACK_SHA256: SHA256 esperado para o binario `mrpack-install` (opcional).
-- TERRARIA_SHA256: SHA256 esperado para o zip do servidor Terraria (opcional).
-- Forneca variaveis `*_SHA256` correspondentes para habilitar verificacao de checksum durante o instalador. Quando ausente, o instalador baixa e emite um aviso.
- - Per-mod SHA variables: `MOD_<NAME>_SHA256` (e.g. `MOD_CHUNKY_SHA256`) can be provided to verify individual QoL mod downloads.
-
-Guia operacional e de seguranca:
-
-- [docs/shared/SecurityAndOps.md](docs/shared/SecurityAndOps.md) cobre firewall, rotacao de logs, health checks e limite de MAC.
- 
-Banner:
-
-- Coloque um arquivo `banner.txt` ASCII em `assets/branding/banner.txt` ou `/etc/crias/banner.txt` para mostrar um banner personalizado no instalador. Uma amostra `assets/branding/banner.txt` foi adicionada ao repositório.
-
-Dica para CI: use CONFIG_FILE apontando para um arquivo temporario, sem precisar alterar o config.env versionado.
-
-## Atencao: desativacao do stack oposto
-
-Durante a instalacao, se existir stack oposto no host, o instalador apenas desativa os servicos associados e remove o autoload de aliases correspondente.
-
-Nao ha remoção de dados em `/opt` nem exclusao de usuario sem acao explicita fora do fluxo padrao.
+```
+.
+├── install.sh                  # Bootstrap principal
+├── config.env                  # Configuração global (PT-BR comentado)
+├── packages.lock               # Versões mínimas de pacotes pacman críticos
+├── shared/lib/                 # Bibliotecas bash compartilhadas
+│   ├── common.sh               #   log/warn/err, dry-run, is_virtualized, generate_token
+│   ├── config-parser.sh        #   Parser de .env com escape de $()` e aspas
+│   ├── downloads.sh            #   download_and_verify (SHA256 obrigatório, retry backoff)
+│   ├── hardware-profile.sh     #   Detecção de RAM/CPU/disco + tier
+│   ├── system-tuning.sh        #   zram, sysctl, scheduler, cpupower
+│   ├── stack-installer.sh      #   Framework de hooks para installers (DRY)
+│   ├── backup-engine.sh        #   Engine de backup com flock + retenção
+│   ├── setup-cron.sh           #   Timer systemd parametrizado
+│   ├── minecraft-tuning.sh     #   Tuning específico Minecraft
+│   └── terraria-tuning.sh      #   Tuning específico Terraria
+├── minecraft/                  # Stack Minecraft
+│   ├── install.sh              #   Installer (usa stack-installer.sh)
+│   ├── start-server.sh         #   Launcher runtime (JAVA_OPTS como array)
+│   ├── mc-manager.sh           #   CLI de gerenciamento
+│   ├── backup-cron.sh          #   Backup com RCON save-lock
+│   ├── setup-cron.sh           #   Wrapper para timer systemd
+│   └── minecraft.service       #   Template systemd (envsubst + hardening)
+├── terraria/                   # Stack Terraria (estrutura espelho do Minecraft)
+├── discord-agent/              # Agente Go (gRPC + RCON + eventos)
+├── discord-bot/                # Bot Python (discord.py 2.x + slash commands)
+├── archiso-profile/            # Perfil archiso para build de ISO bootável
+├── tests/                      # 22 testes bash + 36 testes Python + helpers
+└── .github/workflows/          # 3 workflows: build-iso, build-agent, build-bot
+```
 
 ## Tuning por hardware
 
-O sistema detecta automaticamente RAM, CPU e tipo de disco, e aplica um tier.
+O sistema detecta automaticamente RAM total, CPU cores e tipo de disco (HDD/SSD/NVME), e aplica um tier que afeta tanto parâmetros do jogo quanto limites de serviço systemd (`MemoryMax`).
 
-Esse tuning afeta tanto os parametros de jogo quanto limites de servico systemd (MemoryMax) na instalacao.
+| Tier | Perfil alvo | Comportamento típico |
+|------|-------------|----------------------|
+| LOW  | Máquinas limitadas (≤3 GB RAM ou ≤2 cores) | Menos players, distâncias menores, heap reduzido |
+| MID  | Máquinas intermediárias (≤12 GB ou ≤6 cores) | Balanceado para estabilidade e desempenho |
+| HIGH | Máquinas robustas (>12 GB e >6 cores) | Mais players, distâncias maiores, parâmetros agressivos |
 
-| Tier | Perfil alvo | Exemplo de comportamento |
-|------|-------------|--------------------------|
-| LOW  | Maquinas limitadas | Menos players, distancias menores, heap reduzido |
-| MID  | Maquinas intermediarias | Balanceado para estabilidade e desempenho |
-| HIGH | Maquinas fortes | Mais players, distancias maiores, parametros mais agressivos |
-
-### Override manual de tier
-
-No config.env:
-
+**Override manual** em `config.env`:
 ```bash
-FORCE_HARDWARE_TIER="HIGH"
+FORCE_HARDWARE_TIER="HIGH"   # LOW, MID, HIGH ou vazio para auto
 ```
 
-Valores aceitos: LOW, MID, HIGH ou vazio para auto.
-
-## Recalibracao apos instalacao
-
-Minecraft:
-
+**Recalibração após mudança de hardware** (sem reinstalar):
 ```bash
 sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware
-sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware HIGH
+sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware HIGH  # forçar tier
 ```
 
-Terraria:
+## Backup
+
+Cada stack tem script de backup imediato + setup de timer systemd:
 
 ```bash
-sudo /opt/terraria-server/tt-manager.sh reconfigure-hardware
-sudo /opt/terraria-server/tt-manager.sh reconfigure-hardware LOW
+# Backup manual agora
+sudo /opt/minecraft-server/mc-manager.sh backup
+sudo /opt/terraria-server/tt-manager.sh backup
+
+# Configurar timer systemd (pergunta frequência: diário, 2x/dia, 4h, semanal)
+sudo /opt/minecraft-server/setup-cron.sh
+sudo /opt/terraria-server/setup-cron.sh
 ```
 
-## Comandos principais
+- Retenção dinâmica baseada no tier (LOW=5 dias, MID=7, HIGH=10).
+- Compressão zstd com ionice (baixa prioridade de I/O).
+- Lock via `flock` (previne backups concorrentes).
+- Minecraft com RCON: `save-off` + `save-all` antes, `save-on` depois.
 
-Minecraft:
+Restore: veja [docs/restore.md](docs/restore.md).
 
-- sudo systemctl start minecraft
-- sudo /opt/minecraft-server/mc-manager.sh status
-- sudo /opt/minecraft-server/mc-manager.sh backup
+## Controle Remoto via Discord (opcional)
 
-Terraria:
+Quando `INSTALL_AGENT=true`, o `install.sh` instala:
+1. **`crias-agent`** — binário Go que escuta em `localhost:8473` (hardening: `MemoryMax=32M`, `CPUQuota=10%`, `MemoryDenyWriteExecute=yes`)
+2. **`crias-bot`** — bot Python (discord.py 2.x) para deploy no Railway
 
-- sudo systemctl start terraria
-- sudo /opt/terraria-server/tt-manager.sh status
-- sudo /opt/terraria-server/tt-manager.sh backup
-
-## Aliases de comandos
-
-Durante a instalacao, cada stack gera um arquivo de aliases e o instalador configura o autoload automaticamente via `/etc/profile.d/crias-server.sh`:
-
-- /opt/minecraft-server/comandos.sh
-- /opt/terraria-server/comandos.sh
-
-As entradas sao idempotentes (nao duplicam linhas em reinstalacoes).
-
-Para usar imediatamente na sessao atual:
-
-```bash
-source /etc/profile.d/crias-server.sh
+```
+┌──────────────────────┐
+│   Discord (Railway)  │  discord.py + slash commands
+└──────────┬───────────┘
+           │ gRPC over HTTPS (Tailscale Funnel)
+           ▼
+┌──────────────────────┐
+│  crias-agent (Go)    │  localhost:8473 no servidor
+└──────────┬───────────┘
+           │ Delegação (subprocess)
+           ▼
+   sudo systemctl start/stop/restart minecraft
+   sudo -u minecraft mc-manager.sh backup
+   mcrcon say/list/save-*
 ```
 
-Exemplos rapidos:
+### Slash Commands disponíveis no Discord
 
-- mcstart, mcstatus, mclogs, mcbackup, mcreconfig
-- ttstart, ttstatus, ttlogs, ttbackup, ttreconfig
+| Comando | Permissão | Descrição |
+|---------|-----------|-----------|
+| `/mc start` | Admin | Liga o servidor |
+| `/mc stop` | Admin | Desliga graceful |
+| `/mc restart` | Admin | Reinicia |
+| `/mc status` | Todos | Online/offline, players, RAM, tier |
+| `/mc players` | Todos | Lista quem está online |
+| `/mc say <msg>` | Mod+ | Mensagem no chat do jogo via RCON |
+| `/mc console` | Admin | Toggle stream de console no canal #console |
+| `/mc health` | Admin | Health check (porta + RCON) |
 
-## Gerenciamento de Serviços
+Veja:
+- [discord-agent/README.md](discord-agent/README.md) — Agente Go (gRPC, RCON, eventos)
+- [discord-bot/README.md](discord-bot/README.md) — Bot Python (discord.py, slash commands)
 
-Cada stack (Minecraft e Terraria) cria um arquivo systemd em `/etc/systemd/system/`:
+### Tailscale Funnel
 
-- `minecraft.service`
-- `terraria.service`
+Após instalar Tailscale no host:
+```bash
+sudo tailscale up
+sudo tailscale funnel 8473   # expõe https://<host>.<tailnet>.ts.net
+```
 
-### Comportamento de Conflitos
+O bot Discord conecta neste endpoint HTTPS sem precisar estar na VPN.
 
-Os dois servicos sao marcados com a diretiva `Conflicts=` no systemd, o que significa:
+## CI/CD
 
-- Apenas **um** stack pode rodar simultaneamente no mesmo host
-- Se tentar iniciar um stack enquanto o outro está ativo, o systemd desativará o conflitante automaticamente
+| Workflow | Arquivo | Função |
+|----------|---------|--------|
+| Build ISO | [`.github/workflows/build-iso.yml`](.github/workflows/build-iso.yml) | Lint + testes shell + build ISO + QEMU boot + release (`crias-server-full.zip`, `crias-server-slim.zip`, ISO) |
+| Build Agent | [`.github/workflows/build-agent.yml`](.github/workflows/build-agent.yml) | Build Go (amd64 + arm64) + testes `-race` + release em tag `agent-*` |
+| Build Bot | [`.github/workflows/build-bot.yml`](.github/workflows/build-bot.yml) | Lint ruff + testes pytest + Docker build |
 
-Isso é intencional e evita uso duplicado de recursos (RAM, CPU, disco). Para executar ambos:
+**Releases automáticas:**
+- `crias-server-slim.zip` — repo sem `archiso-profile/`, `docs/`, `.github/workflows/` (para quem já tem ISO)
+- `crias-server-full.zip` — repo completo
+- ISO bootável — para install fresh em bare-metal/VM
+- `crias-agent-linux-amd64` + `arm64` — binários do agente (tag `agent-*`)
 
-1. Parar o stack atual: `sudo systemctl stop minecraft` ou `sudo systemctl stop terraria`
-2. Iniciar o novo stack: `sudo systemctl start terraria` ou `sudo systemctl start minecraft`
-
-Modificar este comportamento requer edição manual dos arquivos .service e é **não recomendado** para ambientes padrão.
-
-## Documentacao
-
-Consulte a documentação canônica em [docs/README.md](docs/README.md) para guias detalhados (instalação, operação, tuning e runbooks).
-
-## CI no GitHub Actions
-
-O workflow em .github/workflows/build-iso.yml agora roda:
-
-- lint de shell scripts
-- testes rapidos de scripts (sintaxe + parser de log QEMU com fixtures)
-- testes de contrato do instalador (falha esperada para config invalida e precedencia de variaveis)
-- smoke tests em container Arch Linux
-- dry-run de instalacao completa (Minecraft e Terraria) em container Arch Linux
-- build da ISO apenas se os testes passarem
-
-O repositório também inclui `tests/minecraft-tuning-test.sh` para validar alocação de memória e outros contratos shell em `tests/`.
-
-## Testes locais rapidos
-
-Para validar regressao de scripts sem buildar ISO:
+## Testes
 
 ```bash
+# Bateria completa (22 testes bash + 36 testes Python)
+bash tests/run-all.sh
+
+# Apenas bash rápido
 bash tests/quick-script-tests.sh
+
+# Testes que requerem ISO construída
+ISO_PATH=/path/to/crias.iso bash tests/run-all.sh
 ```
 
-Para validar contratos do instalador no ambiente Arch:
+## Documentação
 
-```bash
-sudo bash tests/install-contracts.sh
-sudo bash tests/arch-dry-install.sh
-```
+- [docs/README.md](docs/README.md) — Índice central de toda a documentação
+- [docs/tutorial.md](docs/tutorial.md) — Tutorial passo-a-passo de operação
+- [docs/minecraft/README.md](docs/minecraft/README.md) — Stack Minecraft + mods
+- [docs/terraria/README.md](docs/terraria/README.md) — Stack Terraria
+- [docs/tailscale.md](docs/tailscale.md) — Conexão via Tailscale (VPN + Funnel)
+- [docs/restore.md](docs/restore.md) — Restore de backups
+- [docs/security.md](docs/security.md) — Firewall, logs, health checks, MAC
+- [docs/CHANGELOG.md](docs/CHANGELOG.md) — Histórico de mudanças por versão
+- [ROADMAP.md](ROADMAP.md) — Status de implementação e próximos passos
+
+## Atenção: desativação do stack oposto
+
+Durante a instalação, se existir stack oposto no host, o instalador apenas **desativa** os serviços associados e remove o autoload de aliases — **não remove dados** em `/opt` nem exclui usuários. Essas operações destrutivas exigiriam comando opt-in separado com confirmação explícita.
+
+## Licença
+
+MIT — veja [LICENSE](LICENSE) (ou o cabeçalho dos arquivos).

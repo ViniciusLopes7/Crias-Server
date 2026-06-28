@@ -40,13 +40,21 @@ for tier in LOW MID HIGH; do
 
 done
 
-echo "[arch-smoke] Verificando placeholders de service..."
-grep -q "__SERVER_USER__" minecraft/minecraft.service
-grep -q "__SERVER_DIR__" minecraft/minecraft.service
-grep -q "__MEMORY_MAX_MB__" minecraft/minecraft.service
-grep -q "__SERVER_USER__" terraria/terraria.service
-grep -q "__SERVER_DIR__" terraria/terraria.service
-grep -q "__MEMORY_MAX_MB__" terraria/terraria.service
+echo "[arch-smoke] Verificando placeholders de service (envsubst syntax)..."
+# Após refactoring da Fase 0, templates .service usam ${VAR} (envsubst)
+# em vez de __VAR__ (sed). Validamos que as variáveis esperadas existem.
+grep -q '${SERVER_USER}' minecraft/minecraft.service
+grep -q '${SERVER_DIR}' minecraft/minecraft.service
+grep -q '${MEMORY_MAX_MB}' minecraft/minecraft.service
+grep -q '${SERVER_USER}' terraria/terraria.service
+grep -q '${SERVER_DIR}' terraria/terraria.service
+grep -q '${MEMORY_MAX_MB}' terraria/terraria.service
+
+# E que NÃO restaram placeholders legados __VAR__.
+if grep -q '__[A-Z_]*__' minecraft/minecraft.service terraria/terraria.service; then
+    echo "Placeholder legado __VAR__ ainda presente nos templates .service" >&2
+    exit 1
+fi
 
 echo "[arch-smoke] Verificando ausencia de arquivos legados na raiz..."
 for legacy in start-server.sh mc-manager.sh backup-cron.sh setup-cron.sh minecraft.service; do
