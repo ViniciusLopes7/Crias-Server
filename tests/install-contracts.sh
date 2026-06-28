@@ -21,7 +21,9 @@ assert_expected_failure() {
     local scenario="$3"
 
     set +e
-    CONFIG_FILE="$config_file" bash ./install.sh > "$log_file" 2>&1
+    # env -u limpa variaveis que podem vazar de testes anteriores
+    # (apply_config_with_env_precedence da prioridade ao ambiente sobre config)
+    env -u ACCEPT_EULA -u SERVER_TYPE CONFIG_FILE="$config_file" bash ./install.sh > "$log_file" 2>&1
     local status=$?
     set -e
 
@@ -184,7 +186,8 @@ ACCEPT_EULA="false"
 EOF
 
     set +e
-    CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1
+    # env -u ACCEPT_EULA garante que apenas o config file (com false) seja usado
+    env -u ACCEPT_EULA CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1
     local status=$?
     set -e
 
@@ -224,7 +227,7 @@ ACCEPT_EULA="true"
 EOF
 
     set +e
-    CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1
+    env -u ACCEPT_EULA CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1
     local status=$?
     set -e
 
@@ -261,7 +264,7 @@ TERRARIA_DOWNLOAD_URL="https://example.invalid/terraria.zip"
 EOF
 
     set +e
-CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1
+    env -u ACCEPT_EULA CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1
     local status=$?
     set -e
 
