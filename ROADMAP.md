@@ -18,8 +18,8 @@
 | **Bot Discord** (`discord-bot/`) | ✅ | discord.py 2.x, slash commands `/mc start|stop|restart|status|players|say|console|health`, `asyncio.Lock` em `connect()`, backoff exponencial 1s→60s, cache de status 15s |
 | **Eventos push** | ✅ | `ServerStarted`/`Stopped`, `PlayerJoined`/`Left`, `HealthWarning` → bot posta em `#controle` |
 | **Streaming console** | ✅ | `StreamConsole` RPC (journalctl -f) → bot posta em `#console` com buffer 2s + chunks 1800 chars |
-| **CI/CD** | ✅ | 3 workflows: `build-iso.yml` (lint + testes + ISO + QEMU + release), `build-agent.yml` (Go + race + release `agent-*`), `build-bot.yml` (Python + ruff + Docker) |
-| **Releases** | ✅ | `crias-server-full.zip`, `crias-server-slim.zip`, ISO bootável, `crias-agent-linux-{amd64,arm64}` |
+| **CI/CD** | ✅ | Workflow único `ci.yml` com 9 jobs paralelos + release unificado (ISO + slim.zip + full.zip + agent binaries + sha256sums) |
+| **Releases** | ✅ | Release unificado em tag `v*`: ISO + `crias-server-full.zip` + `crias-server-slim.zip` + `crias-agent-linux-{amd64,arm64}` + `sha256sums.txt` (+ GPG sig opcional) |
 | **Testes** | ✅ | 22 testes bash + 36 testes Python + 3 testes Go (race-safe) |
 
 ### Decisões arquiteturais finais
@@ -56,8 +56,8 @@
 - [ ] **`/mc autoshutdown on/off`** — ativar feature do agente via slash command (já implementado no agente, falta o comando no bot)
 - [ ] **`/mc logs [n]`** — ultimas N linhas via `StreamConsole` com tail
 - [ ] **Cache Go modules no CI** — `actions/cache` com `~/go/pkg/mod` para acelerar builds
-- [ ] **Cache pacman no CI** — `build-iso.yml` não cacheia packages.x86_64 entre runs
-- [ ] **Scheduled run semanal** — `build-bot.yml` e `build-agent.yml` com `schedule: cron: '0 3 * * 1'` para capturar regressões em deps
+- [ ] **Cache pacman no CI** — `ci.yml` job `build-iso` não cacheia packages.x86_64 entre runs
+- [ ] **Scheduled run semanal** — adicionar `schedule: cron: '0 3 * * 1'` ao `ci.yml` para capturar regressões em deps
 
 ### Baixa prioridade
 

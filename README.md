@@ -14,7 +14,7 @@ Instalador modular para servidor de jogos em Arch Linux, com escolha inicial ent
 - **Supply chain seguro**: SHA256 obrigatório em downloads, `mrpack-install` pinado em versão específica, `packages.lock` com versões mínimas de pacotes pacman.
 - **Backup com RCON save-lock** (Minecraft): `save-off` + `save-all` antes do `tar`, `save-on` depois.
 - **Controle remoto via Discord** (opcional): agente Go (`crias-agent`) + bot Python (`discord-bot`) com slash commands `/mc start|stop|status|players|say|console|health`.
-- **CI/CD**: 3 workflows GitHub Actions (build ISO + build agent + build bot), release automático com checksums e assinatura GPG opcional.
+- **CI/CD**: workflow único `ci.yml` com 11 jobs paralelos (lint + test + build), release consolidada com ISO + binários Go + Docker bot + source archives + checksums + assinatura GPG opcional.
 - **Modo não-interativo e DRY_RUN** para testes em CI.
 
 ## Quick Start
@@ -84,7 +84,7 @@ Flags importantes em `config.env`:
 ├── discord-bot/                # Bot Python (discord.py 2.x + slash commands)
 ├── archiso-profile/            # Perfil archiso para build de ISO bootável
 ├── tests/                      # 22 testes bash + 36 testes Python + helpers
-└── .github/workflows/          # 3 workflows: build-iso, build-agent, build-bot
+└── .github/workflows/          # Workflow único: ci.yml (11 jobs paralelos + release)
 ```
 
 ## Tuning por hardware
@@ -180,17 +180,42 @@ O bot Discord conecta neste endpoint HTTPS sem precisar estar na VPN.
 
 ## CI/CD
 
-| Workflow | Arquivo | Função |
-|----------|---------|--------|
-| Build ISO | [`.github/workflows/build-iso.yml`](.github/workflows/build-iso.yml) | Lint + testes shell + build ISO + QEMU boot + release (`crias-server-full.zip`, `crias-server-slim.zip`, ISO) |
-| Build Agent | [`.github/workflows/build-agent.yml`](.github/workflows/build-agent.yml) | Build Go (amd64 + arm64) + testes `-race` + release em tag `agent-*` |
-| Build Bot | [`.github/workflows/build-bot.yml`](.github/workflows/build-bot.yml) | Lint ruff + testes pytest + Docker build |
+Workflow único: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — 11 jobs em paralelo + release consolidada.
 
-**Releases automáticas:**
-- `crias-server-slim.zip` — repo sem `archiso-profile/`, `docs/`, `.github/workflows/` (para quem já tem ISO)
+### Jobs de lint + test (paralelos, rodam em todo push/PR)
+
+| Job | Função | Runner |
+|-----|--------|--------|
+| `lint-shell` | Shellcheck (suprime falsos positivos SC1091/SC2034/SC2016) | ubuntu-22.04 |
+| `lint-go` | `go vet` + `gofmt -l` check (após `go mod tidy` + proto) | ubuntu-22.04 |
+| `lint-python` | `ruff check` + `ruff format --check` | ubuntu-22.04 |
+| `test-shell` | Quick tests + contracts + static-audit + stack-installer | ubuntu-22.04 |
+| `test-shell-arch` | `arch-smoke` + `arch-dry-install` (container Arch) | archlinux:base-devel |
+| `test-go` | `go test -race` (após `go mod tidy` + proto) | ubuntu-22.04 |
+| `test-python` | `pytest` em Python 3.11 e 3.12 (matrix) | ubuntu-22.04 |
+
+### Jobs de build (paralelos, só em push to main ou tag `v*`)
+
+| Job | Função | Runner |
+|-----|--------|--------|
+| `build-iso` | `mkarchiso` (ISO bootável) — depende de lint-shell + test-shell + test-shell-arch | archlinux:base-devel |
+| `build-agent` | Build Go linux/amd64 + linux/arm64 (matrix) — depende de lint-go + test-go | ubuntu-22.04 |
+| `build-bot` | Docker build smoke — depende de lint-python + test-python | ubuntu-22.04 |
+
+### Job de release (consolida todos artefatos)
+
+| Job | Função |
+|-----|--------|
+| `release` | Baixa todos os artefatos dos 3 builds e cria **uma release única** com tudo |
+
+**Release consolidada** (em tag `v*.*.*` ou `workflow_dispatch` com `create_release=true`):
+- `crias-server-*.iso` — ISO bootável
 - `crias-server-full.zip` — repo completo
-- ISO bootável — para install fresh em bare-metal/VM
-- `crias-agent-linux-amd64` + `arm64` — binários do agente (tag `agent-*`)
+- `crias-server-slim.zip` — repo sem `archiso-profile/`, `docs/`, `.github/workflows/` (para quem já tem ISO)
+- `crias-agent-linux-amd64` + `arm64` + `.sha256` — binários do agente Go
+- `crias-bot-image.tar` — Docker image do bot
+- `sha256sums.txt` — checksums de todos os artefatos
+- `sha256sums.txt.sig` — assinatura GPG (se `GPG_PRIVATE_KEY` secret configurado)
 
 ## Testes
 

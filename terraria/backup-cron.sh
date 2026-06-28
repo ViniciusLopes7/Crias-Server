@@ -32,6 +32,8 @@ fi
 
 # ---------------------------------------------------------------------------
 # Configuração do backup para Terraria.
+# Variáveis lidas por backup_run() em shared/lib/backup-engine.sh.
+# shellcheck disable=SC2034  # BACKUP_STACK_NAME, BACKUP_DIRS usadas por backup-engine.sh
 # ---------------------------------------------------------------------------
 BACKUP_SERVER_DIR="${SERVER_DIR:-$DEFAULT_SERVER_DIR}"
 BACKUP_STACK_NAME="terraria"

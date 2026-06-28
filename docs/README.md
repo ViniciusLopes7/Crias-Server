@@ -44,11 +44,33 @@
 
 ## CI/CD
 
-| Workflow | Arquivo | Função |
-|----------|---------|--------|
-| Build ISO | [../.github/workflows/build-iso.yml](../.github/workflows/build-iso.yml) | Lint + testes shell + build ISO + QEMU + release (`full.zip`, `slim.zip`, ISO) |
-| Build Agent | [../.github/workflows/build-agent.yml](../.github/workflows/build-agent.yml) | Build Go (amd64 + arm64) + testes `-race` + release em tag `agent-*` |
-| Build Bot | [../.github/workflows/build-bot.yml](../.github/workflows/build-bot.yml) | Lint ruff + testes pytest + Docker build |
+Workflow único: [../.github/workflows/ci.yml](../.github/workflows/ci.yml) — 11 jobs em paralelo + release consolidada.
+
+### Lint + Test (paralelos, rodam em todo push/PR)
+
+| Job | Função |
+|-----|--------|
+| `lint-shell` | Shellcheck (suprime falsos positivos SC1091/SC2034/SC2016) |
+| `lint-go` | `go vet` + `gofmt -l` (após `go mod tidy` + proto) |
+| `lint-python` | `ruff check` + `ruff format --check` |
+| `test-shell` | Quick tests + contracts + static-audit + stack-installer |
+| `test-shell-arch` | `arch-smoke` + `arch-dry-install` (Arch container) |
+| `test-go` | `go test -race` (após `go mod tidy` + proto) |
+| `test-python` | `pytest` em Python 3.11 e 3.12 (matrix) |
+
+### Build (paralelos, só em push to main ou tag `v*`)
+
+| Job | Função |
+|-----|--------|
+| `build-iso` | `mkarchiso` (ISO bootável) |
+| `build-agent` | Build Go linux/amd64 + linux/arm64 (matrix) |
+| `build-bot` | Docker build smoke |
+
+### Release (consolida todos artefatos)
+
+| Job | Função |
+|-----|--------|
+| `release` | Em tag `v*.*.*` ou `workflow_dispatch` com `create_release=true`: cria UMA release com ISO + binários Go + Docker bot + source archives + checksums + assinatura GPG opcional |
 
 ## Testes
 

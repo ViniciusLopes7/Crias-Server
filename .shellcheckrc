@@ -1,0 +1,15 @@
+# .shellcheckrc
+#
+# Configuração do shellcheck para o repositório Crias-Server.
+#
+# SC2034: "Variable appears unused. Verify use (or export if used externally)."
+#   Falsos positivos em scripts que definem variáveis usadas via `source`
+#   por outros scripts (ex: STACK_NAME, SETUP_CRON_* em shared/lib/).
+#
+# SC2164: "Use cd ... || exit in case cd fails."
+#   Já tratado por `set -euo pipefail` no topo de cada script.
+
+disable=SC2034,SC2164
+
+# Seguir sources (comentário # shellcheck source= nos arquivos).
+external-sources=true

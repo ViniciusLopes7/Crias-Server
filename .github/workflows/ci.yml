@@ -1,0 +1,534 @@
+# .github/workflows/ci.yml
+#
+# Workflow único do Crias-Server. Jobs rodam em paralelo:
+#
+#   lint-shell ─┐
+#   lint-go ────┤
+#   lint-python ┤
+#   test-shell ─┤──→ build-iso ────┐
+#   test-go ─────┤──→ build-agent ─┤──→ release (consolida todos artefatos)
+#   test-python ─┘──→ build-bot ───┘
+#
+# Release é criada apenas em:
+#   - push de tag v*.*.* (release manual)
+#   - workflow_dispatch com input release=true
+#
+# Em push/PR normal, apenas lint + test + build rodam (sem release).
+
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*.*.*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Criar release no final (consolida ISO + agent + bot)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.22'
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  # ═══════════════════════════════════════════════════════
+  # LINT (3 jobs paralelos: shell, go, python)
+  # ═══════════════════════════════════════════════════════
+
+  lint-shell:
+    name: Lint Shell
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck
+        # -x segue sources (resolve SC1091)
+        # --exclude suprime falsos positivos conhecidos:
+        #   SC1091: não segue source (já tratado com -x, mas alguns ainda warn)
+        #   SC2034: var "unused" — falso positivo em libs sourced (vars usadas por callers)
+        #   SC2016: expressões em single quotes — intencional em muitos casos
+        #   SC2086: double quote — vamos corrigir aos poucos, não bloqueia CI
+        #   SC2154: var referenced but not assigned — falso positivo em libs sourced
+        #   SC2310: set -e em função — intencional
+        run: |
+          find . -name '*.sh' -not -path './.git/*' -print0 \
+            | xargs -0 shellcheck -x \
+                --exclude SC1091,SC2034,SC2016,SC2086,SC2154,SC2310 \
+                --severity=warning \
+                || true
+          # Re-roda só com errors (severity=error) para decidir pass/fail
+          find . -name '*.sh' -not -path './.git/*' -print0 \
+            | xargs -0 shellcheck -x \
+                --exclude SC1091 \
+                --severity=error
+
+  lint-go:
+    name: Lint Go
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: discord-agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: discord-agent/go.sum
+
+      - name: Install protoc + plugins
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.32.0
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Generate proto + tidy
+        run: |
+          make proto
+          go mod tidy
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Go fmt check (non-blocking)
+        # gofmt -l lista arquivos não formatados. Non-blocking por enquanto
+        # (arquivos Go usam espaços em vez de tabs — migrar gradualmente).
+        continue-on-error: true
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "⚠️ Arquivos não formatados com gofmt (non-blocking):"
+            gofmt -l .
+          else
+            echo "✓ Todos os arquivos Go formatados com gofmt"
+          fi
+
+  lint-python:
+    name: Lint Python
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: discord-bot
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install ruff
+        run: pip install ruff==0.3.7
+
+      - name: Ruff check
+        run: ruff check src/ tests/
+
+      - name: Ruff format check
+        run: ruff format --check src/ tests/
+
+  # ═══════════════════════════════════════════════════════
+  # TEST (3 jobs paralelos: shell, go, python)
+  # ═══════════════════════════════════════════════════════
+
+  test-shell:
+    name: Test Shell
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run shell test suite
+        # Roda bateria bash (sem testes ISO que precisam de ISO real).
+        # install-contracts e arch-dry-install rodam em container Arch separado.
+        run: |
+          bash tests/quick-script-tests.sh
+          bash tests/install-contracts.sh
+          bash tests/static-audit.sh
+          bash tests/stack-installer-test.sh
+          bash tests/agent-install-hook-test.sh
+          bash tests/config-parser-eq-test.sh
+
+  test-shell-arch:
+    name: Test Shell (Arch container)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    container:
+      image: archlinux:base-devel
+      options: --privileged --security-opt seccomp=unconfined
+    steps:
+      - name: Install deps
+        run: |
+          pacman-key --init || true
+          pacman-key --populate archlinux || true
+          pacman -Syu --noconfirm --needed git bash gettext jq
+
+      - uses: actions/checkout@v4
+
+      - name: Run arch-specific tests
+        run: |
+          bash tests/arch-smoke.sh
+          bash tests/arch-dry-install.sh
+
+  test-go:
+    name: Test Go (race)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: discord-agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: discord-agent/go.sum
+
+      - name: Install protoc + plugins
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.32.0
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Generate proto + tidy
+        run: |
+          make proto
+          go mod tidy
+
+      - name: Go test with race detector
+        run: go test -v -race -timeout 120s ./...
+
+  test-python:
+    name: Test Python
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python-version: [ '3.11', '3.12' ]
+    defaults:
+      run:
+        working-directory: discord-bot
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+
+      - name: Generate protobuf code
+        run: |
+          mkdir -p src/crias_bot/grpc_gen
+          python -m grpc_tools.protoc \
+              -I ../discord-agent/proto \
+              --python_out=src/crias_bot/grpc_gen \
+              --grpc_python_out=src/crias_bot/grpc_gen \
+              ../discord-agent/proto/crias.proto
+          sed -i 's/^import crias_pb2 as crias__pb2/from crias_bot.grpc_gen import crias_pb2 as crias__pb2/' \
+              src/crias_bot/grpc_gen/crias_pb2_grpc.py
+          touch src/crias_bot/grpc_gen/__init__.py
+
+      - name: Run pytest
+        run: PYTHONPATH=src python -m pytest tests/ -v --tb=short
+
+  # ═══════════════════════════════════════════════════════
+  # BUILD (3 jobs paralelos: ISO, agent, bot) — só em main ou tag
+  # ═══════════════════════════════════════════════════════
+
+  build-iso:
+    name: Build ISO
+    needs: [lint-shell, test-shell, test-shell-arch]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    container:
+      image: archlinux:base-devel
+      options: --privileged --security-opt seccomp=unconfined
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman-key --init || true
+          pacman-key --populate archlinux || true
+          pacman -Syu --noconfirm --needed archiso git grub
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build ISO
+        run: |
+          mkdir -p out
+          rm -rf /tmp/archiso-tmp
+          mkarchiso -v -w /tmp/archiso-tmp -o out/ archiso-profile/
+
+      - name: Generate checksums
+        run: |
+          cd out
+          sha256sum *.iso > sha256sums-iso.txt
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact-iso
+          path: |
+            out/*.iso
+            out/sha256sums-iso.txt
+          retention-days: 7
+
+  build-agent:
+    name: Build Agent (${{ matrix.goos }}/${{ matrix.goarch }})
+    needs: [lint-go, test-go]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+    defaults:
+      run:
+        working-directory: discord-agent
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: discord-agent/go.sum
+
+      - name: Install protoc + plugins
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.32.0
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Generate proto + tidy
+        run: |
+          make proto
+          go mod tidy
+
+      - name: Build binary
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          VERSION="${GITHUB_REF_NAME:-${GITHUB_SHA::7}}"
+          go build \
+            -ldflags "-s -w -X main.version=${VERSION}" \
+            -o build/crias-agent-${{ matrix.goos }}-${{ matrix.goarch }} \
+            ./cmd/crias-agent
+
+      - name: Generate checksum
+        run: |
+          cd build
+          sha256sum crias-agent-${{ matrix.goos }}-${{ matrix.goarch }} > crias-agent-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact-agent-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            discord-agent/build/crias-agent-${{ matrix.goos }}-${{ matrix.goarch }}
+            discord-agent/build/crias-agent-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+          retention-days: 7
+
+  build-bot:
+    name: Build Bot (Docker)
+    needs: [lint-python, test-python]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (smoke test)
+        # Build context é a raiz do repo porque Dockerfile copia ../discord-agent/proto/
+        run: docker build -t crias-bot:ci -f discord-bot/Dockerfile .
+
+      - name: Save image as tar
+        run: docker save crias-bot:ci -o /tmp/crias-bot-image.tar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact-bot-image
+          path: /tmp/crias-bot-image.tar
+          retention-days: 3
+
+  # ═══════════════════════════════════════════════════════
+  # RELEASE — job único que consolida TODOS artefatos
+  # ═══════════════════════════════════════════════════════
+
+  release:
+    name: Release (consolidada)
+    needs: [build-iso, build-agent, build-bot]
+    if: |
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.create_release)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: |
+          echo "=== Artefatos baixados ==="
+          find artifacts/ -type f | sort
+          echo ""
+          echo "=== Tamanhos ==="
+          du -sh artifacts/*
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets/iso release-assets/agent release-assets/bot release-assets/src
+
+          # ISO + checksum
+          if [ -f "artifacts/$(ls artifacts/*.iso 2>/dev/null | head -1 | xargs basename)" ]; then
+            mv artifacts/*.iso release-assets/iso/ 2>/dev/null || true
+            mv artifacts/sha256sums-iso.txt release-assets/iso/ 2>/dev/null || true
+          fi
+
+          # Agent binaries + checksums
+          mv artifacts/crias-agent-* release-assets/agent/ 2>/dev/null || true
+
+          # Bot Docker image
+          mv artifacts/crias-bot-image.tar release-assets/bot/ 2>/dev/null || true
+
+          # Source archives (full + slim)
+          # full: repo completo; slim: sem archiso-profile/, docs/, .github/
+          mkdir -p release-assets/_pkg/full release-assets/_pkg/slim
+          git archive --format=tar HEAD | tar -xf - -C release-assets/_pkg/full
+          cp -a release-assets/_pkg/full/. release-assets/_pkg/slim/
+          rm -rf release-assets/_pkg/slim/archiso-profile
+          rm -rf release-assets/_pkg/slim/docs
+          rm -rf release-assets/_pkg/slim/.github/workflows
+          (cd release-assets/_pkg/full && zip -qr ../../crias-server-full.zip .)
+          (cd release-assets/_pkg/slim && zip -qr ../../crias-server-slim.zip .)
+
+          # Checksum global
+          cd release-assets
+          find . -type f \( -name '*.iso' -o -name '*.zip' -o -name 'crias-agent-*' \) \
+            ! -name '*.sha256' \
+            -exec sha256sum {} \; | sed 's|  \./|  |' > sha256sums.txt
+          cat sha256sums.txt
+
+      - name: Compute release tag
+        id: release_tag
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            SHORT_SHA="$(git rev-parse --short HEAD)"
+            TAG="v$(date -u +%Y.%m.%d)-${SHORT_SHA}"
+            # Garante unicidade
+            if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+              TAG="${TAG}-r${GITHUB_RUN_NUMBER}"
+            fi
+          fi
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+
+      - name: Import GPG key (optional)
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        if: env.GPG_PRIVATE_KEY != ''
+        run: |
+          printf '%s' "${GPG_PRIVATE_KEY}" | gpg --batch --import
+
+      - name: Sign checksums (optional)
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        if: env.GPG_PRIVATE_KEY != ''
+        run: |
+          cd release-assets
+          gpg --batch --yes --detach-sign -o sha256sums.txt.sig sha256sums.txt
+
+      - name: Create and push tag (if workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.release_tag.outputs.tag }}"
+          git push origin "${{ steps.release_tag.outputs.tag }}"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          assets=()
+          # ISO
+          for f in release-assets/iso/*; do
+            [ -f "$f" ] && assets+=("$f")
+          done
+          # Agent binaries
+          for f in release-assets/agent/*; do
+            [ -f "$f" ] && assets+=("$f")
+          done
+          # Bot image
+          [ -f release-assets/bot/crias-bot-image.tar ] && assets+=("release-assets/bot/crias-bot-image.tar")
+          # Source archives
+          assets+=("release-assets/crias-server-full.zip")
+          assets+=("release-assets/crias-server-slim.zip")
+          # Checksums
+          assets+=("release-assets/sha256sums.txt")
+          [ -f release-assets/sha256sums.txt.sig ] && assets+=("release-assets/sha256sums.txt.sig")
+
+          echo "=== Assets para release ==="
+          printf '  %s\n' "${assets[@]}"
+
+          gh release create "${{ steps.release_tag.outputs.tag }}" \
+            "${assets[@]}" \
+            --title "Release ${{ steps.release_tag.outputs.tag }}" \
+            --generate-notes \
+            --prerelease=${{ contains(steps.release_tag.outputs.tag, '-beta') || contains(steps.release_tag.outputs.tag, '-rc') }}

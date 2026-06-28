@@ -1,4 +1,5 @@
 """Tests para config.py."""
+
 from __future__ import annotations
 
 import dataclasses

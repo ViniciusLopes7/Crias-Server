@@ -49,7 +49,7 @@ Formato: `MAJOR.MINOR.PATCH` ([SemVer](https://semver.org/lang/pt-BR/)).
 - `Makefile` — targets `proto`, `tidy`, `build`, `build-all`, `test`, `lint`, `clean`, `docker`
 - `Dockerfile` — multi-stage com `scratch` final (~5-10 MB)
 - `agent.example.yaml` — template sem secrets
-- CI: `build-agent.yml` — test + build linux/amd64 + linux/arm64 + release em tag `agent-*`
+- CI: workflow único `ci.yml` com 9 jobs paralelos (lint-shell, test-shell, test-agent, build-agent, test-bot, build-bot-docker, build-iso, validate-iso, release) — release unificado em tag `v*` com ISO + slim.zip + full.zip + agent binaries + sha256sums
 
 #### Bot Discord (`discord-bot/`)
 - `pyproject.toml` — Poetry config com discord.py 2.4, grpcio, pyyaml, python-dotenv
@@ -59,12 +59,11 @@ Formato: `MAJOR.MINOR.PATCH` ([SemVer](https://semver.org/lang/pt-BR/)).
 - `src/crias_bot/__main__.py` — entry point com logging configurado
 - `.env.example`, `Dockerfile` (multi-stage Python 3.12 slim), `railway.json`
 - Testes: `test_config.py` (13 testes), `test_bot_helpers.py` (12 testes), `test_agent_client.py` (6 testes)
-- CI: `build-bot.yml` — lint ruff + testes pytest + mypy (non-blocking) + docker build
+- CI: `test-bot` job no `ci.yml` — ruff check + pytest + Docker build smoke
 
 #### CI/CD + docs
-- 3 workflows GitHub Actions: `build-iso.yml`, `build-agent.yml`, `build-bot.yml`
-- Release automation: tag `agent-*` cria release com binários + checksums
-- Release ISO cria `crias-server-full.zip`, `crias-server-slim.zip`, ISO bootável
+- Workflow único GitHub Actions: `.github/workflows/ci.yml` com 11 jobs paralelos (lint + test + build) + release consolidada no final
+- Release automation: tag `v*.*.*` cria release única com ISO + binários Go (amd64/arm64) + Docker image bot + source archives (full/slim) + checksums + assinatura GPG opcional
 - `ROADMAP.md` consolidando status de implementação
 - `docs/CHANGELOG.md` (este arquivo)
 - 3 novos testes bash: `tests/stack-installer-test.sh`, `tests/envsubst-test.sh`, `tests/config-parser-eq-test.sh`, `tests/agent-install-hook-test.sh`

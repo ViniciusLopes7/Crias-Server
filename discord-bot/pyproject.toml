@@ -39,6 +39,15 @@ crias-bot = "crias_bot.__main__:main"
 target-version = "py311"
 line-length = 100
 
+# Excluir código protobuf gerado (grpc_gen/) — é auto-gerado e não deve ser lintado.
+# Nota: exclude só funciona quando ruff descobre paths (ruff check .), não quando
+# paths são passados explicitamente (ruff check src/ tests/).
+exclude = [
+    "src/crias_bot/grpc_gen",
+    ".venv",
+    "__pycache__",
+]
+
 [tool.ruff.lint]
 select = [
     "E",   # pycodestyle errors

@@ -18,10 +18,10 @@ if [ -n "$bad_curls" ]; then
 fi
 
 echo "Checking for tar commands with stderr suppressed to /dev/null..."
-# Match only tar invocations (not URLs containing .tar.gz in arguments of other commands).
-# Pattern: line starts with optional whitespace, then `tar ` (with trailing space) as command,
-# followed by anything, then `2>/dev/null`.
-bad_tar=$(grep -RInE "${scan_excludes[@]}" --exclude-dir=tests "^[[:space:]]*[^#]*\btar [^#]*2>/dev/null" . || true)
+# Match apenas `tar` como COMANDO (precedido por start de linha ou whitespace, não por `.`).
+# Isso evita falso positivo em paths como `image.tar` ou `file.tar.gz`.
+# Pattern: (start ou whitespace) + tar + espaço + args + 2>/dev/null
+bad_tar=$(grep -RInE "${scan_excludes[@]}" --exclude-dir=tests "(^|[[:space:]])tar [^#]*2>/dev/null" . || true)
 if [ -n "$bad_tar" ]; then
   echo "ERROR: Found tar commands redirecting stderr to /dev/null:" >&2
   printf "%s\n" "$bad_tar" >&2
@@ -29,7 +29,7 @@ if [ -n "$bad_tar" ]; then
 fi
 
 echo "Checking for ionice+tar with stderr redirection..."
-bad_ionice=$(grep -RInE "${scan_excludes[@]}" --exclude-dir=tests "^[[:space:]]*[^#]*\bionice\b[^#]*\btar\b[^#]*2>/dev/null" . || true)
+bad_ionice=$(grep -RInE "${scan_excludes[@]}" --exclude-dir=tests "(^|[[:space:]])ionice\b[^#]*\btar\b[^#]*2>/dev/null" . || true)
 if [ -n "$bad_ionice" ]; then
   echo "ERROR: Found ionice+tar redirecting stderr to /dev/null:" >&2
   printf "%s\n" "$bad_ionice" >&2

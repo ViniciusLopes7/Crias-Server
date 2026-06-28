@@ -31,6 +31,8 @@ else
 fi
 
 # Configuração específica do Terraria.
+# Variáveis lidas por setup_cron_run() em shared/lib/setup-cron.sh.
+# shellcheck disable=SC2034
 SETUP_CRON_STACK_NAME="terraria"
 SETUP_CRON_SERVICE_NAME="terraria"
 SETUP_CRON_SERVER_DIR="$SCRIPT_DIR"

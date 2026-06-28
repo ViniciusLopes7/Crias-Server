@@ -40,6 +40,8 @@ TERRARIA_INSTALL_SUCCEEDED="${TERRARIA_INSTALL_SUCCEEDED:-false}"
 
 # ---------------------------------------------------------------------------
 # Configuração do framework stack-installer.
+# Estas variáveis são lidas por shared/lib/stack-installer.sh (sourced abaixo).
+# shellcheck disable=SC2034  # variáveis usadas por stack-installer.sh
 # ---------------------------------------------------------------------------
 STACK_NAME="terraria"
 STACK_USER="$TERRARIA_USER"
@@ -162,6 +164,8 @@ stack_configure_runtime() {
     detect_hardware_profile "$TERRARIA_SERVER_DIR" "$FORCE_HARDWARE_TIER"
     compute_terraria_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER"
 
+    # STACK_SERVICE_MEMORY_MAX_MB é lido por install_stack_service (stack-installer.sh).
+    # shellcheck disable=SC2034
     STACK_SERVICE_MEMORY_MAX_MB="$TT_SERVICE_MEMORY_MAX_MB"
 
     write_terraria_runtime_env "$TERRARIA_SERVER_DIR/runtime.env"

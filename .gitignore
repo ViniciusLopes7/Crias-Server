@@ -24,7 +24,7 @@ discord-agent/internal/proto/*.pb.go
 *.test
 *.out
 
-# Env files
+# Env files com secrets (NUNCA commitar)
 .env
 .env.local
 .env.production
@@ -41,6 +41,9 @@ agent.local.yaml
 
 # OS
 Thumbs.db
+
+# Worklog de desenvolvimento local (mantemos /home/z/my-project/worklog.md fora do repo)
+worklog.md
 
 # Artefatos de build locais
 out/

@@ -76,7 +76,9 @@ trap 'rm -rf -- "$TMP_TEST_DIR" || true' EXIT
 SERVER_DIR="$TMP_TEST_DIR/server"
 mkdir -p "$SERVER_DIR/world" "$SERVER_DIR/world_nether"
 
-# Define configuração mínima de backup
+# Define configuração mínima de backup.
+# Variáveis lidas por backup_run() em shared/lib/backup-engine.sh.
+# shellcheck disable=SC2034
 BACKUP_SERVER_DIR="$SERVER_DIR"
 BACKUP_STACK_NAME="minecraft"
 BACKUP_SERVICE_NAME="minecraft"
