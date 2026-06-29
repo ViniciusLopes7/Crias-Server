@@ -1,0 +1,65 @@
+# .dockerignore (raiz do repo)
+#
+# Evita que arquivos desnecessários sejam enviados ao contexto de build do Docker.
+# Reduz tempo de build e tamanho da camada final.
+
+# VCS
+.git/
+.gitignore
+.gitattributes
+
+# CI / docs (não necessários no container)
+.github/
+*.md
+!discord-bot/README.md
+docs/
+LICENSE
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtualenvs locais (o venv é criado dentro do Docker)
+.venv/
+venv/
+env/
+
+# Arquivos de ambiente com secrets (NUNCA devem entrar na imagem)
+.env
+.env.local
+.env.production
+**/.env
+**/.env.local
+**/.env.production
+
+# Código protobuf gerado localmente (será regenerado no build)
+discord-bot/src/crias_bot/grpc_gen/*.py
+!discord-bot/src/crias_bot/grpc_gen/__init__.py
+
+# IDE / SO
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Build artifacts do agente Go (não necessários para o bot)
+discord-agent/crias-agent
+discord-agent/bin/
+discord-agent/dist/
+
+# Testes não são necessários na imagem de runtime
+tests/
+
+# Logs e dumps
+*.log
+*.dump
+*.core
