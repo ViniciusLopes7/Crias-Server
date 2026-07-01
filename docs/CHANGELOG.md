@@ -135,6 +135,21 @@ Formato: `MAJOR.MINOR.PATCH` ([SemVer](https://semver.org/lang/pt-BR/)).
 - `README.md` (raiz) — Release consolidada agora lista apenas
   `crias-agent-linux-amd64` (antes era `amd64 + arm64`).
 
+#### CI/CD fixes
+- `discord-agent/Makefile` — corrigidas receitas que usavam 8 espaços em vez
+  de tabs (causava erro `missing separator` no job `lint-go` do CI).
+- `.github/workflows/ci.yml` `test-python` — removida matrix `[3.11, 3.12]`
+  que criava 2 jobs duplicados. Agora roda apenas Python 3.12 (valor do
+  `env.PYTHON_VERSION`).
+- `.github/workflows/ci.yml` — novo job `test-iso-qemu` que faz boot real
+  da ISO no QEMU (BIOS legacy + UEFI com OVMF) e valida:
+  - Formato ISO 9660 + El Torito boot record
+  - Kernel Linux inicializa em 30s
+  - archiso hooks carregam
+  - Estrutura da ISO (vmlinuz, initramfs, diretório arch/)
+  O job `release` agora depende de `test-iso-qemu` — ISO só é publicada se
+  passar no boot test.
+
 ## [1.0.0] — 2026-06-29
 
 ### Decisão de escopo

@@ -192,13 +192,14 @@ Workflow único: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — 11 j
 | `test-shell` | Quick tests + contracts + static-audit + stack-installer | ubuntu-22.04 |
 | `test-shell-arch` | `arch-smoke` + `arch-dry-install` (container Arch) | archlinux:base-devel |
 | `test-go` | `go test -race` (após `go mod tidy` + proto) | ubuntu-22.04 |
-| `test-python` | `pytest` em Python 3.11 e 3.12 (matrix) | ubuntu-22.04 |
+| `test-python` | `pytest` em Python 3.12 | ubuntu-22.04 |
 
 ### Jobs de build (paralelos, só em push to main ou tag `v*`)
 
 | Job | Função | Runner |
 |-----|--------|--------|
 | `build-iso` | `mkarchiso` (ISO bootável) — depende de lint-shell + test-shell + test-shell-arch | archlinux:base-devel |
+| `test-iso-qemu` | Boot real da ISO no QEMU (BIOS + UEFI) — depende de build-iso | ubuntu-22.04 |
 | `build-agent` | Build Go linux/amd64 — depende de lint-go + test-go | ubuntu-22.04 |
 | `build-bot` | Docker build smoke — depende de lint-python + test-python | ubuntu-22.04 |
 
@@ -206,7 +207,7 @@ Workflow único: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — 11 j
 
 | Job | Função |
 |-----|--------|
-| `release` | Baixa todos os artefatos dos 3 builds e cria **uma release única** com tudo |
+| `release` | Baixa todos os artefatos dos 3 builds + valida que ISO passou no QEMU boot test, e cria **uma release única** com tudo |
 
 **Release consolidada** (em tag `v*.*.*` ou `workflow_dispatch` com `create_release=true`):
 - `crias-server-*.iso` — ISO bootável

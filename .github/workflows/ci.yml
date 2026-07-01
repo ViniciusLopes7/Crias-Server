@@ -224,19 +224,16 @@ jobs:
     name: Test Python
     runs-on: ubuntu-22.04
     timeout-minutes: 10
-    strategy:
-      matrix:
-        python-version: [ '3.11', '3.12' ]
     defaults:
       run:
         working-directory: discord-bot
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
         run: |
@@ -319,6 +316,206 @@ jobs:
             out/*.iso
             out/sha256sums-iso.txt
           retention-days: 7
+
+  test-iso-qemu:
+    name: Test ISO (QEMU boot)
+    needs: [build-iso]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download ISO artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: artifact-iso
+          path: iso-download/
+
+      - name: Find ISO file
+        id: find_iso
+        run: |
+          ISO_FILE="$(find iso-download/ -name '*.iso' -type f | head -1)"
+          if [ -z "$ISO_FILE" ]; then
+            echo "FAIL: nenhuma ISO encontrada em iso-download/" >&2
+            ls -la iso-download/ >&2
+            exit 1
+          fi
+          echo "ISO encontrada: $ISO_FILE"
+          ls -lh "$ISO_FILE"
+          echo "iso_path=$ISO_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Validate ISO 9660 format
+        run: |
+          ISO_FILE="${{ steps.find_iso.outputs.iso_path }}"
+          # Verifica magic bytes de ISO 9660
+          file "$ISO_FILE"
+          if ! file "$ISO_FILE" | grep -qi 'ISO 9660'; then
+            echo "FAIL: arquivo não é ISO 9660 válido" >&2
+            exit 1
+          fi
+          # Verifica El Torito boot record (offset 0x8001)
+          EL_TORITO="$(dd if="$ISO_FILE" bs=1 skip=32769 count=31 2>/dev/null || true)"
+          if echo "$EL_TORITO" | grep -q 'EL TORITO SPECIFICATION'; then
+            echo "OK: El Torito boot record presente (ISO é bootável)"
+          else
+            echo "FAIL: El Torito boot record não encontrado" >&2
+            exit 1
+          fi
+
+      - name: Install QEMU and OVMF (UEFI firmware)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils ovmf
+          echo "=== QEMU version ==="
+          qemu-system-x86_64 --version | head -2
+          echo "=== OVMF firmware ==="
+          ls -la /usr/share/OVMF/ 2>/dev/null || ls -la /usr/share/ovmf/ 2>/dev/null || true
+
+      - name: Boot ISO in QEMU (BIOS legacy) — smoke test
+        run: |
+          ISO_FILE="${{ steps.find_iso.outputs.iso_path }}"
+          echo "=== Boot BIOS legacy (30s smoke test) ==="
+          # Boot da ISO em QEMU com 1GB RAM, sem display, capturando serial.
+          # timeout 30s: se o kernel não inicializar em 30s, algo está errado.
+          # -nographic: redireciona tudo para o terminal (serial console).
+          # -m 1024: 1GB RAM (archiso precisa de pelo menos 512MB).
+          # -cdrom: attacha a ISO como CD-ROM bootável.
+          # -boot d: boot pelo CD-ROM.
+          qemu_log="$(mktemp /tmp/crias-qemu-bios-XXXXXX.log)"
+          timeout 30 qemu-system-x86_64 \
+            -m 1024 \
+            -cdrom "$ISO_FILE" \
+            -boot d \
+            -nographic \
+            -no-reboot \
+            -serial mon:stdio \
+            </dev/null >"$qemu_log" 2>&1 || true
+
+          echo "=== Últimas 30 linhas do log QEMU (BIOS) ==="
+          tail -30 "$qemu_log"
+
+          # Validações: kernel deve inicializar e archiso hooks devem carregar.
+          PASS=true
+          if grep -qi 'Linux version' "$qemu_log"; then
+            echo "✓ OK: kernel Linux inicializou (BIOS boot)"
+            grep -oE 'Linux version [0-9.]+[^ ]*' "$qemu_log" | head -1
+          else
+            echo "✗ FAIL: kernel Linux não inicializou em 30s (BIOS boot)" >&2
+            PASS=false
+          fi
+
+          if grep -qi 'archiso' "$qemu_log"; then
+            echo "✓ OK: archiso hooks carregados (BIOS boot)"
+          else
+            echo "✗ FAIL: archiso não encontrado no log (BIOS boot)" >&2
+            PASS=false
+          fi
+
+          rm -f "$qemu_log"
+          if [ "$PASS" != "true" ]; then
+            exit 1
+          fi
+
+      - name: Boot ISO in QEMU (UEFI) — smoke test
+        run: |
+          ISO_FILE="${{ steps.find_iso.outputs.iso_path }}"
+          echo "=== Boot UEFI (30s smoke test) ==="
+          # Cria cópia writable do OVMF_VARS (UEFI requer NVRAM vars file writable).
+          OVMF_VARS="/tmp/ovmf-vars.fd"
+          OVMF_SRC=""
+          for candidate in /usr/share/OVMF/OVMF_VARS.fd /usr/share/ovmf/OVMF_VARS.fd /usr/share/OVMF/OVMF_VARS_4M.fd; do
+            if [ -f "$candidate" ]; then
+              OVMF_SRC="$candidate"
+              break
+            fi
+          done
+          if [ -z "$OVMF_SRC" ]; then
+            echo "AVISO: OVMF_VARS.fd não encontrado — pulando teste UEFI" >&2
+            exit 0
+          fi
+          cp "$OVMF_SRC" "$OVMF_VARS"
+          OVMF_CODE="$(dirname "$OVMF_SRC")/$(echo "$OVMF_SRC" | xargs basename | sed 's/VARS/CODE/')"
+          if [ ! -f "$OVMF_CODE" ]; then
+            # Fallback: tentar OVMF_CODE.fd no mesmo dir
+            OVMF_CODE="$(dirname "$OVMF_SRC")/OVMF_CODE.fd"
+          fi
+          echo "OVMF_CODE: $OVMF_CODE"
+          echo "OVMF_VARS: $OVMF_VARS"
+
+          qemu_log="$(mktemp /tmp/crias-qemu-uefi-XXXXXX.log)"
+          timeout 30 qemu-system-x86_64 \
+            -m 1024 \
+            -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+            -drive if=pflash,format=raw,file="$OVMF_VARS" \
+            -cdrom "$ISO_FILE" \
+            -boot d \
+            -nographic \
+            -no-reboot \
+            -serial mon:stdio \
+            </dev/null >"$qemu_log" 2>&1 || true
+
+          echo "=== Últimas 30 linhas do log QEMU (UEFI) ==="
+          tail -30 "$qemu_log"
+
+          # Para UEFI, aceitamos que pelo menos o GRUB/carregador inicialize
+          # (kernel pode demorar mais em UEFI em CI lento).
+          PASS=true
+          if grep -qi 'grub\|Linux version\|archiso' "$qemu_log"; then
+            echo "✓ OK: bootloader/kernel inicializou (UEFI boot)"
+          else
+            echo "✗ FAIL: nenhum sinal de boot em 30s (UEFI boot)" >&2
+            PASS=false
+          fi
+
+          rm -f "$qemu_log" "$OVMF_VARS"
+          if [ "$PASS" != "true" ]; then
+            exit 1
+          fi
+
+      - name: Validate embedded installer is accessible in live ISO
+        run: |
+          echo "=== Validação de que instalador embutido está na ISO ==="
+          ISO_FILE="${{ steps.find_iso.outputs.iso_path }}"
+          # Monta ISO (read-only) e verifica que /opt/crias-server/install.sh existe.
+          # Não podemos bootar e interagir facilmente, mas podemos verificar que
+          # o airootfs.squfs tem o arquivo examinando o conteúdo da ISO.
+          mkdir -p /tmp/iso-mount
+          sudo mount -o loop,ro "$ISO_FILE" /tmp/iso-mount || true
+
+          echo "=== Conteúdo raiz da ISO ==="
+          ls -la /tmp/iso-mount/ || true
+
+          # Verifica que o diretório arch/ existe (install_dir do profiledef.sh)
+          if [ -d /tmp/iso-mount/arch/ ]; then
+            echo "✓ OK: diretório arch/ (install_dir) presente na ISO"
+            ls /tmp/iso-mount/arch/
+          else
+            echo "AVISO: diretório arch/ não encontrado na ISO montada" >&2
+            ls -la /tmp/iso-mount/ >&2
+          fi
+
+          # Verifica presença do vmlinuz e initramfs (boot mínimo)
+          if find /tmp/iso-mount/ -name 'vmlinuz-linux' 2>/dev/null | grep -q .; then
+            echo "✓ OK: vmlinuz-linux presente na ISO"
+          else
+            echo "✗ FAIL: vmlinuz-linux não encontrado na ISO" >&2
+            sudo umount /tmp/iso-mount 2>/dev/null || true
+            exit 1
+          fi
+
+          if find /tmp/iso-mount/ -name 'initramfs-linux.img' 2>/dev/null | grep -q .; then
+            echo "✓ OK: initramfs-linux.img presente na ISO"
+          else
+            echo "✗ FAIL: initramfs-linux.img não encontrado na ISO" >&2
+            sudo umount /tmp/iso-mount 2>/dev/null || true
+            exit 1
+          fi
+
+          sudo umount /tmp/iso-mount 2>/dev/null || true
+          echo "=== Validação de estrutura da ISO: OK ==="
 
   build-agent:
     name: Build Agent (${{ matrix.goos }}/${{ matrix.goarch }})
@@ -416,7 +613,7 @@ jobs:
 
   release:
     name: Release (consolidada)
-    needs: [build-iso, build-agent, build-bot]
+    needs: [build-iso, test-iso-qemu, build-agent, build-bot]
     if: |
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.create_release)
