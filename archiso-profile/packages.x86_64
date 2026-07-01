@@ -1,4 +1,4 @@
-# Core archiso (ESSENCIAL)
+# Core archiso (ESSENCIAL — não remover)
 archiso
 base
 linux
@@ -17,12 +17,17 @@ memtest86+
 usbutils
 
 # Networking
+# Tailscale embutido na ISO desde v1.1.0 (re-adicionado após feedback do
+# maintainer: garante que Tailscale está disponível mesmo sem internet no
+# primeiro boot). O install.sh ainda verifica se está instalado e ativa o
+# daemon, mas não precisa mais baixar o pacote.
 networkmanager
 tailscale
 curl
 wget
 
-# Minecraft Dependencies
+# Minecraft Dependencies (Java 21 é grande; vale deixar embutido para evitar
+# download de ~200MB em cada boot da ISO)
 jdk21-openjdk
 tar
 gzip
@@ -30,7 +35,7 @@ logrotate
 unzip
 zstd
 
-# System utilities
+# System utilities (mantemos o essencial; htop/vim são úteis para debug no live)
 nano
 vim
 htop

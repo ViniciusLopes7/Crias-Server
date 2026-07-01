@@ -190,11 +190,17 @@ install_tailscale_if_enabled() {
     fi
 
     print_step "Instalando Tailscale..."
-    if ! command_exists tailscale; then
+
+    # Já está instalado? (comum em hosts que deram boot pela ISO Crias, onde
+    # Tailscale já vem pré-instalado no airootfs via packages.x86_64).
+    if command_exists tailscale; then
+        print_step "Tailscale já está instalado — pulando download."
+    else
+        # Host sem ISO Crias (instalação direta em Arch limpo): baixa via pacman.
         outdated_packages="$(pacman -Qu 2>/dev/null || true)"
         if [ -n "$outdated_packages" ]; then
             print_warning "Foram detectados pacotes desatualizados no sistema."
-            print_warning "Recomendado executar 'pacman -Syu' antes de instalar Tailscale para evitar partial-upgrade."
+            print_warning "Recomendado executar 'pacman -Syu' antes para evitar partial-upgrade."
             if ! is_true "$NON_INTERACTIVE"; then
                 if ! ask_confirm "Continuar mesmo assim?" "N"; then
                     print_error "Instalacao do Tailscale cancelada pelo usuario."
@@ -202,7 +208,42 @@ install_tailscale_if_enabled() {
                 fi
             fi
         fi
-        pacman -S --needed --noconfirm tailscale
+
+        # Tentativa 1: pacman (repo Arch oficial).
+        if ! pacman -S --needed --noconfirm tailscale; then
+            print_warning "pacman -S tailscale falhou. Tentando via repo oficial Tailscale..."
+            # Tentativa 2: script oficial (https://pkgs.tailscale.com/stable/#arch).
+            # Adiciona repo [tailscale] ao pacman.conf e instala.
+            local tmpdir
+            tmpdir="$(mktemp -d)"
+            if curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 10 \
+                    -o "$tmpdir/tailscale.repo" \
+                    https://pkgs.tailscale.com/stable/arch/tailscale.repo 2>/dev/null; then
+                # Adiciona repo [tailscale] ao pacman.conf temporariamente.
+                if ! grep -q '^\[tailscale\]' /etc/pacman.conf 2>/dev/null; then
+                    cat >> /etc/pacman.conf <<'EOF'
+
+[tailscale]
+Server = https://pkgs.tailscale.com/stable/arch/$arch
+EOF
+                fi
+                # Popula key do repo Tailscale (justin@tailscale.com).
+                pacman-key --recv-key 999EAC3D9BD5B7F7 || true
+                pacman-key --lsign-key 999EAC3D9BD5B7F7 || true
+                if ! pacman -Syy --noconfirm tailscale; then
+                    print_error "Falha ao instalar Tailscale via repo oficial."
+                    print_error "Instale manualmente depois: sudo pacman -S tailscale"
+                    rm -rf "$tmpdir"
+                    return 1
+                fi
+            else
+                print_error "Não foi possível baixar repo Tailscale (sem internet?)."
+                print_error "Instale manualmente depois: sudo pacman -S tailscale"
+                rm -rf "$tmpdir"
+                return 1
+            fi
+            rm -rf "$tmpdir"
+        fi
     fi
 
     systemctl enable tailscaled >/dev/null 2>&1 || true
@@ -569,11 +610,24 @@ install_crias_agent_if_enabled() {
         stack_user="$MINECRAFT_USER"
         service_name="minecraft"
         stack_type_for_agent="minecraft"
+        stack_port="$MINECRAFT_PORT"
     else
         stack_dir="$TERRARIA_SERVER_DIR"
         stack_user="$TERRARIA_USER"
         service_name="terraria"
         stack_type_for_agent="terraria"
+        stack_port="$TERRARIA_PORT"
+    fi
+
+    # Tier de hardware efetivo (vindo do stack installer ou FORCE_HARDWARE_TIER).
+    # Usado para popular agent.yaml → server.hardware_tier, que o bot Discord
+    # mostra no /mc status (item v1.1.0).
+    local agent_hardware_tier="${FORCE_HARDWARE_TIER:-}"
+    if [ -z "$agent_hardware_tier" ] && [ -f "$stack_dir/.hardware-tier" ]; then
+        agent_hardware_tier="$(cat "$stack_dir/.hardware-tier" 2>/dev/null || true)"
+    fi
+    if [ -z "$agent_hardware_tier" ]; then
+        agent_hardware_tier="unknown"
     fi
 
     # 1. Cria usuário crias-agent.
@@ -672,6 +726,8 @@ server:
   service_name: "$service_name"
   manager_script: "$stack_dir/mc-manager.sh"
   server_dir: "$stack_dir"
+  server_port: $stack_port
+  hardware_tier: "$agent_hardware_tier"
   rcon:
     enabled: $rcon_enabled
     host: "$rcon_host"

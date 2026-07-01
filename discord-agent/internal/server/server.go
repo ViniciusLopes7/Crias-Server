@@ -7,7 +7,9 @@ import (
         "crypto/subtle"
         "fmt"
         "io"
+        "net"
         "os/exec"
+        "strconv"
         "strings"
         "sync"
         "time"
@@ -171,7 +173,7 @@ func (s *Server) RestartServer(ctx context.Context, req *criasv1.RestartRequest)
         }, nil
 }
 
-// GetStatus retorna status consolidado: systemd + RCON players.
+// GetStatus retorna status consolidado: systemd + RCON players + recursos.
 func (s *Server) GetStatus(ctx context.Context, req *criasv1.GetStatusRequest) (*criasv1.StatusResponse, error) {
         active := s.isServiceActive(ctx, s.cfg.Server.ServiceName)
 
@@ -179,11 +181,19 @@ func (s *Server) GetStatus(ctx context.Context, req *criasv1.GetStatusRequest) (
                 ServiceName: s.cfg.Server.ServiceName,
                 Stack:       s.cfg.Server.Stack,
                 Version:     Version,
+                // Popula hardware_tier do config (v1.1.0+). Antes era sempre vazio.
+                HardwareTier: s.cfg.Server.HardwareTier,
         }
 
         if active {
                 resp.ServiceActive = true
                 resp.UptimeSeconds = s.getServiceUptime(ctx, s.cfg.Server.ServiceName)
+
+                // Popula memória usada/máxima do cgroup do serviço systemd.
+                // Antes (v1.0.x) estes campos vinham sempre 0 — agora refletem
+                // o uso real do processo do servidor de jogo.
+                resp.MemoryUsedMb = s.getServiceMemoryUsedMB(ctx, s.cfg.Server.ServiceName)
+                resp.MemoryMaxMb = s.getServiceMemoryMaxMB(ctx, s.cfg.Server.ServiceName)
 
                 // Tenta buscar players via RCON (best-effort).
                 if s.rcon != nil {
@@ -200,9 +210,25 @@ func (s *Server) GetStatus(ctx context.Context, req *criasv1.GetStatusRequest) (
 }
 
 // GetHealth verifica se porta está em escuta + RCON responde.
+//
+// v1.1.0+: agora popula os campos `port` e `port_listening` (antes eram
+// sempre 0/false). A porta vem do config (server_port); port_listening é
+// testado via net.Dial com timeout curto (1s).
 func (s *Server) GetHealth(ctx context.Context, req *criasv1.GetHealthRequest) (*criasv1.HealthResponse, error) {
         resp := &criasv1.HealthResponse{
                 ServiceName: s.cfg.Server.ServiceName,
+                Port:        int32(s.cfg.Server.ServerPort),
+        }
+
+        // Testa se a porta do servidor de jogo está em escuta.
+        // Usa net.DialTimeout com 1s para não bloquear o handler gRPC.
+        if s.cfg.Server.ServerPort > 0 {
+                addr := fmt.Sprintf("127.0.0.1:%d", s.cfg.Server.ServerPort)
+                conn, err := net.DialTimeout("tcp", addr, time.Second)
+                if err == nil {
+                        resp.PortListening = true
+                        _ = conn.Close()
+                }
         }
 
         // Se RCON habilitado, testa resposta.
@@ -213,11 +239,21 @@ func (s *Server) GetHealth(ctx context.Context, req *criasv1.GetHealthRequest) (
                 }
         }
 
-        resp.Healthy = resp.RconResponsive
+        // Healthy = porta em escuta E (RCON desabilitado OU RCON responsivo).
+        // Se RCON está habilitado mas não responde, é warning (mas porta pode
+        // estar ok para players conectarem).
+        resp.Healthy = resp.PortListening && (!s.cfg.Server.RCON.Enabled || resp.RconResponsive)
         if resp.Healthy {
                 resp.Message = "healthy"
         } else {
-                resp.Message = "rcon indisponível ou servidor offline"
+                reasons := []string{}
+                if !resp.PortListening {
+                        reasons = append(reasons, fmt.Sprintf("porta %d não está em escuta", s.cfg.Server.ServerPort))
+                }
+                if s.cfg.Server.RCON.Enabled && !resp.RconResponsive {
+                        reasons = append(reasons, "rcon indisponível")
+                }
+                resp.Message = strings.Join(reasons, "; ")
         }
 
         return resp, nil
@@ -381,6 +417,45 @@ func (s *Server) getServiceUptime(ctx context.Context, service string) int64 {
                 return 0
         }
         return int64(time.Since(t).Seconds())
+}
+
+// getServiceMemoryUsedMB retorna memória residente do serviço em MB.
+// Lê MemoryCurrent do cgroup via systemctl show. Retorna 0 se indisponível.
+func (s *Server) getServiceMemoryUsedMB(ctx context.Context, service string) int64 {
+        cmd := exec.CommandContext(ctx, "systemctl", "show", "-p", "MemoryCurrent", "--value", service)
+        out, err := cmd.Output()
+        if err != nil {
+                return 0
+        }
+        raw := strings.TrimSpace(string(out))
+        // MemoryCurrent pode ser "[not set]" ou "0" em containers.
+        if raw == "" || raw == "[not set]" {
+                return 0
+        }
+        bytes, err := strconv.ParseInt(raw, 10, 64)
+        if err != nil || bytes <= 0 {
+                return 0
+        }
+        return bytes / (1024 * 1024)
+}
+
+// getServiceMemoryMaxMB retorna limite de memória (MemoryMax) do serviço em MB.
+// Retorna 0 se não houver limite configurado (servidor sem MemoryMax=).
+func (s *Server) getServiceMemoryMaxMB(ctx context.Context, service string) int64 {
+        cmd := exec.CommandContext(ctx, "systemctl", "show", "-p", "MemoryMax", "--value", service)
+        out, err := cmd.Output()
+        if err != nil {
+                return 0
+        }
+        raw := strings.TrimSpace(string(out))
+        if raw == "" || raw == "[not set]" || raw == "infinity" {
+                return 0
+        }
+        bytes, err := strconv.ParseInt(raw, 10, 64)
+        if err != nil || bytes <= 0 {
+                return 0
+        }
+        return bytes / (1024 * 1024)
 }
 
 // eventToProto converte events.Event → criasv1.ServerEvent.

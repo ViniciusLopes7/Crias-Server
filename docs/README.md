@@ -63,7 +63,7 @@ Workflow único: [../.github/workflows/ci.yml](../.github/workflows/ci.yml) — 
 | Job | Função |
 |-----|--------|
 | `build-iso` | `mkarchiso` (ISO bootável) |
-| `build-agent` | Build Go linux/amd64 + linux/arm64 (matrix) |
+| `build-agent` | Build Go linux/amd64 |
 | `build-bot` | Docker build smoke |
 
 ### Release (consolida todos artefatos)

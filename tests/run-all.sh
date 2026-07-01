@@ -64,6 +64,22 @@ echo "Repo: $ROOT_DIR"
 # Sintaxe bash de TODOS os scripts.
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "PRE-PASS: sync-airootfs.sh (preenche airootfs para testes ISO)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+if bash archiso-profile/sync-airootfs.sh >/tmp/crias-sync.log 2>&1; then
+    echo "→ PASS (airootfs populado para testes)"
+    PASS=$((PASS + 1))
+else
+    echo "→ FAIL (sync-airootfs.sh falhou)"
+    tail -20 /tmp/crias-sync.log
+    FAIL=$((FAIL + 1))
+    FAILED_TESTS+=("sync-airootfs.sh")
+fi
+rm -f /tmp/crias-sync.log
+
+# Sintaxe bash de TODOS os scripts.
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "TEST: bash -n em todos os .sh do repo"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 bash_errors=0
@@ -162,6 +178,8 @@ run_test "arch-smoke"               "tests/arch-smoke.sh"
 run_test "arch-dry-install"         "tests/arch-dry-install.sh"
 run_test "archiso-profile-validate" "tests/archiso-profile-validate.sh"
 run_test "iso-label-validate"       "tests/iso-label-validate.sh"
+run_test "iso-embedded-scripts-validate" "tests/iso-embedded-scripts-validate.sh"
+run_test "iso-qemu-validate"        "tests/iso-qemu-validate.sh"
 run_test "config-parser"            "tests/config-parser.sh"
 run_test "config-parser-eq-test"    "tests/config-parser-eq-test.sh"
 run_test "stack-installer-test"     "tests/stack-installer-test.sh"

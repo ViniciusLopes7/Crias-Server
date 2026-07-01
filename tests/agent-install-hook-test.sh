@@ -39,6 +39,9 @@ assert_grep_fixed 'rcon:' "$ROOT_DIR/discord-agent/agent.example.yaml"
 assert_grep_fixed 'features:' "$ROOT_DIR/discord-agent/agent.example.yaml"
 assert_grep_fixed 'auto_shutdown:' "$ROOT_DIR/discord-agent/agent.example.yaml"
 assert_grep_fixed 'health_check:' "$ROOT_DIR/discord-agent/agent.example.yaml"
+# v1.1.0+: novos campos server_port e hardware_tier
+assert_grep_fixed 'server_port:' "$ROOT_DIR/discord-agent/agent.example.yaml"
+assert_grep_fixed 'hardware_tier:' "$ROOT_DIR/discord-agent/agent.example.yaml"
 
 # 4. install.sh referencia /etc/crias/agent.yaml (caminho onde o agente lê config)
 assert_grep '/etc/crias/agent.yaml' "$ROOT_DIR/install.sh"
@@ -86,6 +89,12 @@ assert 'features' in cfg, 'missing features section'
 assert cfg['agent']['port'] == 8473, 'wrong port'
 assert cfg['agent']['bind_address'] == '127.0.0.1', 'wrong bind_address'
 assert cfg['server']['stack'] in ('minecraft', 'terraria'), 'wrong stack'
+# v1.1.0+: novos campos
+assert 'server_port' in cfg['server'], 'missing server_port'
+assert isinstance(cfg['server']['server_port'], int), 'server_port deve ser int'
+assert cfg['server']['server_port'] > 0, 'server_port deve ser > 0'
+assert 'hardware_tier' in cfg['server'], 'missing hardware_tier'
+assert cfg['server']['hardware_tier'] in ('LOW', 'MID', 'HIGH', 'unknown'), 'wrong hardware_tier'
 assert 'auto_shutdown' in cfg['features'], 'missing auto_shutdown'
 assert 'health_check' in cfg['features'], 'missing health_check'
 assert cfg['features']['auto_shutdown']['enabled'] is False, 'auto_shutdown should be off by default'

@@ -15,6 +15,126 @@ Formato: `MAJOR.MINOR.PATCH` ([SemVer](https://semver.org/lang/pt-BR/)).
 - Dependabot/Renovate para auto-update de deps Go e Python
 - Scheduled run semanal do CI para capturar regressões em deps
 
+## [1.1.0] — 2026-07-01
+
+### Adicionado
+
+#### ISO "pronta pra uso"
+- `archiso-profile/sync-airootfs.sh` — script que copia os scripts do repo
+  (install.sh, config.env, shared/lib/*, minecraft/*, terraria/*, branding)
+  para dentro de `archiso-profile/airootfs/opt/crias-server/` antes do
+  `mkarchiso`. A ISO gerada não precisa mais de internet para clonar o repo
+  no primeiro boot.
+- `archiso-profile/airootfs/root/.automated_script.sh` reescrito:
+  - Detecta e roda o instalador embutido em `/opt/crias-server/install.sh`
+    (modo EMBEDDED).
+  - Fallback via `git clone` se a ISO foi construída sem sync (modo CLONE).
+  - Avisa se internet está indisponível antes de rodar install.sh.
+  - Valida checksum opcional via `INSTALL_SH_SHA256`.
+- `archiso-profile/profiledef.sh` agora declara `file_permissions` para os
+  arquivos embutidos (`/opt/crias-server/install.sh`, `config.env`, etc.).
+- `tests/iso-embedded-scripts-validate.sh` — novo teste que valida 20
+  arquivos essenciais embutidos, permissões executáveis, manifesto, e que
+  install.sh embutido bate com o do repo.
+
+#### Embeds padronizados do bot Discord
+- `discord-bot/src/crias_bot/embeds.py` — fábrica centralizada de embeds com:
+  - Paleta de cores consistente (success/error/warning/info/event/online/offline).
+  - Thumbnail do escudo Crias em todos os embeds (branding).
+  - Timestamp UTC + footer com versão do bot em todos os embeds.
+  - Helpers específicos: `status_online`, `status_offline`, `players_list`,
+    `health_report`, `command_result`, `say_confirmation`, `console_stream_*`,
+    `event_embed`.
+- `discord-bot/src/crias_bot/bot.py` refatorado:
+  - Todos os 8 slash commands usam embeds (antes só 3 usavam).
+  - `/mc start|stop|restart` agora usam `command_result()` com cor semântica.
+  - `/mc say` usa `say_confirmation()` com codeblock da mensagem.
+  - `/mc console` toggle agora é atômico via `asyncio.Lock` (evita task zombie
+    se dois admins clicarem simultaneamente).
+  - `_check_admin()`/`_check_moderator()` reduzem boilerplate de permissão.
+  - `event_bridge` agora posta embeds (antes era texto puro).
+- `discord-bot/tests/test_embeds.py` — 33 novos testes Python cobrindo todos
+  os builders de embed.
+
+#### Agente Go: campos populados que vinham vazios
+- `GetStatus` agora popula `hardware_tier` (do config), `memory_used_mb` e
+  `memory_max_mb` (lidos de `systemctl show -p MemoryCurrent/MemoryMax`).
+- `GetHealth` agora popula `port` (do config `server_port`) e `port_listening`
+  (testado via `net.DialTimeout` em 1s). `Healthy` agora considera porta em
+  escuta, não só RCON.
+- `config.go` — adicionados campos `ServerPort` e `HardwareTier` em
+  `ServerConfig`.
+- `install.sh` gera `agent.yaml` com `server_port` e `hardware_tier`.
+- `agent.example.yaml` atualizado com os novos campos.
+
+### Removido
+
+#### ARM64 do agente Go
+- `.github/workflows/ci.yml` — `build-agent` matrix agora é linux/amd64 only.
+  Antes buildava arm64 também (~5-10 min de CI sem uso real).
+- `discord-agent/Makefile` — `build-all` agora é alias de `build-linux-amd64`.
+  Target `build-linux-arm64` removido. Cross-compile manual continua possível
+  via `make build BUILD_ARCH=arm64`.
+- Referências a arm64 removidas de `README.md`, `docs/README.md`,
+  `docs/CHANGELOG.md`, `ROADMAP.md`, `discord-agent/README.md`.
+
+#### Tailscale na ISO (mantido após feedback)
+- `archiso-profile/packages.x86_64` — `tailscale` mantido. Decisão revisada
+  após feedback do maintainer: garantir disponibilidade mesmo sem internet no
+  primeiro boot é mais importante que reduzir ~30-50MB da ISO. O `install.sh`
+  detecta se já está instalado (comum em hosts que bootaram pela ISO Crias) e
+  pula o download. Para hosts sem ISO, mantém fallback via pacman + repo oficial.
+
+### Modificado
+
+#### install.sh — instalação do Tailscale mais robusta
+- `install_tailscale_if_enabled()` agora tem duas tentativas:
+  1. `pacman -S --needed --noconfirm tailscale` (repo Arch oficial).
+  2. Fallback: adiciona repo `[tailscale]` ao pacman.conf, importa key
+     `999EAC3D9BD5B7F7`, e instala via `pacman -Syy`.
+- Trata caso em que Tailscale já está instalado (skipa download).
+- Em caso de falha dupla, retorna erro com instruções claras para instalação
+  manual (antes falhava silenciosamente).
+
+#### CI/CD
+- `build-iso` job agora roda `sync-airootfs.sh` + `iso-embedded-scripts-validate.sh`
+  antes do `mkarchiso`, garantindo que toda ISO publicada tenha o instalador
+  embutido e validado.
+
+#### Testes
+- `tests/agent-install-hook-test.sh` agora valida os novos campos
+  `server_port` e `hardware_tier` no agent.example.yaml.
+- `tests/run-all.sh` adiciona PRE-PASS que roda `sync-airootfs.sh` para
+  garantir que `iso-embedded-scripts-validate.sh` passe localmente.
+- `tests/iso-embedded-scripts-validate.sh` (novo) valida 7 checks de
+  integridade do airootfs antes do build da ISO.
+- `tests/iso-qemu-validate.sh` (novo) valida o profile contra a documentação
+  oficial do archiso (README.profile.rst):
+  - `install_dir` ≤ 8 chars `[a-z0-9]`
+  - `iso_label` ≤ 11 chars (limite FAT)
+  - `bootmodes` e `buildmodes` com valores válidos
+  - `file_permissions` com formato `["/path"]="uid:gid:mode"`
+  - Estrutura de diretórios (airootfs/, syslinux/, grub/, etc.)
+  - `mkinitcpio.conf` com hooks `archiso` + `archiso_loop_mnt`
+  - `packages.x86_64` com pacotes obrigatórios (mkinitcpio, mkinitcpio-archiso)
+  - Smoke test via QEMU (`run_archiso`) se ISO_PATH fornecido e QEMU disponível
+
+#### Bug fix
+- `archiso-profile/profiledef.sh` — corrigida sintaxe inválida
+  `${git_short::5^^}` (bash não suporta substring + uppercase combinados
+  dessa forma). Substituído por `printf '%.5s' | tr '[:lower:]' '[:upper:]'`.
+  Sem essa correção, o `profiledef.sh` não podia ser sourceado standalone
+  (ex: em testes), embora o `mkarchiso` funcionasse porque faz `declare -A`
+  antes.
+
+### Documentação
+- `archiso-profile/README.md` reescrito: explica a estratégia "pronto pra
+  uso", o que está embutido vs baixado sob demanda, troubleshooting.
+- `discord-agent/README.md` — removida referência a arm64 como build
+  suportado; mantida nota sobre cross-compile experimental.
+- `README.md` (raiz) — Release consolidada agora lista apenas
+  `crias-agent-linux-amd64` (antes era `amd64 + arm64`).
+
 ## [1.0.0] — 2026-06-29
 
 ### Decisão de escopo
@@ -63,7 +183,7 @@ Formato: `MAJOR.MINOR.PATCH` ([SemVer](https://semver.org/lang/pt-BR/)).
 
 #### CI/CD + docs
 - Workflow único GitHub Actions: `.github/workflows/ci.yml` com 11 jobs paralelos (lint + test + build) + release consolidada no final
-- Release automation: tag `v*.*.*` cria release única com ISO + binários Go (amd64/arm64) + Docker image bot + source archives (full/slim) + checksums + assinatura GPG opcional
+- Release automation: tag `v*.*.*` cria release única com ISO + binário Go (amd64) + Docker image bot + source archives (full/slim) + checksums + assinatura GPG opcional
 - `ROADMAP.md` consolidando status de implementação
 - `docs/CHANGELOG.md` (este arquivo)
 - 3 novos testes bash: `tests/stack-installer-test.sh`, `tests/envsubst-test.sh`, `tests/config-parser-eq-test.sh`, `tests/agent-install-hook-test.sh`

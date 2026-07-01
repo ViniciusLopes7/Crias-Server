@@ -19,7 +19,7 @@
 | **Eventos push** | ✅ | `ServerStarted`/`Stopped`, `PlayerJoined`/`Left`, `HealthWarning` → bot posta em `#controle` |
 | **Streaming console** | ✅ | `StreamConsole` RPC (journalctl -f) → bot posta em `#console` com buffer 2s + chunks 1800 chars |
 | **CI/CD** | ✅ | Workflow único `ci.yml` com 9 jobs paralelos + release unificado (ISO + slim.zip + full.zip + agent binaries + sha256sums) |
-| **Releases** | ✅ | Release unificado em tag `v*`: ISO + `crias-server-full.zip` + `crias-server-slim.zip` + `crias-agent-linux-{amd64,arm64}` + `sha256sums.txt` (+ GPG sig opcional) |
+| **Releases** | ✅ | Release unificado em tag `v*`: ISO + `crias-server-full.zip` + `crias-server-slim.zip` + `crias-agent-linux-amd64` + `sha256sums.txt` (+ GPG sig opcional) |
 | **Testes** | ✅ | 22 testes bash + 36 testes Python + 3 testes Go (race-safe) |
 
 ### Decisões arquiteturais finais

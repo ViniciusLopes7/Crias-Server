@@ -199,7 +199,7 @@ Workflow único: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — 11 j
 | Job | Função | Runner |
 |-----|--------|--------|
 | `build-iso` | `mkarchiso` (ISO bootável) — depende de lint-shell + test-shell + test-shell-arch | archlinux:base-devel |
-| `build-agent` | Build Go linux/amd64 + linux/arm64 (matrix) — depende de lint-go + test-go | ubuntu-22.04 |
+| `build-agent` | Build Go linux/amd64 — depende de lint-go + test-go | ubuntu-22.04 |
 | `build-bot` | Docker build smoke — depende de lint-python + test-python | ubuntu-22.04 |
 
 ### Job de release (consolida todos artefatos)
@@ -212,7 +212,7 @@ Workflow único: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — 11 j
 - `crias-server-*.iso` — ISO bootável
 - `crias-server-full.zip` — repo completo
 - `crias-server-slim.zip` — repo sem `archiso-profile/`, `docs/`, `.github/workflows/` (para quem já tem ISO)
-- `crias-agent-linux-amd64` + `arm64` + `.sha256` — binários do agente Go
+- `crias-agent-linux-amd64` + `.sha256` — binário do agente Go (x86_64 only; a ISO é x86_64)
 - `crias-bot-image.tar` — Docker image do bot
 - `sha256sums.txt` — checksums de todos os artefatos
 - `sha256sums.txt.sig` — assinatura GPG (se `GPG_PRIVATE_KEY` secret configurado)

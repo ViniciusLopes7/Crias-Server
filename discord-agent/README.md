@@ -172,14 +172,17 @@ make proto
 # Build linux/amd64:
 make build
 
-# Build para arm64 (Raspberry Pi, etc.):
-make build BUILD_ARCH=arm64
-
 # Docker (multi-stage, scratch final):
 make docker
 # ou:
 docker build -t crias-agent:latest .
 ```
+
+> **Nota sobre arquiteturas**: apenas `linux/amd64` é lançado oficialmente (a
+> ISO é x86_64). Para cross-compilar para outra arquitetura:
+> ```bash
+> make build BUILD_OS=linux BUILD_ARCH=arm64  # experimental, sem CI
+> ```
 
 ## Testes
 

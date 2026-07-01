@@ -50,5 +50,10 @@ out/
 release-assets/
 tmp/
 
+# airootfs sincronizado pelo sync-airootfs.sh (artefato de build, NÃO commitar).
+# Estes arquivos são cópias do repo geradas antes do mkarchiso. Para regerar:
+#   bash archiso-profile/sync-airootfs.sh
+archiso-profile/airootfs/opt/crias-server/
+
 # Logs de QEMU gerados por tests/iso-qemu-boot.sh
 tests/fixtures/qemu-boot-last.log

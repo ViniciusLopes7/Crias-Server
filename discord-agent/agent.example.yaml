@@ -16,6 +16,8 @@ server:
   service_name: "minecraft"
   manager_script: "/opt/minecraft-server/mc-manager.sh"
   server_dir: "/opt/minecraft-server"
+  server_port: 25565  # porta do servidor de jogo (25565 MC, 7777 TT) — usado em /mc health
+  hardware_tier: "HIGH"  # LOW/MID/HIGH — replicado do install.sh para /mc status
   rcon:
     enabled: true
     host: "127.0.0.1"

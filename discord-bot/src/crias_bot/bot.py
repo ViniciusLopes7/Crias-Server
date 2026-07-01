@@ -10,6 +10,9 @@ Comandos:
   /mc logs [n]    Admin   Últimas N linhas do journalctl (via StreamConsole tail)
   /mc console     Admin   Ativa/desativa stream de console no canal #console
   /mc health      Admin   Health check passivo
+
+Todos os replies usam embeds padronizados via `crias_bot.embeds` para manter
+identidade visual consistente (cores, thumbnail, timestamp, footer).
 """
 
 from __future__ import annotations
@@ -24,6 +27,22 @@ from discord.ext import commands, tasks
 
 from .agent_client import AgentClient, AgentClientError
 from .config import BotConfig
+from .embeds import (
+    agent_error,
+    command_result,
+    console_stream_error,
+    console_stream_started,
+    console_stream_stopped,
+    error,
+    event_embed,
+    health_report,
+    permission_denied,
+    players_list,
+    say_confirmation,
+    status_offline,
+    status_online,
+    warning,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +64,9 @@ class CriasBot(commands.Bot):
         self.agent = agent
         self._console_stream_active = False
         self._console_task: asyncio.Task | None = None
+        # Lock para tornar /mc console toggle atômico (evita task zombie se
+        # dois admins clicarem simultaneamente).
+        self._console_lock: asyncio.Lock = asyncio.Lock()
 
     async def setup_hook(self) -> None:
         """Sincroniza slash commands no guild específico (se definido)."""
@@ -114,7 +136,11 @@ class CriasBot(commands.Bot):
         await self.wait_until_ready()
 
     async def _dispatch_event(self, ev: dict) -> None:
-        """Mapeia evento do agente para mensagem Discord no canal #controle."""
+        """Mapeia evento do agente para embed no canal #controle.
+
+        Usa embeds padronizados (ver `crias_bot.embeds.event_embed`) em vez de
+        texto puro — mantém identidade visual e cores contextuais.
+        """
         if self.config.controle_channel_id is None:
             return
 
@@ -122,23 +148,23 @@ class CriasBot(commands.Bot):
         if channel is None or not isinstance(channel, discord.TextChannel):
             return
 
-        event_type = ev.get("event_type", "")
-        metadata = ev.get("metadata", {})
+        embed = event_embed(ev)
+        if embed is None:
+            # Evento desconhecido — loga e posta fallback textual curto.
+            event_type = ev.get("event_type", "")
+            metadata = ev.get("metadata", {})
+            logger.debug("Evento sem embed dedicado: %s", event_type)
+            embed = warning(
+                f"Evento: {event_type}",
+                f"```\n{metadata}\n```",
+            )
 
-        # Mapeamento simples de evento → emoji + mensagem.
-        messages = {
-            "ServerStarted": ("🟢", f"**Servidor iniciado** ({ev.get('service', '')})"),
-            "ServerStopped": ("🔴", f"**Servidor parado** ({ev.get('service', '')})"),
-            "PlayerJoined": ("➡️", f"**{metadata.get('player', '?')}** entrou no servidor"),
-            "PlayerLeft": ("⬅️", f"**{metadata.get('player', '?')}** saiu do servidor"),
-            "HealthWarning": ("⚠️", f"**Aviso de saúde**: {metadata.get('reason', 'unknown')}"),
-        }
-
-        emoji, msg = messages.get(event_type, ("ℹ️", f"Evento {event_type}: {metadata}"))
         try:
-            await channel.send(f"{emoji} {msg}")
+            await channel.send(embed=embed)
         except discord.HTTPException:
-            logger.warning("Falha ao postar evento %s no canal %d", event_type, channel.id)
+            logger.warning(
+                "Falha ao postar evento %s no canal %d", ev.get("event_type"), channel.id
+            )
 
 
 class MinecraftCog(commands.Cog):
@@ -149,56 +175,84 @@ class MinecraftCog(commands.Cog):
     def __init__(self, bot: CriasBot) -> None:
         self.bot = bot
 
+    # ------------------------------------------------------------------
+    # Helpers internos para reduzir boilerplate de permissão + error handling.
+    # ------------------------------------------------------------------
+
+    async def _check_admin(self, interaction: discord.Interaction) -> bool:
+        """Verifica permissão admin. Retorna False se já respondeu com erro."""
+        if self.bot.is_admin(interaction.user):
+            return True
+        await interaction.response.send_message(embed=permission_denied("admin"), ephemeral=True)
+        return False
+
+    async def _check_moderator(self, interaction: discord.Interaction) -> bool:
+        """Verifica permissão moderador+. Retorna False se já respondeu."""
+        if self.bot.is_moderator(interaction.user):
+            return True
+        await interaction.response.send_message(
+            embed=permission_denied("moderador"), ephemeral=True
+        )
+        return False
+
+    async def _send_agent_error(self, interaction: discord.Interaction, e: Exception) -> None:
+        """Envia embed de erro de agente no followup."""
+        await interaction.followup.send(embed=agent_error(str(e)))
+
+    # ------------------------------------------------------------------
+    # Slash commands.
+    # ------------------------------------------------------------------
+
     @group.command(name="start", description="Liga o servidor")
     async def start(self, interaction: discord.Interaction) -> None:
-        if not self.bot.is_admin(interaction.user):
-            await interaction.response.send_message(
-                "❌ Sem permissão (admin necessário).", ephemeral=True
-            )
+        if not await self._check_admin(interaction):
             return
         await interaction.response.defer(thinking=True, ephemeral=True)
         try:
             result = await self.bot.agent.start_server()
-            if result["ok"]:
-                await interaction.followup.send(f"✅ {result['message']}")
-            else:
-                await interaction.followup.send(f"❌ {result['message']}")
+            embed = command_result(
+                ok=bool(result["ok"]),
+                action="iniciado",
+                message=result.get("message", ""),
+                service=result.get("service", ""),
+            )
+            await interaction.followup.send(embed=embed)
         except AgentClientError as e:
-            await interaction.followup.send(f"❌ Erro: {e}")
+            await self._send_agent_error(interaction, e)
 
     @group.command(name="stop", description="Desliga o servidor")
     async def stop(self, interaction: discord.Interaction) -> None:
-        if not self.bot.is_admin(interaction.user):
-            await interaction.response.send_message(
-                "❌ Sem permissão (admin necessário).", ephemeral=True
-            )
+        if not await self._check_admin(interaction):
             return
         await interaction.response.defer(thinking=True, ephemeral=True)
         try:
             result = await self.bot.agent.stop_server()
-            if result["ok"]:
-                await interaction.followup.send(f"✅ {result['message']}")
-            else:
-                await interaction.followup.send(f"❌ {result['message']}")
+            embed = command_result(
+                ok=bool(result["ok"]),
+                action="parado",
+                message=result.get("message", ""),
+                service=result.get("service", ""),
+            )
+            await interaction.followup.send(embed=embed)
         except AgentClientError as e:
-            await interaction.followup.send(f"❌ Erro: {e}")
+            await self._send_agent_error(interaction, e)
 
     @group.command(name="restart", description="Reinicia o servidor")
     async def restart(self, interaction: discord.Interaction) -> None:
-        if not self.bot.is_admin(interaction.user):
-            await interaction.response.send_message(
-                "❌ Sem permissão (admin necessário).", ephemeral=True
-            )
+        if not await self._check_admin(interaction):
             return
         await interaction.response.defer(thinking=True, ephemeral=True)
         try:
             result = await self.bot.agent.restart_server()
-            if result["ok"]:
-                await interaction.followup.send(f"✅ {result['message']}")
-            else:
-                await interaction.followup.send(f"❌ {result['message']}")
+            embed = command_result(
+                ok=bool(result["ok"]),
+                action="reiniciado",
+                message=result.get("message", ""),
+                service=result.get("service", ""),
+            )
+            await interaction.followup.send(embed=embed)
         except AgentClientError as e:
-            await interaction.followup.send(f"❌ Erro: {e}")
+            await self._send_agent_error(interaction, e)
 
     @group.command(name="status", description="Mostra status do servidor")
     async def status(self, interaction: discord.Interaction) -> None:
@@ -206,116 +260,78 @@ class MinecraftCog(commands.Cog):
         try:
             s = await self.bot.agent.get_status()
             if not s["service_active"]:
-                embed = discord.Embed(
-                    title=f"📊 Status — {s['service_name']}",
-                    description="🔴 **Offline**",
-                    color=discord.Color.red(),
-                )
+                embed = status_offline(s.get("service_name", "?"))
             else:
-                uptime = _format_uptime(s["uptime_seconds"])
-                players_list = ", ".join(s["players"]) if s["players"] else "_ninguém_"
-                embed = discord.Embed(
-                    title=f"📊 Status — {s['service_name']}",
-                    description="🟢 **Online**",
-                    color=discord.Color.green(),
-                )
-                embed.add_field(name="Stack", value=s["stack"], inline=True)
-                embed.add_field(name="Tier", value=s.get("hardware_tier", "?"), inline=True)
-                embed.add_field(name="Uptime", value=uptime, inline=True)
-                embed.add_field(
-                    name=f"Players ({s['player_count']})",
-                    value=players_list,
-                    inline=False,
-                )
-                embed.add_field(
-                    name="Memória",
-                    value=f"{s['memory_used_mb']} / {s['memory_max_mb']} MB",
-                    inline=True,
-                )
+                embed = status_online(s)
             await interaction.followup.send(embed=embed)
         except AgentClientError as e:
-            await interaction.followup.send(f"❌ Erro ao consultar status: {e}")
+            await self._send_agent_error(interaction, e)
 
     @group.command(name="players", description="Lista players online")
     async def players(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(thinking=True)
         try:
             s = await self.bot.agent.get_status()
-            if not s["players"]:
-                await interaction.followup.send("📭 Nenhum player online.")
-            else:
-                lines = [f"• **{p}**" for p in s["players"]]
-                embed = discord.Embed(
-                    title=f"👥 Players online ({s['player_count']})",
-                    description="\n".join(lines),
-                    color=discord.Color.blue(),
-                )
-                await interaction.followup.send(embed=embed)
+            embed = players_list(s)
+            await interaction.followup.send(embed=embed)
         except AgentClientError as e:
-            await interaction.followup.send(f"❌ Erro: {e}")
+            await self._send_agent_error(interaction, e)
 
     @group.command(name="say", description="Manda mensagem no chat do jogo via RCON")
     @app_commands.describe(message="Mensagem a ser enviada")
     async def say(self, interaction: discord.Interaction, message: str) -> None:
-        if not self.bot.is_moderator(interaction.user):
-            await interaction.response.send_message(
-                "❌ Sem permissão (moderador+ necessário).", ephemeral=True
-            )
+        if not await self._check_moderator(interaction):
             return
         await interaction.response.defer(thinking=True, ephemeral=True)
         try:
             result = await self.bot.agent.send_rcon_command(f"say {message}")
-            if result["ok"]:
-                await interaction.followup.send(f"✅ Mensagem enviada: `{message}`")
+            if result.get("ok"):
+                await interaction.followup.send(embed=say_confirmation(message), ephemeral=True)
             else:
-                await interaction.followup.send(f"❌ {result.get('error', 'erro desconhecido')}")
+                err_msg = result.get("error", "erro desconhecido")
+                await interaction.followup.send(
+                    embed=error("Falha no RCON", f"```\n{err_msg}\n```"),
+                    ephemeral=True,
+                )
         except AgentClientError as e:
-            await interaction.followup.send(f"❌ Erro: {e}")
+            await self._send_agent_error(interaction, e)
 
     @group.command(name="health", description="Verifica saúde do servidor")
     async def health(self, interaction: discord.Interaction) -> None:
-        if not self.bot.is_admin(interaction.user):
-            await interaction.response.send_message(
-                "❌ Sem permissão (admin necessário).", ephemeral=True
-            )
+        if not await self._check_admin(interaction):
             return
         await interaction.response.defer(thinking=True, ephemeral=True)
         try:
             h = await self.bot.agent.get_health()
-            color = discord.Color.green() if h["healthy"] else discord.Color.orange()
-            embed = discord.Embed(
-                title=f"🏥 Health — {h['service']}",
-                color=color,
-            )
-            embed.add_field(name="Healthy", value="✅" if h["healthy"] else "⚠️", inline=True)
-            embed.add_field(name="RCON", value="✅" if h["rcon_responsive"] else "❌", inline=True)
-            embed.add_field(name="Porta", value=str(h.get("port", "?")), inline=True)
-            embed.add_field(name="Mensagem", value=h.get("message", ""), inline=False)
-            await interaction.followup.send(embed=embed)
+            await interaction.followup.send(embed=health_report(h), ephemeral=True)
         except AgentClientError as e:
-            await interaction.followup.send(f"❌ Erro: {e}")
+            await self._send_agent_error(interaction, e)
 
     @group.command(name="console", description="Ativa/desativa stream de console no canal #console")
     async def console(self, interaction: discord.Interaction) -> None:
-        if not self.bot.is_admin(interaction.user):
-            await interaction.response.send_message(
-                "❌ Sem permissão (admin necessário).", ephemeral=True
-            )
+        if not await self._check_admin(interaction):
             return
 
-        if self.bot._console_stream_active:
-            # Desativar.
-            self.bot._console_stream_active = False
-            if self.bot._console_task is not None:
-                self.bot._console_task.cancel()
-                self.bot._console_task = None
-            await interaction.response.send_message("🔇 Stream de console desativado.")
-        else:
+        # Toggle atômico via lock — evita race entre dois admins clicando ao
+        # mesmo tempo e deixando task zombie.
+        async with self.bot._console_lock:
+            if self.bot._console_stream_active:
+                # Desativar.
+                self.bot._console_stream_active = False
+                if self.bot._console_task is not None:
+                    self.bot._console_task.cancel()
+                    self.bot._console_task = None
+                await interaction.response.send_message(embed=console_stream_stopped())
+                return
+
             # Ativar.
             channel_id = self.bot.config.console_channel_id
             if channel_id is None:
                 await interaction.response.send_message(
-                    "❌ Canal #console não configurado. Defina `DISCORD_CONSOLE_CHANNEL_ID`.",
+                    embed=error(
+                        "Canal #console não configurado",
+                        "Defina `DISCORD_CONSOLE_CHANNEL_ID` nas variáveis de ambiente do bot.",
+                    ),
                     ephemeral=True,
                 )
                 return
@@ -323,16 +339,17 @@ class MinecraftCog(commands.Cog):
             channel = self.bot.get_channel(channel_id)
             if channel is None or not isinstance(channel, discord.TextChannel):
                 await interaction.response.send_message(
-                    f"❌ Canal {channel_id} não encontrado ou não é texto.",
+                    embed=error(
+                        "Canal #console inválido",
+                        f"Canal `{channel_id}` não encontrado ou não é um canal de texto.",
+                    ),
                     ephemeral=True,
                 )
                 return
 
             self.bot._console_stream_active = True
             self.bot._console_task = asyncio.create_task(self._console_stream_loop(channel))
-            await interaction.response.send_message(
-                f"📡 Stream de console ativado em {channel.mention}. Use `/mc console` novamente para parar."
-            )
+            await interaction.response.send_message(embed=console_stream_started(channel.mention))
 
     async def _console_stream_loop(self, channel: discord.TextChannel) -> None:
         """Loop que consome StreamConsole e posta no canal #console em blocos.
@@ -364,7 +381,7 @@ class MinecraftCog(commands.Cog):
         except AgentClientError as e:
             logger.warning("Console stream falhou: %s", e)
             try:
-                await channel.send(f"❌ Stream de console parou: {e}")
+                await channel.send(embed=console_stream_error(str(e)))
             except discord.HTTPException:
                 pass
         except asyncio.CancelledError:
@@ -393,7 +410,10 @@ def _partition_lines(lines: list[str], max_chars: int) -> list[str]:
 
 
 def _format_uptime(seconds: int) -> str:
-    """Formata uptime em 'Xh Ym' ou 'Xd Yh'."""
+    """Formata uptime em 'Xh Ym' ou 'Xd Yh'.
+
+    Mantido para compat com testes existentes (`tests/test_bot_helpers.py`).
+    """
     if seconds < 60:
         return f"{seconds}s"
     if seconds < 3600:
