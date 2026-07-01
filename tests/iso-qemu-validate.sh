@@ -325,13 +325,27 @@ if command -v file >/dev/null 2>&1; then
     echo "  OK: arquivo é ISO 9660 válido"
 fi
 
-# Verifica presença de El Torito boot record (offset 0x8001 deve ter 'EL TORITO SPECIFICATION')
+# Verifica presença de El Torito boot record no setor 17 da ISO 9660.
+# Estrutura ISO 9660:
+#   setor 16 (offset 32768): Primary Volume Descriptor
+#   setor 17 (offset 34816): El Torito Boot Record (se ISO for bootável)
+#   setor 18 (offset 36864): VD Set Terminator
+# O Boot Record tem "EL TORITO SPECIFICATION" no offset 7 dentro do setor.
+#
+# IMPORTANTE: NÃO usar el_torito="$(dd ...)" + echo | grep, porque:
+#   1. Offset 32769 (setor 16+1) aponta para o PVD, não o Boot Record.
+#      Offset correto é setor 17 (skip=17 com bs=2048).
+#   2. bash $(...) stripa null bytes de output binário (warning:
+#      "ignored null byte in input"), corrompendo a comparação.
+# Solução: pipe direto dd | grep -a (grep -a trata binário como texto).
 if command -v dd >/dev/null 2>&1; then
-    el_torito="$(dd if="$ISO_PATH" bs=1 skip=32769 count=31 2>/dev/null || true)"
-    if echo "$el_torito" | grep -q 'EL TORITO SPECIFICATION'; then
+    if dd if="$ISO_PATH" bs=2048 skip=17 count=1 2>/dev/null | grep -aq 'EL TORITO SPECIFICATION'; then
         echo "  OK: El Torito boot record presente (ISO é bootável)"
     else
-        echo "  AVISO: El Torito boot record não encontrado (ISO pode não ser bootável)" >&2
+        echo "  AVISO: El Torito boot record não encontrado no setor 17" >&2
+        echo "  (ISO pode não ser bootável)" >&2
+        echo "  Dump do setor 17 para debug:" >&2
+        dd if="$ISO_PATH" bs=2048 skip=17 count=1 2>/dev/null | od -c | head -4 >&2
     fi
 fi
 
