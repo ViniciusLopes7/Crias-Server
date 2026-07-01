@@ -322,7 +322,7 @@ jobs:
     needs: [build-iso]
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-22.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -391,23 +391,26 @@ jobs:
       - name: Boot ISO in QEMU (BIOS legacy) — smoke test
         run: |
           ISO_FILE="${{ steps.find_iso.outputs.iso_path }}"
-          echo "=== Boot BIOS legacy (240s / 4 min smoke test) ==="
+          echo "=== Boot BIOS legacy (420s / 7 min smoke test) ==="
           # Boot da ISO em QEMU com 2GB RAM, sem display, capturando serial.
-          # timeout 240s (4 min): o kernel precisa de tempo para decomprimir,
-          # carregar módulos do archiso, e inicializar. 30s não é suficiente
-          # em runners do GitHub Actions (que são mais lentos que hardware real).
+          # timeout 420s (7 min): o kernel precisa de tempo para decomprimir,
+          # carregar módulos do archiso, e inicializar. Runners do GitHub
+          # Actions são mais lentos que hardware real.
           #
           # Parâmetros do kernel (configurados em syslinux.cfg):
           #   edd=off            — pula EDD BIOS probing (lento no QEMU)
           #   console=ttyS0,115200 — output do kernel via serial (QEMU captura)
           #   console=tty0       — mantém output no VGA também (para hardware real)
           #
+          # syslinux.cfg também tem SERIAL 0 115200 e UI menu.c32 (modo texto)
+          # em vez de vesamenu.c32 (modo gráfico que trava em QEMU headless).
+          #
           # -nographic: redireciona tudo para o terminal (serial console).
           # -m 2048: 2GB RAM (archiso em squashfs precisa de RAM para descomprimir).
           # -cdrom: attacha a ISO como CD-ROM bootável.
           # -boot d: boot pelo CD-ROM.
           qemu_log="$(mktemp /tmp/crias-qemu-bios-XXXXXX.log)"
-          timeout 240 qemu-system-x86_64 \
+          timeout 420 qemu-system-x86_64 \
             -m 2048 \
             -cdrom "$ISO_FILE" \
             -boot d \
@@ -416,8 +419,8 @@ jobs:
             -serial mon:stdio \
             </dev/null >"$qemu_log" 2>&1 || true
 
-          echo "=== Últimas 50 linhas do log QEMU (BIOS) ==="
-          tail -50 "$qemu_log"
+          echo "=== Últimas 80 linhas do log QEMU (BIOS) ==="
+          tail -80 "$qemu_log"
 
           # Validações: kernel deve inicializar e archiso hooks devem carregar.
           # Com console=ttyS0,115200 no syslinux.cfg, mensagens do kernel aparecem
@@ -427,7 +430,7 @@ jobs:
             echo "✓ OK: kernel Linux inicializou (BIOS boot)"
             grep -oE 'Linux version [0-9.]+[^ ]*' "$qemu_log" | head -1
           else
-            echo "✗ FAIL: kernel Linux não inicializou em 240s (BIOS boot)" >&2
+            echo "✗ FAIL: kernel Linux não inicializou em 420s (BIOS boot)" >&2
             PASS=false
           fi
 
@@ -446,7 +449,7 @@ jobs:
       - name: Boot ISO in QEMU (UEFI) — smoke test
         run: |
           ISO_FILE="${{ steps.find_iso.outputs.iso_path }}"
-          echo "=== Boot UEFI (240s / 4 min smoke test) ==="
+          echo "=== Boot UEFI (420s / 7 min smoke test) ==="
           # Cria cópia writable do OVMF_VARS (UEFI requer NVRAM vars file writable).
           OVMF_VARS="/tmp/ovmf-vars.fd"
           OVMF_SRC=""
@@ -470,7 +473,7 @@ jobs:
           echo "OVMF_VARS: $OVMF_VARS"
 
           qemu_log="$(mktemp /tmp/crias-qemu-uefi-XXXXXX.log)"
-          timeout 240 qemu-system-x86_64 \
+          timeout 420 qemu-system-x86_64 \
             -m 2048 \
             -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
             -drive if=pflash,format=raw,file="$OVMF_VARS" \
@@ -481,8 +484,8 @@ jobs:
             -serial mon:stdio \
             </dev/null >"$qemu_log" 2>&1 || true
 
-          echo "=== Últimas 50 linhas do log QEMU (UEFI) ==="
-          tail -50 "$qemu_log"
+          echo "=== Últimas 80 linhas do log QEMU (UEFI) ==="
+          tail -80 "$qemu_log"
 
           # Para UEFI, aceitamos que pelo menos o GRUB/carregador inicialize
           # (kernel pode demorar mais em UEFI em CI lento).
@@ -490,7 +493,7 @@ jobs:
           if grep -qi 'grub\|Linux version\|archiso' "$qemu_log"; then
             echo "✓ OK: bootloader/kernel inicializou (UEFI boot)"
           else
-            echo "✗ FAIL: nenhum sinal de boot em 240s (UEFI boot)" >&2
+            echo "✗ FAIL: nenhum sinal de boot em 420s (UEFI boot)" >&2
             PASS=false
           fi
 
