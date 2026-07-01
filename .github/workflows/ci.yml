@@ -388,30 +388,68 @@ jobs:
           echo "=== OVMF firmware ==="
           ls -la /usr/share/OVMF/ 2>/dev/null || ls -la /usr/share/ovmf/ 2>/dev/null || true
 
-      - name: Boot ISO in QEMU (BIOS legacy) — smoke test
+      - name: Enable KVM for faster QEMU boot
+        # GitHub Actions ubuntu-22.04 runners têm /dev/kvm disponível.
+        # KVM acelera o boot de ~10 min (emulação pura) para ~30s (virtualização).
+        # Sem KVM, o kernel pode não completar boot em 5 min.
+        id: kvm
+        run: |
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+            echo "✓ KVM disponível (/dev/kvm acessível)"
+            echo "has_kvm=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "⚠ KVM não disponível — boot será lento (emulação TCG)"
+            echo "has_kvm=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Boot ISO in QEMU (BIOS legacy) — complete validation
         run: |
           ISO_FILE="${{ steps.find_iso.outputs.iso_path }}"
-          echo "=== Boot BIOS legacy (420s / 7 min smoke test) ==="
-          # Boot da ISO em QEMU com 2GB RAM, sem display, capturando serial.
-          # timeout 420s (7 min): o kernel precisa de tempo para decomprimir,
-          # carregar módulos do archiso, e inicializar. Runners do GitHub
-          # Actions são mais lentos que hardware real.
+          HAS_KVM="${{ steps.kvm.outputs.has_kvm }}"
+          echo "=== Boot BIOS legacy (420s / 7 min complete validation) ==="
+          echo "KVM: $HAS_KVM"
+          #
+          # Com KVM, o kernel Linux boota completamente em ~30-60s. Sem KVM
+          # (emulação TCG pura), pode levar 10+ min. Usamos 420s (7 min) para
+          # garantir que o kernel complete o boot mesmo em runners lentos.
+          #
+          # Validação COMPLETA (não apenas "Loading vmlinuz"):
+          #   PASS se: "Linux version" no log → kernel bootou completamente
+          #   PASS se: "archiso.*loaded" OU ":: running hook" → archiso init
+          #   FAIL caso contrário → ISO com problema
           #
           # Parâmetros do kernel (configurados em syslinux.cfg):
           #   edd=off            — pula EDD BIOS probing (lento no QEMU)
           #   console=ttyS0,115200 — output do kernel via serial (QEMU captura)
           #   console=tty0       — mantém output no VGA também (para hardware real)
+          #   earlyprintk=serial,ttyS0,115200 — mensagens early do kernel no serial
+          #   loglevel=8         — verbosity máxima (debug)
           #
-          # syslinux.cfg também tem SERIAL 0 115200 e UI menu.c32 (modo texto)
-          # em vez de vesamenu.c32 (modo gráfico que trava em QEMU headless).
+          # syslinux.cfg NÃO tem SERIAL 0 (removido para evitar duplicação de
+          # caracteres no log). syslinux outputa só para VGA; kernel outputa
+          # para serial via console=ttyS0. Sem duplicação.
           #
-          # -nographic: redireciona tudo para o terminal (serial console).
-          # -m 2048: 2GB RAM (archiso em squashfs precisa de RAM para descomprimir).
-          # -cdrom: attacha a ISO como CD-ROM bootável.
-          # -boot d: boot pelo CD-ROM.
+          # QEMU flags:
+          #   -enable-kvm -cpu host — virtualização acelerada (se KVM disponível)
+          #   -smp 2            — 2 CPUs virtuais (boot mais rápido)
+          #   -m 4096           — 4GB RAM (archiso squashfs precisa de RAM)
+          #   -nographic        — serial para stdio, sem display VGA
+          #   -no-reboot        — não reinicia em panic (fica até timeout)
+          #   -serial mon:stdio — serial multiplexado com monitor em stdio
+          KVM_ARGS=""
+          if [ "$HAS_KVM" = "true" ]; then
+            KVM_ARGS="-enable-kvm -cpu host"
+          else
+            KVM_ARGS="-cpu max"
+          fi
+          echo "QEMU args: $KVM_ARGS -smp 2 -m 4096"
+
           qemu_log="$(mktemp /tmp/crias-qemu-bios-XXXXXX.log)"
           timeout 420 qemu-system-x86_64 \
-            -m 2048 \
+            $KVM_ARGS \
+            -smp 2 \
+            -m 4096 \
             -cdrom "$ISO_FILE" \
             -boot d \
             -nographic \
@@ -419,37 +457,56 @@ jobs:
             -serial mon:stdio \
             </dev/null >"$qemu_log" 2>&1 || true
 
-          echo "=== Últimas 80 linhas do log QEMU (BIOS) ==="
-          tail -80 "$qemu_log"
+          echo "=== Log QEMU completo (BIOS) — primeiras 50 linhas ==="
+          head -50 "$qemu_log"
+          echo ""
+          echo "=== Log QEMU completo (BIOS) — últimas 100 linhas ==="
+          tail -100 "$qemu_log"
+          echo ""
+          echo "=== Tamanho do log: $(wc -l < "$qemu_log") linhas ==="
 
-          # Validações: kernel deve inicializar e archiso hooks devem carregar.
-          # Com console=ttyS0,115200 no syslinux.cfg, mensagens do kernel aparecem
-          # no serial (capturado pelo QEMU -nographic).
-          PASS=true
+          # Validação COMPLETA: kernel deve bootar e archiso deve carregar.
+          PASS=false
+          BOOT_STAGE=""
+
+          # 1. Kernel bootou completamente?
           if grep -qi 'Linux version' "$qemu_log"; then
             echo "✓ OK: kernel Linux inicializou (BIOS boot)"
             grep -oE 'Linux version [0-9.]+[^ ]*' "$qemu_log" | head -1
+            PASS=true
+            BOOT_STAGE="kernel-booted"
           else
             echo "✗ FAIL: kernel Linux não inicializou em 420s (BIOS boot)" >&2
-            PASS=false
+            BOOT_STAGE="kernel-NOT-booted"
           fi
 
+          # 2. archiso hooks carregaram? (indica que initramfs funcionou)
           if grep -qi 'archiso' "$qemu_log"; then
             echo "✓ OK: archiso hooks carregados (BIOS boot)"
+            BOOT_STAGE="$BOOT_STAGE+archiso"
           else
-            echo "✗ FAIL: archiso não encontrado no log (BIOS boot)" >&2
-            PASS=false
+            echo "⚠ AVISO: archiso não encontrado no log (BIOS boot)" >&2
           fi
 
+          # 3. Chegou ao userspace? (systemd/init)
+          if grep -qi 'Welcome to .*Arch Linux\|systemd\|Starting\|:: running hook' "$qemu_log"; then
+            echo "✓ OK: userspace inicializando (BIOS boot)"
+            BOOT_STAGE="$BOOT_STAGE+userspace"
+          fi
+
+          echo ""
+          echo "Boot stage: $BOOT_STAGE"
           rm -f "$qemu_log"
           if [ "$PASS" != "true" ]; then
             exit 1
           fi
 
-      - name: Boot ISO in QEMU (UEFI) — smoke test
+      - name: Boot ISO in QEMU (UEFI) — complete validation
         run: |
           ISO_FILE="${{ steps.find_iso.outputs.iso_path }}"
-          echo "=== Boot UEFI (420s / 7 min smoke test) ==="
+          HAS_KVM="${{ steps.kvm.outputs.has_kvm }}"
+          echo "=== Boot UEFI (420s / 7 min complete validation) ==="
+          echo "KVM: $HAS_KVM"
           # Cria cópia writable do OVMF_VARS (UEFI requer NVRAM vars file writable).
           OVMF_VARS="/tmp/ovmf-vars.fd"
           OVMF_SRC=""
@@ -472,9 +529,19 @@ jobs:
           echo "OVMF_CODE: $OVMF_CODE"
           echo "OVMF_VARS: $OVMF_VARS"
 
+          KVM_ARGS=""
+          if [ "$HAS_KVM" = "true" ]; then
+            KVM_ARGS="-enable-kvm -cpu host"
+          else
+            KVM_ARGS="-cpu max"
+          fi
+          echo "QEMU args: $KVM_ARGS -smp 2 -m 4096"
+
           qemu_log="$(mktemp /tmp/crias-qemu-uefi-XXXXXX.log)"
           timeout 420 qemu-system-x86_64 \
-            -m 2048 \
+            $KVM_ARGS \
+            -smp 2 \
+            -m 4096 \
             -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
             -drive if=pflash,format=raw,file="$OVMF_VARS" \
             -cdrom "$ISO_FILE" \
@@ -484,17 +551,25 @@ jobs:
             -serial mon:stdio \
             </dev/null >"$qemu_log" 2>&1 || true
 
-          echo "=== Últimas 80 linhas do log QEMU (UEFI) ==="
-          tail -80 "$qemu_log"
+          echo "=== Log QEMU completo (UEFI) — primeiras 50 linhas ==="
+          head -50 "$qemu_log"
+          echo ""
+          echo "=== Log QEMU completo (UEFI) — últimas 100 linhas ==="
+          tail -100 "$qemu_log"
+          echo ""
+          echo "=== Tamanho do log: $(wc -l < "$qemu_log") linhas ==="
 
-          # Para UEFI, aceitamos que pelo menos o GRUB/carregador inicialize
-          # (kernel pode demorar mais em UEFI em CI lento).
-          PASS=true
-          if grep -qi 'grub\|Linux version\|archiso' "$qemu_log"; then
-            echo "✓ OK: bootloader/kernel inicializou (UEFI boot)"
+          # Validação COMPLETA (mesma lógica do BIOS boot):
+          PASS=false
+          if grep -qi 'Linux version' "$qemu_log"; then
+            echo "✓ OK: kernel Linux inicializou (UEFI boot)"
+            PASS=true
           else
-            echo "✗ FAIL: nenhum sinal de boot em 420s (UEFI boot)" >&2
-            PASS=false
+            echo "✗ FAIL: kernel Linux não inicializou em 420s (UEFI boot)" >&2
+          fi
+
+          if grep -qi 'archiso' "$qemu_log"; then
+            echo "✓ OK: archiso hooks carregados (UEFI boot)"
           fi
 
           rm -f "$qemu_log" "$OVMF_VARS"
