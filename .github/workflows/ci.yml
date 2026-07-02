@@ -382,7 +382,9 @@ jobs:
       - name: Install QEMU and OVMF (UEFI firmware)
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils ovmf bsdtar
+          # libarchive-tools fornece o binário bsdtar (no Ubuntu/Debian o
+          # pacote não se chama "bsdtar" — é "libarchive-tools").
+          sudo apt-get install -y qemu-system-x86 qemu-utils ovmf libarchive-tools
           echo "=== QEMU version ==="
           qemu-system-x86_64 --version | head -2
           echo "=== OVMF firmware ==="
