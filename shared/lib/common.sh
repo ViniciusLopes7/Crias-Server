@@ -175,21 +175,36 @@ write_file_or_dry_run() {
 # ---------------------------------------------------------------------------
 # Prompts interativos.
 # ---------------------------------------------------------------------------
+# print_prompt: destaca uma pergunta do instalador com linha separadora e cor.
+# Usa CYAN + NEGRITO para máxima visibilidade em terminal.
+print_prompt() {
+    local prompt="$1"
+    # Linha separadora de 60 chars em cyan para destacar a pergunta.
+    printf '%s──────────────────────────────────────────────────────────%s\n' "${CYAN}" "${NC}"
+    # Pergunta em cyan + negrito (se terminal suportar).
+    printf '%s❯ %s%s\n' "${CYAN}" "$prompt" "${NC}"
+}
+
+# ask_confirm: pergunta sim/não com destaque visual.
+# Retorna 0 (sim) ou 1 (não).
 ask_confirm() {
     local prompt="$1"
     local default_ans="${2:-Y}"
     local answer
     local prompt_text
 
+    # Destaca a pergunta com linha separadora e cor.
+    print_prompt "$prompt"
+
     if [ "${default_ans^^}" = "Y" ]; then
-        prompt_text="$prompt [Y/n]: "
+        prompt_text="${CYAN}  ➜ [Y/n]: ${NC}"
     else
-        prompt_text="$prompt [y/N]: "
+        prompt_text="${CYAN}  ➜ [y/N]: ${NC}"
     fi
 
     # Captura SIGINT/EOF via exit code de read (130 = SIGINT, 1 = EOF).
     # Não usar trap global aqui — seria sobrescrito por callers e vice-versa.
-    if ! read -r -p "$prompt_text" answer; then
+    if ! read -r -p "$(printf '%b' "$prompt_text")" answer; then
         echo ""
         print_warning "Operacao cancelada pelo usuario (EOF/SIGINT)."
         return 1
@@ -206,13 +221,18 @@ ask_confirm() {
     return 1
 }
 
+# ask_value: pede um valor com default, com destaque visual.
+# Usa printf -v para atribuir o resultado a uma variável nomeada.
 ask_value() {
     local prompt="$1"
     local default_value="$2"
     local var_name="$3"
     local answer
 
-    read -r -p "$prompt [$default_value]: " answer
+    # Destaca a pergunta com linha separadora e cor.
+    print_prompt "$prompt"
+
+    read -r -p "$(printf '%b' "${CYAN}  ➜ [${default_value}]: ${NC}")" answer
     if [ -z "$answer" ]; then
         printf -v "$var_name" '%s' "$default_value"
     else

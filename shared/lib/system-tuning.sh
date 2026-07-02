@@ -123,6 +123,15 @@ apply_nofile_limit() {
         return 0
     fi
 
+    # Garante que o diretório /etc/security/limits.d/ existe.
+    # Em alguns sistemas (containers, installs mínimas) pode não existir.
+    if [ ! -d "/etc/security/limits.d" ]; then
+        mkdir -p "/etc/security/limits.d" 2>/dev/null || {
+            warn "Não foi possível criar /etc/security/limits.d/ — pulando nofile limit."
+            return 0
+        }
+    fi
+
     cat > "$limits_conf" << EOF
 ${server_user} soft nofile 65536
 ${server_user} hard nofile 65536
@@ -171,6 +180,7 @@ apply_zram_and_sysctl_tuning() {
         cp -a "$zram_conf" "${zram_conf}.${backup_suffix}.bak" 2>/dev/null || true
     fi
 
+    mkdir -p "$(dirname "$zram_conf")" 2>/dev/null || true
     cat > "$zram_conf" << EOF
 [zram0]
 zram-size = ${zram_size_mb}M
@@ -183,6 +193,7 @@ EOF
         cp -a "$sysctl_conf" "${sysctl_conf}.${backup_suffix}.bak" 2>/dev/null || true
     fi
 
+    mkdir -p "$(dirname "$sysctl_conf")" 2>/dev/null || true
     cat > "$sysctl_conf" << EOF
 vm.swappiness=${swappiness}
 vm.vfs_cache_pressure=50

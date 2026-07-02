@@ -11,6 +11,12 @@ source "$SCRIPT_DIR/shared/lib/common.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/shared/lib/config-parser.sh"
 
+# shellcheck source=/dev/null
+# downloads.sh define download_and_verify() usada por install_crias_agent_if_enabled()
+# e por minecraft/install.sh (via stack-installer.sh). Sem este source, a função
+# não está disponível quando install.sh chama download_and_verify diretamente.
+source "$SCRIPT_DIR/shared/lib/downloads.sh"
+
 # Apply config with proper precedence: defaults < config.env < environment variables
 apply_config_with_env_precedence "$CONFIG_FILE"
 
@@ -654,18 +660,29 @@ install_crias_agent_if_enabled() {
         return 1
     fi
 
-    # 3. Baixa binário do último release da branch discord (GitHub API).
+    # 3. Baixa binário do último release (GitHub API).
+    # A CI cria releases com tag v*.*.* (ex: v2026.07.02-342c3f9) que contêm
+    # o asset crias-agent-linux-amd64. Buscamos a última release que tenha
+    # esse asset (sem filtrar por prefixo de tag, pois não existe agent-latest).
     local agent_url
-    local api_url="https://api.github.com/repos/ViniciusLopes7/Crias-Server/releases"
-    # Tenta tag específica primeiro; fallback para latest.
+    local api_url="https://api.github.com/repos/ViniciusLopes7/Crias-Server/releases?per_page=10"
+    # Estratégia: lista as 10 releases mais recentes, procura a primeira que
+    # tem o asset "crias-agent-linux-amd64" e extrai a URL de download.
     agent_url=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors --connect-timeout 10 --max-time 60 \
+        -H "Accept: application/vnd.github+json" \
         "$api_url" 2>/dev/null \
-        | jq -r '[.[] | select(.tag_name | startswith("agent-"))] | .[0].assets[] | select(.name=="crias-agent-linux-amd64") | .browser_download_url // empty' 2>/dev/null || true)
+        | jq -r '[.[] | .assets[] | select(.name=="crias-agent-linux-amd64") | .browser_download_url] | .[0] // empty' 2>/dev/null || true)
 
     if [ -z "$agent_url" ]; then
-        # Fallback direto para o asset da tag agent-latest.
-        agent_url="https://github.com/ViniciusLopes7/Crias-Server/releases/download/agent-latest/crias-agent-linux-amd64"
+        print_error "Não foi possível encontrar o asset crias-agent-linux-amd64 em nenhuma release do GitHub."
+        print_error "URL da API consultada: $api_url"
+        print_error "Verifique se há releases publicadas em:"
+        print_error "  https://github.com/ViniciusLopes7/Crias-Server/releases"
+        print_warning "Voce pode instalar manualmente depois: ver discord-agent/README.md"
+        return 1
     fi
+
+    print_step "URL do agente: $agent_url"
 
     local agent_sha_var="CRIAS_AGENT_SHA256"
     if ! download_and_verify "$agent_url" /tmp/crias-agent "$agent_sha_var" "false"; then
