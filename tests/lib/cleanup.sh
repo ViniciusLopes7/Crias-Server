@@ -11,5 +11,8 @@ safe_cleanup_dir() {
         return 1
     fi
 
-    rm -rf -- "$target_dir"
+    # unsquashfs creates files with xattrs/capabilities that non-root can't rm.
+    # chmod +w makes them removable; sudo is fallback if available.
+    chmod -R u+w -- "$target_dir" 2>/dev/null || true
+    rm -rf -- "$target_dir" 2>/dev/null || sudo rm -rf -- "$target_dir" 2>/dev/null || true
 }

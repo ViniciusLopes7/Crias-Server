@@ -49,7 +49,8 @@ if [ ! -f "$squashfs_file" ]; then
 fi
 
 echo "[iso-live-credentials-validate] Expandindo filesystem live..."
-unsquashfs -no-progress -d "$WORK_DIR/rootfs" "$squashfs_file" >/dev/null
+# -no-xattrs: avoid creating files with capabilities that need root to rm.
+unsquashfs -no-progress -no-xattrs -d "$WORK_DIR/rootfs" "$squashfs_file" >/dev/null
 
 passwd_file="$WORK_DIR/rootfs/etc/passwd"
 group_file="$WORK_DIR/rootfs/etc/group"
