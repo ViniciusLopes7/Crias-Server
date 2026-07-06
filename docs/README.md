@@ -8,7 +8,6 @@
 |-----------|-----------|
 | [../README.md](../README.md) | Visão geral + quick start + controle remoto Discord |
 | [../ROADMAP.md](../ROADMAP.md) | Status de implementação e próximos passos |
-| [CHANGELOG.md](CHANGELOG.md) | Histórico de mudanças por versão |
 
 ## Tutorial
 

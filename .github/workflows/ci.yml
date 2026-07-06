@@ -345,7 +345,7 @@ jobs:
     needs: [build-iso]
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -521,12 +521,15 @@ jobs:
             KVM_ARGS="-cpu max"
           fi
 
-          KERNEL_CMDLINE="archisobasedir=$INSTALL_DIR archisolabel=$ISO_LABEL edd=off console=ttyS0,115200 console=tty0 earlyprintk=serial,ttyS0,115200 loglevel=8"
+          # console order: ttyS0 LAST = primary console (kernel logs go to serial).
+          # tty0 first keeps VGA working but serial is primary for output capture.
+          # systemd.show_status=1 forces systemd to keep logging to console.
+          KERNEL_CMDLINE="archisobasedir=$INSTALL_DIR archisolabel=$ISO_LABEL edd=off console=tty0 console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 loglevel=8 systemd.show_status=1 systemd.log_target=console"
           echo "Kernel cmdline: $KERNEL_CMDLINE"
           echo "QEMU args: $KVM_ARGS -smp 2 -m 4096"
 
           qemu_log="$(mktemp /tmp/crias-qemu-kernel-XXXXXX.log)"
-          timeout 420 qemu-system-x86_64 \
+          timeout 180 qemu-system-x86_64 \
             $KVM_ARGS \
             -smp 2 \
             -m 4096 \
@@ -576,13 +579,19 @@ jobs:
             echo "✗ FAIL: archiso não encontrado no log" >&2
           fi
 
-          # 4. Chegou ao login prompt? (requerido para PASS=true)
-          if grep -qiE 'archiso login:' "$qemu_log"; then
-            echo "✓ OK: login prompt reached"
-            BOOT_STAGE="$BOOT_STAGE+login-prompt"
+          # 4. Chegou ao login prompt ou ao multi-user target?
+          # archiso's systemd-mute-console silences serial after boot,
+          # so 'login:' may not appear. Accept these as boot-complete markers:
+          #   - archiso login: (ideal — login prompt reached)
+          #   - Reached target .*Multi-User (systemd reached multi-user.target)
+          #   - Started Getty on tty1 (getty spawned = boot near complete)
+          if grep -qiE 'archiso login:|Reached target .*Multi-User|Started Getty on tty1|Started Login Service' "$qemu_log"; then
+            echo "✓ OK: boot complete marker reached"
+            grep -iE 'archiso login:|Reached target .*Multi-User|Started Getty on tty1|Started Login Service' "$qemu_log" | head -3
+            BOOT_STAGE="$BOOT_STAGE+boot-complete"
             PASS=true
           else
-            echo "✗ FAIL: login prompt não reached em 420s" >&2
+            echo "✗ FAIL: boot complete marker não reached em 180s" >&2
             echo "  Últimas 30 linhas do log:" >&2
             tail -30 "$qemu_log" >&2
           fi

@@ -86,7 +86,3 @@
 - `discord-agent/internal/rcon/client_test.go::TestClient_Execute_Mock` — `dialer` agora é mockado (TST-004)
 
 ---
-
-## 📜 Histórico
-
-Para histórico detalhado de mudanças por versão, veja [docs/CHANGELOG.md](docs/CHANGELOG.md).

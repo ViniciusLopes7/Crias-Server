@@ -213,9 +213,7 @@ class AgentClient:
         code = code_fn() if callable(code_fn) else None
         if code not in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.UNKNOWN):
             return
-        logger.warning(
-            "RPC falhou com %s — resetando canal gRPC para forçar reconexão", code
-        )
+        logger.warning("RPC falhou com %s — resetando canal gRPC para forçar reconexão", code)
         self._stub = None
         self._event_stub = None
         # Drop cached status so we don't serve stale data after reconnect.
