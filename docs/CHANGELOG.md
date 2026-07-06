@@ -29,9 +29,7 @@ Formato: `MAJOR.MINOR.PATCH` ([SemVer](https://semver.org/lang/pt-BR/)).
 
 ### Adicionado (Auditoria de Segurança)
 
-- `SECURITY.md` — política de segurança e divulgação de vulnerabilidades
 - `CONTRIBUTING.md` — guia de contribuição com setup, padrões e fluxo de PR
-- `CODE_OF_CONDUCT.md` — Contributor Covenant 2.1 (PT-BR)
 - `discord-agent/internal/server/server_test.go` — 18 testes para `server.go` (antes 0% cobertura) — **saí de "Planejado"**
 - Rate limiting no agente Go (5 req/min por IP)
 - TLS/mTLS opcional no agente Go

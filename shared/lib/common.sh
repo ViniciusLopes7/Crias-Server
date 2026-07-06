@@ -1,15 +1,10 @@
 #!/bin/bash
 # shared/lib/common.sh
 #
-# Utilitários compartilhados usados pelo bootstrap raiz e pelos módulos de
-# jogo (minecraft/terraria). Centraliza logging, dry-run, prompts, IO seguro
-# e helpers de systemd.
-#
-# Este arquivo é sourced (não executado). Não coloque `set -euo pipefail`
-# aqui — quem chama decide a política de erro. Apenas declara funções
-# reutilizáveis.
+# Shared utilities: logging, dry-run, prompts, safe IO, systemd helpers.
+# This file is sourced (not executed); callers set their own error policy.
 
-# Cores ANSI (constants exportáveis / utilizadas via printf -v).
+# ANSI color constants.
 # shellcheck disable=SC2034
 RED='\033[0;31m'
 # shellcheck disable=SC2034
@@ -24,15 +19,10 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 # ---------------------------------------------------------------------------
-# Logging centralizado (item 6.4 do plano).
-#
-# Os managers (mc-manager.sh, tt-manager.sh) e os scripts de backup costumam
-# redefinir log()/warn()/err() localmente. Para evitar duplicação, fornecemos
-# versões padrão aqui. Quem precisa de formato diferente (ex.: backup com
-# timestamp ISO) pode sobrescrever após o source.
+# Logging. Managers may override these for custom formats.
 # ---------------------------------------------------------------------------
 log() {
-    # Mensagem informativa. Se o caller definir CRIAS_LOG_PREFIX, prefixa.
+    # Info message with optional CRIAS_LOG_PREFIX.
     printf '%s[INFO]%s %s\n' "${BLUE}" "${NC}" "$*"
 }
 
@@ -44,7 +34,7 @@ err() {
     printf '%s[ERRO]%s %s\n' "${RED}" "${NC}" "$*" >&2
 }
 
-# Variantes prefixadas com timestamp ISO-8601 (usadas por scripts de cron/backup).
+# ISO-8601 timestamped variants (used by cron/backup scripts).
 log_ts() {
     printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
 }
@@ -58,10 +48,10 @@ err_ts() {
 }
 
 # ---------------------------------------------------------------------------
-# Helpers de banner e passos.
+# Banner and step helpers.
 # ---------------------------------------------------------------------------
 print_header() {
-    # Tenta exibir banner do repositório se existir; fallback para default.
+    # Display repo banner if available; fallback to default.
     local repo_root
     repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
     local banner_paths=("$repo_root/assets/images/branding/banner.txt" "$repo_root/assets/branding/banner.txt" "/etc/crias/banner.txt")
@@ -98,7 +88,7 @@ print_error() {
 }
 
 # ---------------------------------------------------------------------------
-# Boolean parsing e dry-run.
+# Boolean parsing and dry-run.
 # ---------------------------------------------------------------------------
 is_true() {
     local value="${1:-}"
@@ -107,7 +97,7 @@ is_true() {
     value="${value#"$__trim"}"
     __trim="${value##*[![:space:]]}"
     value="${value%"$__trim"}"
-    # Valores truthy aceitos: 1, true, yes, y, sim, s, on, enabled.
+    # Truthy values: 1, true, yes, y, sim, s, on, enabled.
     case "${value,,}" in
         1|true|yes|y|sim|s|on|enabled)
             return 0
@@ -123,7 +113,7 @@ dry_run_enabled() {
 }
 
 # ---------------------------------------------------------------------------
-# Leitura de config (compatível com arquivos .env simples).
+# Read config value from simple .env files.
 # ---------------------------------------------------------------------------
 config_read_value() {
     local file_path="$1"
@@ -145,7 +135,7 @@ config_read_value() {
 }
 
 # ---------------------------------------------------------------------------
-# Run helpers com suporte a DRY_RUN.
+# Run helpers with DRY_RUN support.
 # ---------------------------------------------------------------------------
 run_or_dry_run() {
     local description="$1"
@@ -173,27 +163,25 @@ write_file_or_dry_run() {
 }
 
 # ---------------------------------------------------------------------------
-# Prompts interativos.
+# Interactive prompts.
 # ---------------------------------------------------------------------------
-# print_prompt: destaca uma pergunta do instalador com linha separadora e cor.
-# Usa CYAN + NEGRITO para máxima visibilidade em terminal.
+# Highlight a question with a separator line and color.
 print_prompt() {
     local prompt="$1"
-    # Linha separadora de 60 chars em cyan para destacar a pergunta.
+    # Separator line.
     printf '%s──────────────────────────────────────────────────────────%s\n' "${CYAN}" "${NC}"
-    # Pergunta em cyan + negrito (se terminal suportar).
+    # Question in cyan + bold.
     printf '%s❯ %s%s\n' "${CYAN}" "$prompt" "${NC}"
 }
 
-# ask_confirm: pergunta sim/não com destaque visual.
-# Retorna 0 (sim) ou 1 (não).
+# Yes/no prompt. Returns 0 (yes) or 1 (no).
 ask_confirm() {
     local prompt="$1"
     local default_ans="${2:-Y}"
     local answer
     local prompt_text
 
-    # Destaca a pergunta com linha separadora e cor.
+    # Highlight the question.
     print_prompt "$prompt"
 
     if [ "${default_ans^^}" = "Y" ]; then
@@ -202,8 +190,7 @@ ask_confirm() {
         prompt_text="${CYAN}  ➜ [y/N]: ${NC}"
     fi
 
-    # Captura SIGINT/EOF via exit code de read (130 = SIGINT, 1 = EOF).
-    # Não usar trap global aqui — seria sobrescrito por callers e vice-versa.
+    # Capture SIGINT/EOF via read exit code (130 = SIGINT, 1 = EOF).
     if ! read -r -p "$(printf '%b' "$prompt_text")" answer; then
         echo ""
         print_warning "Operacao cancelada pelo usuario (EOF/SIGINT)."
@@ -221,15 +208,14 @@ ask_confirm() {
     return 1
 }
 
-# ask_value: pede um valor com default, com destaque visual.
-# Usa printf -v para atribuir o resultado a uma variável nomeada.
+# Prompt for a value with default. Uses printf -v to assign to a named variable.
 ask_value() {
     local prompt="$1"
     local default_value="$2"
     local var_name="$3"
     local answer
 
-    # Destaca a pergunta com linha separadora e cor.
+    # Highlight the question.
     print_prompt "$prompt"
 
     read -r -p "$(printf '%b' "${CYAN}  ➜ [${default_value}]: ${NC}")" answer
@@ -241,7 +227,7 @@ ask_value() {
 }
 
 # ---------------------------------------------------------------------------
-# Verificações de ambiente.
+# Environment checks.
 # ---------------------------------------------------------------------------
 command_exists() {
     command -v "$1" >/dev/null 2>&1
@@ -316,7 +302,7 @@ check_arch() {
 }
 
 # ---------------------------------------------------------------------------
-# IO seguro.
+# Safe IO.
 # ---------------------------------------------------------------------------
 safe_mkdir() {
     mkdir -p "$1"
@@ -325,9 +311,7 @@ safe_mkdir() {
 safe_remove_dir() {
     local target_dir="${1:-}"
 
-    # SH-004: validar path antes de rm -rf para evitar destruição de dirs
-    # do sistema (CWE-22, CWE-269). A validação cobre paths vazios,
-    # relativos, raiz e áreas críticas do sistema.
+    # Validate path before rm -rf.
     if ! validate_server_dir "$target_dir"; then
         print_warning "safe_remove_dir recebeu caminho invalido: '$target_dir'"
         return 1
@@ -341,46 +325,37 @@ safe_remove_dir() {
 }
 
 # ---------------------------------------------------------------------------
-# SH-004: Valida path de diretório de servidor antes de operações destrutivas
-# (chown -R, rm -rf). Rejeita paths vazios, relativos, raiz e áreas críticas
-# do sistema que poderiam permitir privesc ou destruição do host.
-# 2D-001: Resolve symlinks antes da validação para prevenir bypass (CWE-59).
-# Referência: CWE-22 (Path Traversal), CWE-269 (Improper Privilege Management),
-#             CWE-59 (Link Following).
-# Retorna 0 se o path é seguro, 1 caso contrário.
+# Validate server directory before destructive ops (chown -R, rm -rf).
+# Rejects empty, relative, root, and system-critical paths.
+# Resolves symlinks before validation to prevent bypass.
 # ---------------------------------------------------------------------------
 validate_server_dir() {
     local dir="${1:-}"
 
-    # Rejeitar vazio, raiz, ou path relativo logo no início.
+    # Reject empty, root, or relative paths.
     if [ -z "$dir" ] || [ "$dir" = "/" ]; then
         print_error "Diretório de servidor inválido (vazio ou raiz): '$dir'"
         return 1
     fi
 
-    # Path deve ser absoluto.
+    # Must be absolute.
     if [[ "$dir" != /* ]]; then
         print_error "Diretório de servidor inválido (caminho relativo): '$dir'"
         return 1
     fi
 
-    # 2D-001: Resolver symlinks antes de validar. realpath -m resolve o caminho
-    # mesmo se o alvo não existir ainda (comum em setup inicial). Se realpath
-    # falhar (busybox sem coreutils), mantém o path original.
+    # Resolve symlinks (realpath -m works on non-existent paths).
     local resolved
     resolved="$(realpath -m "$dir" 2>/dev/null || echo "$dir")"
 
-    # Rejeitar vazio/raiz no path resolvido (caso symlink aponte para /).
+    # Reject if resolved to empty or root.
     if [ -z "$resolved" ] || [ "$resolved" = "/" ]; then
         print_error "Diretório de servidor inválido após resolução (vazio ou raiz): '$dir' -> '$resolved'"
         return 1
     fi
 
-    # Rejeitar áreas críticas do sistema (CWE-732 — Incorrect Permission
-    # Assignment for Critical Resource). Estes prefixos nunca devem ser
-    # alvo de chown -R ou rm -rf vindos do installer.
-    # Validação feita no path RESOLVIDO para impedir bypass via symlink
-    # (ex.: /opt/minecraft-server -> /etc).
+    # Reject system-critical areas (checked on resolved path to prevent
+    # symlink bypass).
     case "$resolved" in
         /usr|/usr/*|/etc|/etc/*|/bin|/bin/*|/sbin|/sbin/*|/boot|/boot/*|\
         /root|/root/*|/lib|/lib*|/proc|/proc/*|/sys|/sys/*|/dev|/dev/*|\
@@ -394,17 +369,13 @@ validate_server_dir() {
 }
 
 sanitize_service_name() {
-    # Mantém nomes de serviço seguros para nomes de unit files systemd.
+    # Sanitize for systemd unit file names.
     local value="${1:-}"
     echo "$value" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-'
 }
 
 # ---------------------------------------------------------------------------
-# systemd helpers (item 6.4 do plano).
-#
-# systemctl_quiet_or_warn: invoca systemctl e, se falhar porque o systemd
-# não está disponível (containers, ambientes de teste), apenas avisa em vez
-# de abortar. Útil para scripts que precisam ser idempotentes.
+# systemd helpers.
 # ---------------------------------------------------------------------------
 systemctl_quiet_or_warn() {
     local op="$1"
@@ -423,10 +394,7 @@ systemctl_quiet_or_warn() {
 }
 
 # ---------------------------------------------------------------------------
-# Detecção de virtualização (item S8 do plano).
-#
-# Retorna 0 se estiver rodando em container/VPS (skip de tuning de host),
-# caso contrário retorna 1.
+# Virtualization detection. Returns 0 if container/VPS (skip host tuning).
 # ---------------------------------------------------------------------------
 is_virtualized() {
     local virt=""
@@ -443,7 +411,7 @@ is_virtualized() {
         esac
     fi
 
-    # Fallback: detectar containers via /proc/1/cgroup
+    # Fallback: detect containers via /proc/1/cgroup.
     if [ -r /proc/1/cgroup ]; then
         if grep -Eq '(docker|lxc|containerd|kubepods)' /proc/1/cgroup 2>/dev/null; then
             return 0
@@ -458,14 +426,14 @@ is_virtualized() {
 }
 
 # ---------------------------------------------------------------------------
-# Geração de token aleatório (para o agente na Fase 1).
+# Random token generation.
 # ---------------------------------------------------------------------------
 generate_token() {
     local bytes="${1:-32}"
     if command_exists openssl; then
         openssl rand -hex "$bytes" 2>/dev/null
     else
-        # Fallback: ler de /dev/urandom
+        # Fallback: read from /dev/urandom.
         head -c "$bytes" /dev/urandom 2>/dev/null | od -An -tx1 | tr -d ' \n'
     fi
 }

@@ -1,14 +1,14 @@
 #!/bin/bash
 # minecraft/setup-cron.sh
 #
-# Wrapper fino sobre shared/lib/setup-cron.sh (item A2 do plano).
-# Apenas configura variáveis específicas do stack e delega.
+# Thin wrapper over shared/lib/setup-cron.sh. Sets stack-specific variables
+# and delegates.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Carrega common.sh (preferencialmente do .shared instalado).
+# Load common.sh (prefer installed .shared).
 COMMON_LIB="$SCRIPT_DIR/.shared/common.sh"
 if [ -f "$COMMON_LIB" ]; then
     # shellcheck source=/dev/null
@@ -19,7 +19,7 @@ else
     source "$ROOT_DIR/shared/lib/common.sh"
 fi
 
-# Carrega setup-cron.sh (preferencialmente do .shared instalado).
+# Load setup-cron.sh (prefer installed .shared).
 SETUP_CRON_LIB="$SCRIPT_DIR/.shared/setup-cron.sh"
 if [ -f "$SETUP_CRON_LIB" ]; then
     # shellcheck source=/dev/null
@@ -30,8 +30,7 @@ else
     source "$ROOT_DIR/shared/lib/setup-cron.sh"
 fi
 
-# Configuração específica do Minecraft.
-# Variáveis lidas por setup_cron_run() em shared/lib/setup-cron.sh.
+# Minecraft-specific config. Variables read by setup_cron_run() in shared/lib/setup-cron.sh.
 # shellcheck disable=SC2034
 SETUP_CRON_STACK_NAME="minecraft"
 SETUP_CRON_SERVICE_NAME="minecraft"

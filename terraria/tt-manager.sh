@@ -1,8 +1,8 @@
 #!/bin/bash
 # terraria/tt-manager.sh
 #
-# CLI de gerenciamento do Terraria. Centraliza log()/warn()/err() em
-# shared/lib/common.sh (item 6.4 do plano) e gera show_help dinamicamente.
+# Terraria CLI manager. Uses log()/warn()/err() from common.sh and
+# generates show_help dynamically.
 
 set -euo pipefail
 
@@ -84,7 +84,7 @@ if [ -f "$COMMON_LIB" ]; then
     source "$COMMON_LIB"
 fi
 
-# log()/warn()/err() centralizados em common.sh (item 6.4 do plano).
+# log()/warn()/err() centralized in common.sh.
 
 get_cfg() {
     local key="$1"
@@ -180,7 +180,7 @@ cmd_reconfigure_hardware() {
     echo "Max players: $TT_MAX_PLAYERS"
     echo "NPC stream: $TT_NPC_STREAM"
 
-    # SH-004: valida SERVER_DIR antes de chown -R (previne path traversal)
+    # Validate SERVER_DIR before chown -R (path traversal prevention).
     if declare -F validate_server_dir >/dev/null 2>&1; then
         if ! validate_server_dir "$SERVER_DIR"; then
             err "SERVER_DIR invalido, nao aplicando chown: $SERVER_DIR"
@@ -217,7 +217,7 @@ cmd_health() {
 }
 
 # ---------------------------------------------------------------------------
-# show_help gerado dinamicamente via declare -F (item 6.4 do plano).
+# show_help generated dynamically via declare -F.
 # ---------------------------------------------------------------------------
 show_help() {
     cat << EOF

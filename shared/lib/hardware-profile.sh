@@ -157,7 +157,7 @@ detect_disk_type_for_path() {
     fi
 
     if [ -r "/sys/block/$base_device/queue/rotational" ]; then
-        # read -r evita fork/exec de cat (mais eficiente para arquivos /sys pequenos).
+        # read -r avoids fork/exec of cat for small /sys files.
         read -r rotational < "/sys/block/$base_device/queue/rotational" 2>/dev/null || rotational=""
         if [ "$rotational" = "1" ]; then
             echo "HDD"
@@ -182,7 +182,7 @@ classify_hardware_tier() {
         return 0
     fi
 
-    # Item R1: thresholds lidos de config.env (com defaults sane).
+    # Hardware tier thresholds (with sane defaults).
     local low_ram="${HW_LOW_TIER_MAX_RAM_MB:-3072}"
     local low_cpu="${HW_LOW_TIER_MAX_CPU_CORES:-2}"
     local mid_ram="${HW_MID_TIER_MAX_RAM_MB:-12288}"
@@ -222,8 +222,7 @@ detect_hardware_profile() {
     HW_CPU_THREADS=$(grep -c '^processor' /proc/cpuinfo 2>/dev/null)
     HW_DISK_TYPE=$(detect_disk_type_for_path "$target_path")
 
-    # Fallbacks defensivos: se nproc ou /proc/cpuinfo falham (containers exóticos),
-    # usa 1 core como mínimo.
+    # Fallbacks: if nproc or /proc/cpuinfo fail, use 1 core minimum.
     if [ -z "$HW_CPU_CORES" ] || ! [[ "$HW_CPU_CORES" =~ ^[0-9]+$ ]] || [ "$HW_CPU_CORES" -le 0 ]; then
         HW_CPU_CORES=1
     fi

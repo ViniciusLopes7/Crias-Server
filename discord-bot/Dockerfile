@@ -58,7 +58,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Create non-root user before COPY so we can use --chown on the COPY steps
-# (2A-031 regression fix: --chown avoids a separate `RUN chown -R` layer
+# Use --chown to avoid a separate RUN chown -R layer (doubles image size).
 # with root-owned files; smaller image, fewer layers).
 RUN groupadd --system --gid 1001 crias \
     && useradd --system --uid 1001 --gid crias --create-home --home-dir /home/crias crias
@@ -77,7 +77,7 @@ ENV PYTHONPATH=/app/src
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# 2A-032: USER crias (named user) for readability; equivalent to 1001:1001.
+# Run as non-root user.
 USER crias
 
 # Healthcheck simples: tenta importar grpc e discord (valida venv + PYTHONPATH).

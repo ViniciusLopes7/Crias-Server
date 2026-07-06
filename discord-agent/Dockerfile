@@ -7,7 +7,7 @@
 FROM golang:1.23-alpine AS builder
 
 # Instala protoc + plugins + ca-certificates (necessário para https em runtime).
-# DEP-005: versões pinadas (não @latest) para builds reprodutíveis.
+# Pinned versions for reproducible builds.
 RUN apk add --no-cache protobuf-dev git make build-base \
     && go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.33.0 \
     && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
@@ -39,7 +39,7 @@ FROM scratch
 # CA certs para HTTPS (Tailscale Funnel exige).
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
-# DOCKER-001 (regression fix 2A-001): copy /etc/passwd so the non-root UID
+# Copy /etc/passwd so the non-root UID resolves at runtime.
 # (65532 = distroless) resolves to a username; scratch has no /etc/passwd
 # and Go's os/user (used by some libs) would otherwise fail or run as "root".
 COPY --from=builder /etc/passwd /etc/passwd
@@ -52,7 +52,7 @@ COPY agent.example.yaml /etc/crias/agent.yaml
 
 EXPOSE 8473/tcp
 
-# DOCKER-001: run as non-root (UID 65532 = distroless default).
+# Run as non-root (UID 65532 = distroless default).
 USER 65532:65532
 
 ENTRYPOINT ["/opt/crias-agent/crias-agent"]

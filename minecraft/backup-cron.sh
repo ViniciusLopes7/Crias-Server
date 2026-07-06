@@ -1,8 +1,8 @@
 #!/bin/bash
 # minecraft/backup-cron.sh
 #
-# Backup do Minecraft usando shared/lib/backup-engine.sh (item A3 do plano).
-# Stack-specific: RCON save-lock antes/depois do backup.
+# Minecraft backup using shared/lib/backup-engine.sh.
+# Stack-specific: RCON save-lock before/after backup.
 
 set -euo pipefail
 
@@ -12,7 +12,7 @@ if [ ! -d "$DEFAULT_SERVER_DIR/world" ] && [ -d "/opt/minecraft-server/world" ];
     DEFAULT_SERVER_DIR="/opt/minecraft-server"
 fi
 
-# Carrega libs compartilhadas (instaladas em .shared/ no runtime).
+# Load shared libs (installed in .shared/ at runtime).
 COMMON_LIB="$SCRIPT_DIR/.shared/common.sh"
 BACKUP_LIB="$SCRIPT_DIR/.shared/backup-engine.sh"
 
@@ -22,7 +22,7 @@ if [ -f "$BACKUP_LIB" ]; then
     # shellcheck source=/dev/null
     source "$BACKUP_LIB"
 else
-    # Fallback para dev: source direto do repo
+    # Dev fallback: source directly from repo.
     ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
     # shellcheck source=/dev/null
     source "$ROOT_DIR/shared/lib/common.sh"
@@ -31,16 +31,15 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Configuração do backup para Minecraft.
-# Variáveis lidas por backup_run() em shared/lib/backup-engine.sh.
-# shellcheck disable=SC2034  # BACKUP_STACK_NAME, BACKUP_DIRS usadas por backup-engine.sh
+# Minecraft backup config. Variables read by backup_run() in backup-engine.sh.
+# shellcheck disable=SC2034  # BACKUP_STACK_NAME, BACKUP_DIRS used by backup-engine.sh
 # ---------------------------------------------------------------------------
 BACKUP_SERVER_DIR="${SERVER_DIR:-$DEFAULT_SERVER_DIR}"
 BACKUP_STACK_NAME="minecraft"
 BACKUP_SERVICE_NAME="${BACKUP_SERVICE_NAME:-minecraft}"
 BACKUP_DIRS=("world" "world_nether" "world_the_end")
 
-# Herda variáveis legadas (compat retroativa).
+# Inherit legacy variables (backward compat).
 BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-7}"
 BACKUP_ZSTD_LEVEL="${BACKUP_ZSTD_LEVEL:--3}"
 BACKUP_DRY_RUN="${BACKUP_DRY_RUN:-false}"

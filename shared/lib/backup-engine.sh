@@ -1,36 +1,34 @@
 #!/bin/bash
 # shared/lib/backup-engine.sh
 #
-# Engine de backup unificado com zstd + flock + retenção por data.
-# Substitui ~70% da duplicação entre minecraft/backup-cron.sh e
-# terraria/backup-cron.sh (item A3 do plano).
+# Unified backup engine with zstd + flock + date-based retention.
 #
-# Como usar:
+# Usage:
 #
 #   source "$ROOT_DIR/shared/lib/backup-engine.sh"
 #
-#   # Variáveis que o caller DEVE definir:
-#   BACKUP_SERVER_DIR       # diretório do servidor
-#   BACKUP_STACK_NAME       # "minecraft" | "terraria" (para nome de arquivo)
-#   BACKUP_DIRS             # array de dirs relativos a BACKUP_SERVER_DIR
-#   BACKUP_SERVICE_NAME     # nome do serviço systemd para checagem ativa
+#   # Variables the caller MUST define:
+#   BACKUP_SERVER_DIR       # server directory
+#   BACKUP_STACK_NAME       # "minecraft" | "terraria" (for filename)
+#   BACKUP_DIRS             # array of dirs relative to BACKUP_SERVER_DIR
+#   BACKUP_SERVICE_NAME     # systemd service name for active check
 #
-#   # Opcionais (com defaults):
+#   # Optionals (with defaults):
 #   BACKUP_RETENTION_DAYS=7
 #   BACKUP_ZSTD_LEVEL=-3
 #   BACKUP_DRY_RUN=false
 #   BACKUP_REQUIRE_ACTIVE_SERVICE=true
 #
-#   # Hooks opcionais (definir antes de chamar backup_run):
-#   backup_pre_hook()    { ... }   # ex.: RCON save-off + save-all
-#   backup_post_hook()   { ... }   # ex.: RCON save-on
+#   # Optional hooks (define before calling backup_run):
+#   backup_pre_hook()    { ... }   # e.g.: RCON save-off + save-all
+#   backup_post_hook()   { ... }   # e.g.: RCON save-on
 #
 #   backup_run
 
-# NOTA: não usar `set -u` em libs sourced — caller decide política de erro.
+# NOTE: do not use `set -u` in sourced libs; caller decides error policy.
 
 # ---------------------------------------------------------------------------
-# Inicializa variáveis com defaults sane.
+# Initialize variables with sane defaults.
 # ---------------------------------------------------------------------------
 backup_init() {
     BACKUP_DIR="${BACKUP_DIR:-${BACKUP_SERVER_DIR:?}/backups}"
@@ -43,20 +41,15 @@ backup_init() {
     BACKUP_NAME="${BACKUP_STACK_NAME:?}-backup-${BACKUP_DATE}.tar.zst"
     BACKUP_LOCK_FD=200
 
-    # Carrega runtime.env se existir (para herdar BACKUP_RETENTION_DAYS, etc.)
+    # Load runtime.env if present (inherits BACKUP_RETENTION_DAYS, etc.).
     local runtime_env="${BACKUP_SERVER_DIR}/runtime.env"
     if [ -f "$runtime_env" ]; then
-        # 2D-002: NÃO usar `source "$runtime_env"` — isso executaria bash
-        # arbitrário. O runtime.env é world-readable (umask 022) e qualquer
-        # modificação por operador ou atacante levaria a RCE no contexto
-        # do usuário de backup (CWE-78). Preferir o config-parser seguro
-        # (com denylist de variáveis perigosas) quando disponível.
+        # Do NOT `source "$runtime_env"` — would execute arbitrary bash.
+        # Prefer the safe config-parser (with dangerous-variable denylist).
         if declare -F load_config_file >/dev/null 2>&1; then
             load_config_file "$runtime_env"
         else
-            # Fallback: validar que o arquivo é key=value apenas, sem
-            # construções shell perigosas. Rejeita $var, backticks, ||, &&,
-            # ;, source/. e exit. Ainda usa `source` mas só após validação.
+            # Fallback: validate key=value only, no shell constructs.
             if grep -qE '(^|[^\\])\$|`|\|\||&&|;|^[[:space:]]*(source|\.)[[:space:]]|^[[:space:]]*exit[[:space:]]' "$runtime_env" 2>/dev/null; then
                 backup_log "ERRO: Arquivo env contém construções perigosas: $runtime_env"
                 return 1
@@ -68,11 +61,11 @@ backup_init() {
         fi
     fi
 
-    # Re-aplica defaults caso runtime.env tenha sobrescrito com valor vazio.
+    # Re-apply defaults in case runtime.env overwrote with empty value.
     BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-7}"
     BACKUP_ZSTD_LEVEL="${BACKUP_ZSTD_LEVEL:--3}"
 
-    # Valida formatos.
+    # Validate formats.
     if ! [[ "$BACKUP_RETENTION_DAYS" =~ ^[0-9]+$ ]]; then
         BACKUP_RETENTION_DAYS=7
     fi
@@ -82,14 +75,14 @@ backup_init() {
 }
 
 # ---------------------------------------------------------------------------
-# Logging (compatível com formato cron existente).
+# Logging (compatible with existing cron format).
 # ---------------------------------------------------------------------------
 backup_log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
 # ---------------------------------------------------------------------------
-# Ajusta ownership do backup para combinar com o SERVER_DIR.
+# Match backup ownership to SERVER_DIR.
 # ---------------------------------------------------------------------------
 backup_owner_spec() {
     stat -c '%U:%G' "$BACKUP_SERVER_DIR" 2>/dev/null || true
@@ -110,7 +103,7 @@ adopt_backup_ownership() {
 }
 
 # ---------------------------------------------------------------------------
-# Trava concorrência via flock (não-bloqueante).
+# Acquire non-blocking flock for concurrency control.
 # ---------------------------------------------------------------------------
 acquire_lock() {
     mkdir -p "$BACKUP_DIR"
@@ -124,7 +117,7 @@ acquire_lock() {
 }
 
 # ---------------------------------------------------------------------------
-# Verifica se o serviço systemd está ativo (com skip em DRY_RUN).
+# Check if systemd service is active (skipped in DRY_RUN).
 # ---------------------------------------------------------------------------
 is_service_active_or_skip() {
     if [ "$BACKUP_DRY_RUN" = "true" ]; then
@@ -154,18 +147,13 @@ is_service_active_or_skip() {
 }
 
 # ---------------------------------------------------------------------------
-# Cria o backup propriamente dito.
-#   1. Adquire lock
-#   2. Chama backup_pre_hook (RCON save-off + save-all, etc.)
-#   3. tar + zstd os dirs
-#   4. Chama backup_post_hook (RCON save-on)
+# Create the backup: acquire lock, run pre_hook, tar+zstd dirs, run post_hook.
 # ---------------------------------------------------------------------------
 create_backup() {
     local backup_dirs=()
     local dir
 
-    # Item: ${arr[@]:-} itera com string vazia se array está vazio;
-    # ${arr[@]+"${arr[@]}"} expande para nada quando vazio (compat set -u).
+    # ${arr[@]+"${arr[@]}"} expands to nothing when array is empty (set -u safe).
     for dir in ${BACKUP_DIRS[@]+"${BACKUP_DIRS[@]}"}; do
         if [ -d "$BACKUP_SERVER_DIR/$dir" ]; then
             backup_dirs+=("$dir")
@@ -183,7 +171,7 @@ create_backup() {
 
     cd "$BACKUP_SERVER_DIR" || return 1
 
-    # Hook pre (RCON save-lock para Minecraft; no-op para Terraria).
+    # Pre hook (RCON save-lock for Minecraft; no-op for Terraria).
     if declare -F backup_pre_hook >/dev/null 2>&1; then
         backup_pre_hook
     fi
@@ -196,7 +184,7 @@ create_backup() {
         return 0
     fi
 
-    # zstd só é necessário em execução real (não em DRY_RUN).
+    # zstd only needed for real execution (not DRY_RUN).
     if ! command -v zstd >/dev/null 2>&1; then
         backup_log "ERRO: zstd nao encontrado no PATH. Instale (pacman -S zstd) ou ajuste o PATH do cron."
         if declare -F backup_post_hook >/dev/null 2>&1; then
@@ -222,8 +210,8 @@ create_backup() {
 }
 
 # ---------------------------------------------------------------------------
-# Limpa backups antigos por parsing de timestamp no nome.
-# Fallback para find -mtime se o parse falhar.
+# Clean old backups by parsing timestamp in filename.
+# Falls back to find -mtime if parse fails.
 # ---------------------------------------------------------------------------
 cleanup_old_backups() {
     local cutoff_timestamp
@@ -234,7 +222,7 @@ cleanup_old_backups() {
 
     cutoff_timestamp="$(date -d "${BACKUP_RETENTION_DAYS} days ago" +%Y%m%d-%H%M%S 2>/dev/null || true)"
     if [ -z "$cutoff_timestamp" ]; then
-        # Fallback: find por mtime (menos preciso mas funciona em BusyBox).
+        # Fallback: find by mtime (less precise but works on BusyBox).
         find "$BACKUP_DIR" -name "$pattern" -type f -mtime +"$BACKUP_RETENTION_DAYS" -delete 2>/dev/null || true
         return 0
     fi
@@ -253,7 +241,7 @@ cleanup_old_backups() {
 }
 
 # ---------------------------------------------------------------------------
-# Ponto de entrada: orquestra toda a rotina de backup.
+# Entry point: orchestrate the full backup routine.
 # ---------------------------------------------------------------------------
 backup_run() {
     backup_init

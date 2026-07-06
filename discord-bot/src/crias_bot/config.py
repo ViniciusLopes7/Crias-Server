@@ -1,6 +1,6 @@
-"""Configuração do bot via variáveis de ambiente.
+"""Bot configuration via environment variables.
 
-Lê do ambiente (Railway injeta via variáveis) ou de .env local.
+Loads from env (Railway) or local .env file.
 """
 
 from __future__ import annotations
@@ -11,48 +11,47 @@ from dataclasses import dataclass, field
 
 from dotenv import load_dotenv
 
-# Carrega .env se existir (desenvolvimento local).
+# Load .env if present (local dev).
 load_dotenv()
 
-# Validação de formato do auth_token (BOT-040).
-# 64 hex chars = 256 bits de entropia (gerado por `openssl rand -hex 32`).
+# auth_token format: 64 hex chars (256 bits, from openssl rand -hex 32).
 _TOKEN_RE = re.compile(r"^[0-9a-f]{64}$")
 _TOKEN_PLACEHOLDER = "CHANGE_ME_TO_RANDOM_64_HEX_CHARS"
 
 
 @dataclass(frozen=True)
 class BotConfig:
-    """Configuração imutável do bot Discord."""
+    """Immutable bot configuration."""
 
-    # Discord (campos obrigatórios primeiro — dataclass não permite non-default após default)
+    # Required fields first (dataclass constraint).
     discord_token: str
-    # Agente gRPC (também obrigatórios)
-    agent_host: str  # https://<host>.ts.net (Tailscale Funnel) ou localhost:8473
-    agent_token: str  # 64 hex chars, deve bater com /etc/crias/agent.yaml
+    # Required gRPC agent fields.
+    agent_host: str  # e.g. https://<host>.ts.net or localhost:8473
+    agent_token: str  # 64 hex chars; must match /etc/crias/agent.yaml
 
-    # Discord opcionais
-    guild_id: int | None = None  # guild específico para sync imediato de slash commands
+    # Optional Discord fields.
+    guild_id: int | None = None  # specific guild for immediate slash command sync
 
-    # Permissões (IDs de roles Discord)
+    # Permission role IDs.
     admin_role_ids: frozenset[int] = field(default_factory=frozenset)
     moderator_role_ids: frozenset[int] = field(default_factory=frozenset)
 
-    # Canais
-    controle_channel_id: int | None = None  # onde postar start/stop notifications
-    chat_minecraft_channel_id: int | None = None  # bridge Discord <-> Minecraft
-    console_channel_id: int | None = None  # stream de logs (opcional)
+    # Channel IDs.
+    controle_channel_id: int | None = None  # for start/stop notifications
+    chat_minecraft_channel_id: int | None = None  # Discord <-> Minecraft bridge
+    console_channel_id: int | None = None  # optional log stream
 
-    # Comportamento
-    status_cache_seconds: int = 15  # cache de GetStatus (não consulta agente a cada msg)
-    reconnect_max_delay: int = 60  # backoff exponencial até 60s
+    # Behavior tuning.
+    status_cache_seconds: int = 15  # GetStatus cache TTL
+    reconnect_max_delay: int = 60  # max exponential backoff
 
-    # TLS (BOT-004): pinning de CA opcional para o canal gRPC
+    # Optional CA pinning for gRPC channel.
     agent_tls_ca_path: str | None = None
     agent_use_tls: bool = False
 
 
 def load_config() -> BotConfig:
-    """Carrega config do ambiente. Levanta ValueError se obrigatórios faltarem."""
+    """Load config from env; raise ValueError if required vars are missing."""
     token = os.environ.get("DISCORD_TOKEN", "")
     if not token:
         raise ValueError("DISCORD_TOKEN não definido no ambiente")
@@ -64,7 +63,7 @@ def load_config() -> BotConfig:
     agent_token = os.environ.get("CRIAS_AGENT_TOKEN", "")
     if not agent_token:
         raise ValueError("CRIAS_AGENT_TOKEN não definido (64 hex chars)")
-    # BOT-040: valida formato e rejeita placeholder
+    # validate format and reject placeholder
     if agent_token == _TOKEN_PLACEHOLDER:
         raise ValueError(
             "CRIAS_AGENT_TOKEN ainda é o placeholder — "
@@ -89,7 +88,7 @@ def load_config() -> BotConfig:
     cache_secs = _parse_int_env("STATUS_CACHE_SECONDS", 15)
     reconnect_max = _parse_int_env("RECONNECT_MAX_DELAY", 60)
 
-    # TLS (BOT-004)
+    # TLS
     tls_ca_path = os.environ.get("CRIAS_AGENT_TLS_CA_PATH", "").strip() or None
     use_tls = os.environ.get("CRIAS_AGENT_USE_TLS", "false").strip().lower() == "true"
 
@@ -111,7 +110,7 @@ def load_config() -> BotConfig:
 
 
 def _parse_id_list(raw: str) -> frozenset[int]:
-    """Parseia lista de IDs separados por vírgula: '123,456,789' → frozenset."""
+    """Parse comma-separated IDs ('123,456,789') into a frozenset."""
     if not raw.strip():
         return frozenset()
     ids = set()
@@ -136,7 +135,7 @@ def _parse_optional_int(raw: str) -> int | None:
 
 
 def _parse_int_env(name: str, default: int) -> int:
-    """Lê variável de ambiente inteira com default e tratamento de erro."""
+    """Read int env var with default; raise ValueError if invalid."""
     raw = os.environ.get(name, "").strip()
     if not raw:
         return default

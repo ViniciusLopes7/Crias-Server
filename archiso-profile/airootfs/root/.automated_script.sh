@@ -130,7 +130,7 @@ if [ "$SOURCE_MODE" = "clone" ]; then
 
     log "Clonando repositório do GitHub..."
     CRIAS_REPO_REF="${CRIAS_REPO_REF:-main}"
-    # 2A-019: valida CRIAS_REPO_REF contra whitelist (tag vX.Y.Z ou commit SHA).
+    # Validate CRIAS_REPO_REF: allow tag vX.Y.Z or 40-hex commit SHA.
     # Impede injeção via kernel cmdline ou ISO maliciosa apontando para branch
     # arbitrária do mesmo repositório.
     case "$CRIAS_REPO_REF" in

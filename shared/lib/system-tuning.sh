@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Shared host-level tuning based on detected hardware.
-# NOTA: não usar `set -u` em libs sourced — caller decide política de erro.
+# NOTE: do not use `set -u` in sourced libs; caller decides error policy.
 
 set_scheduler_if_supported() {
     local device="$1"
@@ -43,7 +43,7 @@ apply_block_device_tuning() {
         return 0
     fi
 
-    # read -r é mais eficiente que cat (sem fork/exec) para ler arquivo /sys pequeno.
+    # read -r is more efficient than cat (no fork/exec) for small /sys files.
     read -r rotational < "/sys/block/$device/queue/rotational" 2>/dev/null || rotational=""
 
     if [[ "$device" == nvme* ]]; then
@@ -123,8 +123,8 @@ apply_nofile_limit() {
         return 0
     fi
 
-    # Garante que o diretório /etc/security/limits.d/ existe.
-    # Em alguns sistemas (containers, installs mínimas) pode não existir.
+    # Ensure /etc/security/limits.d/ exists.
+    # May be missing on some systems (containers, minimal installs).
     if [ ! -d "/etc/security/limits.d" ]; then
         mkdir -p "/etc/security/limits.d" 2>/dev/null || {
             warn "Não foi possível criar /etc/security/limits.d/ — pulando nofile limit."
@@ -201,8 +201,7 @@ EOF
 
     systemctl daemon-reload >/dev/null 2>&1 || true
     # Only attempt to load zram module and start the generator service if
-    # the host appears to support zram. This avoids noisy failures on systems
-    # without the feature.
+    # the host appears to support zram.
     if modprobe -n zram >/dev/null 2>&1; then
         modprobe zram >/dev/null 2>&1 || true
         if systemctl list-unit-files | grep -q 'systemd-zram-setup@'; then

@@ -1,18 +1,7 @@
-"""Bot Discord principal: slash commands + bridge de eventos.
+"""Discord bot: slash commands and event bridge for the Crias-Server.
 
-Comandos:
-  /mc start       Admin   Liga o servidor
-  /mc stop        Admin   Desliga graceful
-  /mc restart     Admin   Reinicia
-  /mc status      Todos   Online/offline, players, RAM, tier
-  /mc players     Todos   Lista quem está online
-  /mc say <msg>   Mod+    Manda mensagem no chat do jogo via RCON
-  /mc logs [n]    Admin   (planejado — ver ROADMAP.md) Últimas N linhas do journalctl
-  /mc console     Admin   Ativa/desativa stream de console no canal #console
-  /mc health      Admin   Health check passivo
-
-Todos os replies usam embeds padronizados via `crias_bot.embeds` para manter
-identidade visual consistente (cores, thumbnail, timestamp, footer).
+Exposes `/mc` commands (start/stop/restart/status/players/say/console/health)
+and forwards agent events to Discord via standardized embeds.
 """
 
 from __future__ import annotations
@@ -49,13 +38,12 @@ from .embeds import (
 logger = logging.getLogger(__name__)
 
 
-# BOT-001: sanitização de input para RCON.
-# Rejeita newlines, null bytes, caracteres de controle, e limita a 200 chars.
+# RCON message sanitizer: strips control characters.
 _RCON_MSG_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
 def _sanitize_rcon_message(msg: str) -> str | None:
-    """Sanitiza mensagem para RCON. Retorna None se inválida."""
+    """Sanitize RCON message; return None if invalid (newlines, controls, >200 chars)."""
     if not msg or not msg.strip():
         return None
     if "\n" in msg or "\r" in msg or "\0" in msg:
@@ -68,9 +56,8 @@ def _sanitize_rcon_message(msg: str) -> str | None:
     return sanitized
 
 
-# BOT-005: rate limiting simples por user (sliding window).
 class _RateLimiter:
-    """Rate limiter sliding window por user_id."""
+    """Per-user sliding window rate limiter."""
 
     def __init__(self, max_calls: int = 5, period: float = 10.0) -> None:
         self.max_calls = max_calls
@@ -80,7 +67,7 @@ class _RateLimiter:
     def is_allowed(self, user_id: int) -> bool:
         now = time.monotonic()
         history = self._calls.get(user_id, [])
-        # Mantém apenas chamadas dentro da janela
+        # keep calls within the window
         history = [t for t in history if now - t < self.period]
         if len(history) >= self.max_calls:
             self._calls[user_id] = history
@@ -91,11 +78,11 @@ class _RateLimiter:
 
 
 class CriasBot(commands.Bot):
-    """Bot Discord para o Crias-Server."""
+    """Discord bot for the Crias-Server."""
 
     def __init__(self, config: BotConfig, agent: AgentClient) -> None:
         intents = discord.Intents.default()
-        intents.message_content = False  # não precisamos ler mensagens (só slash)
+        intents.message_content = False  # slash-only; no message content needed
         intents.members = False
 
         super().__init__(
@@ -107,18 +94,16 @@ class CriasBot(commands.Bot):
         self.agent = agent
         self._console_stream_active = False
         self._console_task: asyncio.Task | None = None
-        # Lock para tornar /mc console toggle atômico (evita task zombie se
-        # dois admins clicarem simultaneamente).
+        # Atomic toggle guard to prevent zombie tasks on concurrent calls.
         self._console_lock: asyncio.Lock = asyncio.Lock()
-        # BOT-005: rate limiter para slash commands
+        # per-user rate limiter
         self._rate_limiter = _RateLimiter(max_calls=5, period=10.0)
 
     async def setup_hook(self) -> None:
-        """Sincroniza slash commands no guild específico (se definido)."""
+        """Sync slash commands to guild if FORCE_SYNC_COMMANDS is set."""
         await self.add_cog(MinecraftCog(self))
 
-        # BOT-006: tree.sync() apenas quando explicitamente solicitado
-        # (evita rate limit do Discord a cada startup)
+        # Sync only on demand to avoid Discord rate limits at every startup.
         force_sync = os.environ.get("FORCE_SYNC_COMMANDS", "false").strip().lower() == "true"
         if force_sync:
             if self.config.guild_id:
@@ -134,11 +119,11 @@ class CriasBot(commands.Bot):
                 "Sync de comandos pulado (set FORCE_SYNC_COMMANDS=true para forçar)"
             )
 
-        # Inicia background task de eventos.
+        # Start event bridge background task.
         self.event_bridge.start()
 
     async def close(self) -> None:
-        """Graceful shutdown: cancela tasks e fecha canal gRPC."""
+        """Graceful shutdown: cancel tasks and close gRPC channel."""
         self.event_bridge.cancel()
         if self._console_task is not None:
             self._console_task.cancel()
@@ -169,10 +154,7 @@ class CriasBot(commands.Bot):
 
     @tasks.loop(seconds=5)
     async def event_bridge(self) -> None:
-        """Subscreve a eventos do agente e posta no Discord.
-
-        Reconecta automaticamente em caso de erro.
-        """
+        """Subscribe to agent events and post to Discord; reconnects on error."""
         try:
             async for ev in self.agent.subscribe_events():
                 await self._dispatch_event(ev)
@@ -181,7 +163,7 @@ class CriasBot(commands.Bot):
         except (TimeoutError, OSError, ConnectionError) as e:
             logger.warning("EventBridge: erro de rede: %s", e)
         except Exception:
-            # Catch-all para bugs inesperados; loga traceback para diagnóstico.
+            # Catch-all for unexpected bugs; log traceback for diagnosis.
             logger.exception("Erro inesperado no EventBridge")
 
     @event_bridge.before_loop
@@ -189,11 +171,7 @@ class CriasBot(commands.Bot):
         await self.wait_until_ready()
 
     async def _dispatch_event(self, ev: dict) -> None:
-        """Mapeia evento do agente para embed no canal #controle.
-
-        Usa embeds padronizados (ver `crias_bot.embeds.event_embed`) em vez de
-        texto puro — mantém identidade visual e cores contextuais.
-        """
+        """Dispatch agent event to #controle channel via standardized embed."""
         if self.config.controle_channel_id is None:
             return
 
@@ -203,7 +181,7 @@ class CriasBot(commands.Bot):
 
         embed = event_embed(ev)
         if embed is None:
-            # Evento desconhecido — loga e posta fallback textual curto.
+            # Unknown event: log and post short text fallback.
             event_type = ev.get("event_type", "")
             metadata = ev.get("metadata", {})
             logger.debug("Evento sem embed dedicado: %s", event_type)
@@ -221,7 +199,7 @@ class CriasBot(commands.Bot):
 
 
 class MinecraftCog(commands.Cog):
-    """Cog com slash commands /mc."""
+    """Cog exposing the `/mc` slash commands."""
 
     group = app_commands.Group(name="mc", description="Comandos do Minecraft")
 
@@ -229,18 +207,18 @@ class MinecraftCog(commands.Cog):
         self.bot = bot
 
     # ------------------------------------------------------------------
-    # Helpers internos para reduzir boilerplate de permissão + error handling.
+    # Internal helpers to reduce permission and error-handling boilerplate.
     # ------------------------------------------------------------------
 
     async def _check_admin(self, interaction: discord.Interaction) -> bool:
-        """Verifica permissão admin. Retorna False se já respondeu com erro."""
+        """Check admin permission; replies with error and returns False if denied."""
         if self.bot.is_admin(interaction.user):
             return True
         await interaction.response.send_message(embed=permission_denied("admin"), ephemeral=True)
         return False
 
     async def _check_moderator(self, interaction: discord.Interaction) -> bool:
-        """Verifica permissão moderador+. Retorna False se já respondeu."""
+        """Check moderator+ permission; replies with error and returns False if denied."""
         if self.bot.is_moderator(interaction.user):
             return True
         await interaction.response.send_message(
@@ -249,7 +227,7 @@ class MinecraftCog(commands.Cog):
         return False
 
     async def _send_agent_error(self, interaction: discord.Interaction, e: Exception) -> None:
-        """Envia embed de erro de agente no followup."""
+        """Send agent error embed as followup."""
         await interaction.followup.send(embed=agent_error(str(e)))
 
     # ------------------------------------------------------------------
@@ -335,14 +313,14 @@ class MinecraftCog(commands.Cog):
     async def say(self, interaction: discord.Interaction, message: str) -> None:
         if not await self._check_moderator(interaction):
             return
-        # BOT-005: rate limiting
+        # per-user rate limit
         if not self.bot._rate_limiter.is_allowed(interaction.user.id):
             await interaction.response.send_message(
                 embed=warning("Muitas requisições", "Aguarde alguns segundos antes de tentar novamente."),
                 ephemeral=True,
             )
             return
-        # BOT-001: sanitiza input antes de enviar ao RCON
+        # sanitize before sending to RCON
         sanitized = _sanitize_rcon_message(message)
         if sanitized is None:
             await interaction.response.send_message(
@@ -384,11 +362,10 @@ class MinecraftCog(commands.Cog):
         if not await self._check_admin(interaction):
             return
 
-        # Toggle atômico via lock — evita race entre dois admins clicando ao
-        # mesmo tempo e deixando task zombie.
+        # Atomic toggle to avoid races between concurrent admins.
         async with self.bot._console_lock:
             if self.bot._console_stream_active:
-                # Desativar.
+                # Disable.
                 self.bot._console_stream_active = False
                 if self.bot._console_task is not None:
                     self.bot._console_task.cancel()
@@ -396,7 +373,7 @@ class MinecraftCog(commands.Cog):
                 await interaction.response.send_message(embed=console_stream_stopped())
                 return
 
-            # Ativar.
+            # Enable.
             channel_id = self.bot.config.console_channel_id
             if channel_id is None:
                 await interaction.response.send_message(
@@ -424,30 +401,27 @@ class MinecraftCog(commands.Cog):
             await interaction.response.send_message(embed=console_stream_started(channel.mention))
 
     async def _console_stream_loop(self, channel: discord.TextChannel) -> None:
-        """Loop que consome StreamConsole e posta no canal #console em blocos.
-
-        Buffer de 2s + limite de ~1800 chars por mensagem (Discord limita 2000).
-        """
+        """Consume StreamConsole and post to #console; 2s buffer, ~1800-char chunks (Discord limit)."""
         buffer: list[str] = []
         last_flush = time.monotonic()
-        MAX_CHARS = 1800  # margem para ``` + newlines
+        MAX_CHARS = 1800  # margin for ``` + newlines
 
         try:
             async for line in self.bot.agent.stream_console(tail_lines=50):
                 buffer.append(line)
 
-                # Flush a cada 2s ou se buffer acumular texto suficiente.
+                # Flush every 2s or when buffer fills.
                 now = time.monotonic()
                 total_chars = sum(len(s) for s in buffer)
                 if total_chars >= MAX_CHARS or (now - last_flush) >= 2.0:
                     if buffer:
-                        # Particiona em chunks que cabem em 1800 chars.
+                        # Split into chunks that fit within MAX_CHARS.
                         chunks = _partition_lines(buffer, MAX_CHARS)
                         for chunk in chunks:
                             try:
                                 await channel.send(f"```\n{chunk}\n```")
                             except discord.HTTPException:
-                                pass  # rate limited ou msg muito longa
+                                pass  # rate limited or message too long
                         buffer = []
                         last_flush = now
         except AgentClientError as e:
@@ -464,7 +438,7 @@ class MinecraftCog(commands.Cog):
 
 
 def _partition_lines(lines: list[str], max_chars: int) -> list[str]:
-    """Particiona lista de linhas em chunks que cabem em max_chars."""
+    """Split lines into chunks that fit within max_chars."""
     chunks: list[str] = []
     current: list[str] = []
     current_size = 0
@@ -482,10 +456,7 @@ def _partition_lines(lines: list[str], max_chars: int) -> list[str]:
 
 
 def _format_uptime(seconds: int) -> str:
-    """Formata uptime em 'Xh Ym' ou 'Xd Yh'.
-
-    Mantido para compat com testes existentes (`tests/test_bot_helpers.py`).
-    """
+    """Format uptime as 'Xs', 'Xm', 'Xh Ym' or 'Xd Yh'."""
     if seconds < 60:
         return f"{seconds}s"
     if seconds < 3600:

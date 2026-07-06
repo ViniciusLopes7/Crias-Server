@@ -92,10 +92,7 @@ restore_env_overrides() {
 apply_config_with_env_precedence() {
     local config_file="${1:-}"
 
-    # Capture current environment state (idempotent for each call).
-    # This ensures proper precedence in all contexts, including:
-    # - Direct calls in tests with subshells (each subshell reacaptures)
-    # - Calls in install.sh after defaults are initialized
+    # Capture current environment state (idempotent).
     capture_env_overrides
     load_config_file "$config_file"
     restore_env_overrides
@@ -123,14 +120,7 @@ load_config_file() {
                 local key="${BASH_REMATCH[1]}"
                 local value="${BASH_REMATCH[2]}"
 
-                # SH-003 / 2D-004: rejeitar nomes de variáveis perigosos que
-                # podem hijackar a execução do shell (PATH, IFS, BASH_ENV, etc.).
-                # Mesmo OVERRIDABLE_VARS sendo whitelist na capture/restore,
-                # load_config_file aceita qualquer key com regex; bloqueamos
-                # aqui as que controlam resolução de comandos, ambiente de
-                # subprocessos, ou têm side-effects quando atribuídas.
-                # Referência: CWE-78 (OS Command Injection via PATH hijack),
-                # CWE-665 (Improper Initialization).
+                # Reject variable names that could hijack shell execution.
                 case "$key" in
                     PATH|IFS|BASH_ENV|ENV|SHELLOPTS|HOME|USER|SHELL|LD_PRELOAD|LD_LIBRARY_PATH|PYTHONPATH|\
                     FUNCNAME|BASH_ALIASES|PROMPT_COMMAND|BASH_CMDS|DIRSTACK|GLOBIGNORE|INPUTRC|RC_URL|\

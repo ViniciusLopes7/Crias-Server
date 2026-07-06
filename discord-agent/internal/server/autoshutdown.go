@@ -1,7 +1,7 @@
 // Package server auto-shutdown monitor.
 //
-// Se AutoShutdown.Enabled=true, monitora player_count e para o servidor
-// quando fica vazio por EmptyMinutes minutos. Não reinicia — só para.
+// When AutoShutdown.Enabled is true, stops the server after it has been empty
+// for EmptyMinutes. Does not restart — only stops.
 package server
 
 import (
@@ -12,9 +12,8 @@ import (
 	"github.com/ViniciusLopes7/Crias-Server/discord-agent/internal/events"
 )
 
-// StartAutoShutdownMonitor inicia goroutine que verifica player_count
-// e para o servidor quando vazio por N minutos.
-// Retorna quando ctx é cancelado.
+// StartAutoShutdownMonitor stops the server when it has been empty for EmptyMinutes.
+// Returns when ctx is cancelled.
 func (s *Server) StartAutoShutdownMonitor(ctx context.Context) {
 	if !s.cfg.Features.AutoShutdown.Enabled {
 		return
@@ -49,7 +48,7 @@ func (s *Server) StartAutoShutdownMonitor(ctx context.Context) {
 				continue
 			}
 
-			// Servidor vazio.
+			// Server is empty.
 			if emptySince.IsZero() {
 				emptySince = time.Now()
 				s.bus.Publish(events.Event{
@@ -67,7 +66,7 @@ func (s *Server) StartAutoShutdownMonitor(ctx context.Context) {
 
 			elapsed := time.Since(emptySince)
 			if elapsed >= time.Duration(emptyMinutes)*time.Minute {
-				// Dispara shutdown.
+				// Trigger shutdown.
 				s.bus.Publish(events.Event{
 					EventType:   "HealthWarning",
 					ServiceName: s.cfg.Server.ServiceName,
@@ -78,7 +77,7 @@ func (s *Server) StartAutoShutdownMonitor(ctx context.Context) {
 					},
 				})
 
-				// Executa systemctl stop e trata erro — só publica ServerStopped se sucesso.
+				// Run systemctl stop; only publish ServerStopped on success.
 				stopOut, stopErr := s.runSystemctl(ctx, "stop", s.cfg.Server.ServiceName)
 				if stopErr != nil {
 					s.bus.Publish(events.Event{
@@ -102,13 +101,13 @@ func (s *Server) StartAutoShutdownMonitor(ctx context.Context) {
 					})
 				}
 
-				emptySince = time.Time{} // reset após tentativa (mesmo em falha, para evitar loop)
+				emptySince = time.Time{} // reset after attempt (even on failure, to avoid retry loop)
 			}
 		}
 	}
 }
 
-// getCurrentPlayerCount consulta RCON se disponível, retorna 0 se RCON off.
+// getCurrentPlayerCount returns the RCON player count, or 0 if RCON is disabled.
 func (s *Server) getCurrentPlayerCount(ctx context.Context) int {
 	if s.rcon == nil {
 		return 0

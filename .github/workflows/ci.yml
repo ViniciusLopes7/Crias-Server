@@ -40,7 +40,7 @@ permissions:
 env:
   GO_VERSION: '1.23'
   PYTHON_VERSION: '3.12'
-  # 2A-002: protoc-gen-go versions alinhadas com Dockerfile + Makefile.
+  # protoc-gen-go versions aligned with Dockerfile + Makefile.
   # Definidas como env vars (em vez de literais vX.Y.Z nos comandos) para:
   #   1. Manter a versão em UM lugar (DRY) — bumpar aqui atualiza todos os jobs.
   #   2. Evitar tags mutáveis literais no YAML (auditoria @v[0-9] retorna 0).
@@ -225,7 +225,7 @@ jobs:
           go mod tidy
 
       - name: Go test with race detector + coverage
-        # 2A-014: -coverprofile=coverage.out -covermode=atomic alinha com o
+        # Coverage profile for artifact upload.
         # Makefile `test` target e permite rastrear cobertura no CI.
         # Upload do coverage.out como artifact no próximo step.
         run: go test -v -race -timeout 120s -coverprofile=coverage.out -covermode=atomic ./...
@@ -259,7 +259,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          # TST-011 / 2A-013: pytest pinado para reprodutibilidade (match
+          # Pinned pytest for reproducibility.
           # pyproject.toml: pytest ~=8.0.0, pytest-asyncio ~=0.23.0, pytest-cov ~=4.1.0).
           pip install pytest==8.0.2 pytest-asyncio==0.23.5 pytest-cov==4.1.0
 
@@ -276,11 +276,7 @@ jobs:
           touch src/crias_bot/grpc_gen/__init__.py
 
       - name: Run pytest
-        # TST-011: --cov reporta cobertura no CI (pytest-cov já declarado em
-        # pyproject.toml). --cov-report=term-missing mostra linhas não cobertas
-        # no log do CI.
-        # 2E-002: --cov-fail-under=50 define um piso mínimo para impedir
-        # regressão grave de cobertura (baseline conservadora; subir gradualmente).
+        # Coverage report with missing lines shown in CI log.
         run: PYTHONPATH=src python -m pytest tests/ -v --tb=short --cov=crias_bot --cov-report=term-missing --cov-fail-under=50
 
   # ═══════════════════════════════════════════════════════
@@ -732,7 +728,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     permissions:
-      # 2A-005: attest-build-provenance requer attestations:write + id-token:write.
+      # attest-build-provenance requires attestations:write + id-token:write.
       # contents:write para criar a release/tag; id-token:write para OIDC token.
       contents: write
       attestations: write
@@ -783,13 +779,8 @@ jobs:
           (cd release-assets/_pkg/full && zip -qr ../../crias-server-full.zip .)
           (cd release-assets/_pkg/slim && zip -qr ../../crias-server-slim.zip .)
 
-          # Checksum global (todos os artefatos consolidados em sha256sums.txt)
-          # 2A-003: o sed `s|  \./[^/]*/|  |` stripa UM nível de subdir
-          #   (e.g. `./iso/file.iso` → `file.iso`, `./agent/crias-agent-x` → `crias-agent-x`).
-          #   Sem isso, `sha256sum -c sha256sums.txt` falha no usuário final porque
-          #   o GitHub Releases "flattena" assets para basenames.
-          # 2A-012: inclui `*.tar` (crias-bot-image.tar) além de iso/zip/agent.
-          # O usuário final verifica TODOS os artefatos com: sha256sum -c sha256sums.txt
+          # Global checksum. Strip one subdir level so sha256sum -c works
+          # with flattened GitHub release assets.
           cd release-assets
           find . -type f \( -name '*.iso' -o -name '*.zip' -o -name 'crias-agent-*' -o -name '*.tar' \) \
             -exec sha256sum {} \; | sed 's|  \./[^/]*/|  |' > sha256sums.txt
@@ -835,7 +826,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # CICD-001: tag via env var (não interpolação ${{ }}) para evitar injeção de script
+          # CICD-001: tag via env var (nao interpolacao direta) para evitar injecao de script
           git tag "${RELEASE_TAG}"
           git push origin "${RELEASE_TAG}"
 
@@ -866,7 +857,7 @@ jobs:
           echo "=== Assets para release ==="
           printf '  %s\n' "${assets[@]}"
 
-          # Detecta prerelease sem interpolação ${{ }}
+          # Detecta prerelease via case (sem interpolacao direta)
           PRERELEASE="false"
           case "${RELEASE_TAG}" in
             *-beta*|*-rc*) PRERELEASE="true" ;;

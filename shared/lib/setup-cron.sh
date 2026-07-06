@@ -1,11 +1,9 @@
 #!/bin/bash
 # shared/lib/setup-cron.sh
 #
-# Configuração unificada de timer systemd de backup para qualquer stack.
-# Substitui minecraft/setup-cron.sh e terraria/setup-cron.sh que eram 99%
-# idênticos (item A2 do plano).
+# Unified systemd backup timer setup for any stack.
 #
-# Como usar (a partir de minecraft/setup-cron.sh ou terraria/setup-cron.sh):
+# Usage (from minecraft/setup-cron.sh or terraria/setup-cron.sh):
 #
 #   #!/bin/bash
 #   set -euo pipefail
@@ -19,18 +17,18 @@
 #   SETUP_CRON_BACKUP_SCRIPT="$SCRIPT_DIR/backup-cron.sh"
 #   setup_cron_run
 #
-# Variáveis (com defaults):
-#   SETUP_CRON_STACK_NAME       # exibido em mensagens (obrigatório)
-#   SETUP_CRON_SERVICE_NAME     # serviço systemd que o backup depende (obrigatório)
-#   SETUP_CRON_SERVER_DIR       # diretório do servidor (obrigatório)
-#   SETUP_CRON_BACKUP_SCRIPT    # script de backup (obrigatório)
-#   SETUP_CRON_SERVER_USER      # opcional: auto-detectado via stat se vazio
+# Variables (with defaults):
+#   SETUP_CRON_STACK_NAME       # display name (required)
+#   SETUP_CRON_SERVICE_NAME     # systemd service backup depends on (required)
+#   SETUP_CRON_SERVER_DIR       # server directory (required)
+#   SETUP_CRON_BACKUP_SCRIPT    # backup script (required)
+#   SETUP_CRON_SERVER_USER      # optional: auto-detected via stat if empty
 #   DRY_RUN                     # default false
 
-# NOTA: não usar `set -u` em libs sourced — caller decide política de erro.
+# NOTE: do not use `set -u` in sourced libs; caller decides error policy.
 
 # ---------------------------------------------------------------------------
-# Detecta usuário dono do SERVER_DIR se não fornecido.
+# Detect SERVER_DIR owner if not provided.
 # ---------------------------------------------------------------------------
 detect_server_user() {
     if [ -n "${SETUP_CRON_SERVER_USER:-}" ]; then
@@ -44,10 +42,8 @@ detect_server_user() {
 }
 
 # ---------------------------------------------------------------------------
-# 2D-005: Valida variáveis interpoladas em unit files systemd para prevenir
-# injeção de diretivas (CWE-78, CWE-94). Cada variável deve passar regex
-# específica; newlines são rejeitados em todas. Falha fast em configuração
-# insegura em vez de confiar cegamente no input.
+# Validate interpolated variables for systemd unit files to prevent directive
+# injection. Each variable must pass a specific regex; newlines rejected.
 # ---------------------------------------------------------------------------
 validate_setup_cron_inputs() {
     local var val
@@ -57,7 +53,7 @@ validate_setup_cron_inputs() {
         if [ -z "$val" ]; then
             continue
         fi
-        # Nomes de user/stack/service: apenas [a-z_][a-z0-9_-]*
+        # User/stack/service names: [a-z_][a-z0-9_-]* only.
         if ! [[ "$val" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
             echo -e "${RED}Erro:${NC} $var inválido para systemd unit: '$val' (use [a-z0-9_-])" >&2
             return 1
@@ -69,8 +65,8 @@ validate_setup_cron_inputs() {
         if [ -z "$val" ]; then
             continue
         fi
-        # Paths absolutos: /seguido de [a-zA-Z0-9/_.-]; rejeita newlines,
-        # espaços, shell metachars, e caracteres que quebrariam systemd unit.
+        # Absolute paths: / followed by [a-zA-Z0-9/_.-]; reject newlines,
+        # spaces, shell metachars, and chars that break systemd units.
         if [[ "$val" == *$'\n'* ]] || [[ "$val" == *$'\0'* ]] || \
            [[ "$val" == *' '* ]] || [[ "$val" == *';'* ]] || \
            [[ "$val" == *'|'* ]] || [[ "$val" == *'`'* ]] || \
@@ -86,10 +82,10 @@ validate_setup_cron_inputs() {
 }
 
 # ---------------------------------------------------------------------------
-# Escreve a unit .service do backup.
+# Write the backup .service unit.
 # ---------------------------------------------------------------------------
 write_service_unit() {
-    # 2D-005: validar antes de interpolar em unit file.
+    # Validate before interpolating into unit file.
     validate_setup_cron_inputs || return 1
 
     local target_service="${SETUP_CRON_BACKUP_SERVICE}"
@@ -131,7 +127,7 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# Escreve a unit .timer do backup.
+# Write the backup .timer unit.
 # ---------------------------------------------------------------------------
 write_timer_unit() {
     local desc="$1"
@@ -166,7 +162,7 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# Remove entradas legacy de crontab que referenciem o backup-script.
+# Remove legacy crontab entries referencing the backup script.
 # ---------------------------------------------------------------------------
 remove_legacy_cron_entries() {
     local tmp_cron_file
@@ -220,10 +216,10 @@ remove_legacy_cron_entries() {
 }
 
 # ---------------------------------------------------------------------------
-# Ponto de entrada: configura timer + service do backup.
+# Entry point: configure backup timer + service.
 # ---------------------------------------------------------------------------
 setup_cron_run() {
-    # Validação básica.
+    # Basic validation.
     : "${SETUP_CRON_STACK_NAME:?setup_cron_run requer SETUP_CRON_STACK_NAME}"
     : "${SETUP_CRON_SERVICE_NAME:?setup_cron_run requer SETUP_CRON_SERVICE_NAME}"
     : "${SETUP_CRON_SERVER_DIR:?setup_cron_run requer SETUP_CRON_SERVER_DIR}"
@@ -272,13 +268,8 @@ setup_cron_run() {
         5)
             read -r -p "Digite uma linha valida do systemd (OnCalendar=... ou OnUnitActiveSec=...): " CUSTOM_LINE
 
-            # SH-007 / 2D-005: validar CUSTOM_LINE contra injeção de diretivas
-            # systemd (CWE-78, CWE-94). Apenas diretivas da seção [Timer] são
-            # aceitas (systemd.timer(5)). Rejeita newlines, null bytes,
-            # shell metachars, e diretivas de outras seções ([Service],
-            # [Unit], [Install]) que poderiam levar a RCE via ExecStart=,
-            # User=root, etc.
-            # Referência: https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html
+            # Validate CUSTOM_LINE against systemd directive injection.
+            # Only [Timer] section directives accepted.
             if [[ "$CUSTOM_LINE" == *$'\n'* ]] || [[ "$CUSTOM_LINE" == *$'\0'* ]] || \
                [[ "$CUSTOM_LINE" == *';'* ]] || [[ "$CUSTOM_LINE" == *'|'* ]] || \
                [[ "$CUSTOM_LINE" == *'`'* ]] || [[ "$CUSTOM_LINE" == *'$'* ]]; then
@@ -289,7 +280,7 @@ setup_cron_run() {
                 OnActiveSec=*|OnBootSec=*|OnStartupSec=*|OnUnitActiveSec=*|OnUnitInactiveSec=*|\
                 OnCalendar=*|OnClockChange=*|OnTimezoneChange=*|AccuracySec=*|RandomizedDelaySec=*|\
                 FixedRandomDelay=*|Persistent=*|WakeSystem=*|RemainAfterElapse=*|Unit=*)
-                    : # Diretiva válida de [Timer]; aceitar.
+                    : # Valid [Timer] directive; accept.
                     ;;
                 *)
                     echo -e "${RED}Erro:${NC} CUSTOM_LINE nao e uma diretiva [Timer] valida: $CUSTOM_LINE"

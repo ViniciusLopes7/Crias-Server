@@ -1,9 +1,7 @@
 #!/bin/bash
 # terraria/install.sh
 #
-# Installer do stack Terraria usando o framework shared/lib/stack-installer.sh.
-# Mantém compatibilidade com os testes em tests/install-contracts.sh e
-# tests/quick-script-tests.sh (nomes de função e padrões de grep preservados).
+# Terraria stack installer using shared/lib/stack-installer.sh framework.
 
 set -euo pipefail
 
@@ -24,7 +22,7 @@ source "$ROOT_DIR/shared/lib/downloads.sh"
 source "$ROOT_DIR/shared/lib/stack-installer.sh"
 
 # ---------------------------------------------------------------------------
-# Configuração do stack.
+# Stack config.
 # ---------------------------------------------------------------------------
 TERRARIA_USER="${TERRARIA_USER:-terraria}"
 TERRARIA_SERVER_DIR="${TERRARIA_SERVER_DIR:-/opt/terraria-server}"
@@ -39,9 +37,8 @@ TERRARIA_SERVER_DIR_PREEXISTED="${TERRARIA_SERVER_DIR_PREEXISTED:-false}"
 TERRARIA_INSTALL_SUCCEEDED="${TERRARIA_INSTALL_SUCCEEDED:-false}"
 
 # ---------------------------------------------------------------------------
-# Configuração do framework stack-installer.
-# Estas variáveis são lidas por shared/lib/stack-installer.sh (sourced abaixo).
-# shellcheck disable=SC2034  # variáveis usadas por stack-installer.sh
+# stack-installer framework config. Variables read by shared/lib/stack-installer.sh.
+# shellcheck disable=SC2034  # variables used by stack-installer.sh
 # ---------------------------------------------------------------------------
 STACK_NAME="terraria"
 STACK_USER="$TERRARIA_USER"
@@ -64,7 +61,7 @@ STACK_SHARED_LIBS=(
 )
 
 # ---------------------------------------------------------------------------
-# Hooks do framework.
+# Framework hooks.
 # ---------------------------------------------------------------------------
 
 stack_validate_inputs() {
@@ -119,16 +116,14 @@ download_and_extract_terraria() {
     fi
 
     print_step "Baixando servidor Terraria Vanilla..."
-    # 2D-022: usar mktemp -t (respeita $TMPDIR) com namespace crias- e
-    # template XXXXXX, em vez de hardcoded /tmp/terraria-server-XXXXXX.zip.
-    # 2D-008: trap RETURN garante cleanup mesmo em set -e / exit prematuro.
-    # --suffix=.zip mantém extensão reconhecível sem quebrar a regra XXXXXX.
+    # Use mktemp with namespace and .zip suffix for recognizable temp files.
+    # trap RETURN ensures cleanup on early exit.
     tmp_zip="$(mktemp --suffix=.zip -t crias-terraria-XXXXXX)"
     tmp_dir="$(mktemp -d -t crias-terraria-XXXXXX)"
-    # shellcheck disable=SC2064  # queremos expansão imediata dos paths
+    # shellcheck disable=SC2064
     trap 'rm -f -- "$tmp_zip"; rm -rf -- "$tmp_dir"' RETURN
 
-    # Item S2: SHA256 obrigatório por default (TERRARIA_SHA256 em config.env).
+    # SHA256 required by default (TERRARIA_SHA256 in config.env).
     if ! download_and_verify "$TERRARIA_DOWNLOAD_URL" "$tmp_zip" TERRARIA_SHA256; then
         print_error "Falha ao baixar/validar o servidor Terraria."
         print_error "Defina TERRARIA_DOWNLOAD_URL em config.env com um link valido e TERRARIA_SHA256 (64 hex) com o checksum oficial."
@@ -170,7 +165,7 @@ stack_configure_runtime() {
     detect_hardware_profile "$TERRARIA_SERVER_DIR" "$FORCE_HARDWARE_TIER"
     compute_terraria_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER"
 
-    # STACK_SERVICE_MEMORY_MAX_MB é lido por install_stack_service (stack-installer.sh).
+    # STACK_SERVICE_MEMORY_MAX_MB read by install_stack_service (stack-installer.sh).
     # shellcheck disable=SC2034
     STACK_SERVICE_MEMORY_MAX_MB="$TT_SERVICE_MEMORY_MAX_MB"
 
@@ -219,13 +214,13 @@ $TERRARIA_SERVER_DIR/hardware-profile.env
 EOF
 }
 
-# Alias para preservar nome usado pelo install.sh raiz.
+# Alias preserving name used by root install.sh.
 run_terraria_install() {
     run_stack_install
 }
 
-# Aliases para compat retroativa com testes que chamam funções legadas
-# (tests/arch-dry-install.sh chama deploy_terraria_scripts diretamente).
+# Aliases for backward compat with legacy test functions
+# (tests/arch-dry-install.sh calls deploy_terraria_scripts directly).
 deploy_terraria_scripts() {
     deploy_stack_scripts
 }

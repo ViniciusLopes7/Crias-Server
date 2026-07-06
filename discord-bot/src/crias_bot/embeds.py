@@ -1,18 +1,7 @@
-"""Fábrica centralizada de embeds do bot Discord.
+"""Centralized Discord embed factory.
 
-Esta camada padroniza a identidade visual de TODAS as respostas do bot:
-
-- Paleta de cores consistente (verde=success, vermelho=error, laranja=warning,
-  azul=info, roxo=eventos, cinza=neutro).
-- Thumbnail do escudo Crias em todos os embeds (branding).
-- Timestamp UTC atual em cada embed (discord exibe em fuso do cliente).
-- Footer com versão do bot e "Reino dos Crias".
-- Título com emoji contextual.
-- Helpers para success/error/warning/info/event para evitar boilerplate nos
-  handlers de slash command.
-
-Quem precisa de um embed específico (status, players, health) chama o helper
-apropriado e depois adiciona campos com `add_field()` normalmente.
+Standardizes visual identity (colors, thumbnail, timestamp, footer) and
+provides per-semantic and per-command builders.
 """
 
 from __future__ import annotations
@@ -27,12 +16,12 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
-# Paleta de cores (discord.Color aceita int 24-bit RGB).
+# Color palette (discord.Color accepts 24-bit RGB int).
 # ---------------------------------------------------------------------------
 
 
 class Colors:
-    """Cores canônicas do bot. Centralizadas para não dispersar por handlers."""
+    """Canonical bot colors, centralized to avoid divergence across handlers."""
 
     SUCCESS = 0x57F287  # verde discord.py "blurple green"
     ERROR = 0xED4245  # vermelho discord.py "red"
@@ -45,13 +34,13 @@ class Colors:
 
 
 # ---------------------------------------------------------------------------
-# Identidade visual (constantes).
+# Visual identity constants.
 # ---------------------------------------------------------------------------
 
 BOT_NAME = "Crias-Server"
 BOT_VERSION = "1.1.0"
 FOOTER_TEXT = f"Crias-Server v{BOT_VERSION} • Reino dos Crias"
-# Thumbnail do escudo Crias (asset público do repo).
+# Crias shield thumbnail (public repo asset).
 THUMBNAIL_URL = (
     "https://raw.githubusercontent.com/ViniciusLopes7/Crias-Server/main/"
     "assets/images/branding/EscudoCrias.png"
@@ -59,7 +48,7 @@ THUMBNAIL_URL = (
 
 
 # ---------------------------------------------------------------------------
-# Builders base.
+# Base builders.
 # ---------------------------------------------------------------------------
 
 
@@ -70,14 +59,7 @@ def _base_embed(
     description: str | None = None,
     emoji: str = "",
 ) -> discord.Embed:
-    """Cria embed com timestamp + footer + thumbnail já configurados.
-
-    Args:
-        title: título do embed. Se `emoji` for passado, é prefixado.
-        color: cor da barra lateral (use Colors.*).
-        description: texto principal (suporta markdown do Discord).
-        emoji: emoji opcional para prefixar no título.
-    """
+    """Create embed with timestamp, footer, and thumbnail preconfigured."""
     full_title = f"{emoji} {title}" if emoji else title
     embed = discord.Embed(
         title=full_title,
@@ -91,32 +73,32 @@ def _base_embed(
 
 
 # ---------------------------------------------------------------------------
-# Helpers de semântica (success / error / warning / info).
+# Semantic helpers (success / error / warning / info).
 # ---------------------------------------------------------------------------
 
 
 def success(title: str, description: str | None = None) -> discord.Embed:
-    """Embed verde para operações concluídas com sucesso."""
+    """Green embed for successful operations."""
     return _base_embed(title, color=Colors.SUCCESS, description=description, emoji="✅")
 
 
 def error(title: str, description: str | None = None) -> discord.Embed:
-    """Embed vermelho para erros e falhas."""
+    """Red embed for errors and failures."""
     return _base_embed(title, color=Colors.ERROR, description=description, emoji="❌")
 
 
 def warning(title: str, description: str | None = None) -> discord.Embed:
-    """Embed amarelo para avisos não-fatais."""
+    """Yellow embed for non-fatal warnings."""
     return _base_embed(title, color=Colors.WARNING, description=description, emoji="⚠️")
 
 
 def info(title: str, description: str | None = None) -> discord.Embed:
-    """Embed azul para informações neutras."""
+    """Blue embed for neutral information."""
     return _base_embed(title, color=Colors.INFO, description=description, emoji="ℹ️")
 
 
 def permission_denied(required: str = "admin") -> discord.Embed:
-    """Embed padronizado para falta de permissão (usado em todos os comandos)."""
+    """Standard permission-denied embed used across commands."""
     return error(
         "Permissão negada",
         f"Você precisa ser **{required}** para usar este comando.",
@@ -124,7 +106,7 @@ def permission_denied(required: str = "admin") -> discord.Embed:
 
 
 def agent_error(detail: str) -> discord.Embed:
-    """Embed padronizado para erros de comunicação com o agente gRPC."""
+    """Standard embed for gRPC agent communication errors."""
     return error(
         "Falha de comunicação com o agente",
         f"Não foi possível falar com o `crias-agent`.\n```\n{detail}\n```",
@@ -132,7 +114,7 @@ def agent_error(detail: str) -> discord.Embed:
 
 
 # ---------------------------------------------------------------------------
-# Embeds específicos de comandos.
+# Command-specific embeds.
 # ---------------------------------------------------------------------------
 
 
@@ -143,14 +125,7 @@ def command_result(
     message: str,
     service: str = "",
 ) -> discord.Embed:
-    """Embed para respostas de /mc start|stop|restart (sucesso ou falha).
-
-    Args:
-        ok: True se operação teve sucesso.
-        action: verbo da ação ("iniciado", "parado", "reiniciado").
-        message: mensagem retornada pelo agente.
-        service: nome do serviço systemd (ex.: "minecraft").
-    """
+    """Embed for /mc start|stop|restart results (success or failure)."""
     if ok:
         embed = success(
             f"Servidor {action}",
@@ -167,7 +142,7 @@ def command_result(
 
 
 def status_online(status: dict[str, Any]) -> discord.Embed:
-    """Embed detalhado para /mc status quando servidor está online."""
+    """Detailed embed for /mc status when server is online."""
     service = status.get("service_name", "?")
     stack = status.get("stack", "?")
     tier = status.get("hardware_tier") or "—"
@@ -186,12 +161,12 @@ def status_online(status: dict[str, Any]) -> discord.Embed:
         emoji="📊",
     )
 
-    # Linha 1: identidade do servidor (3 campos inline).
+    # Row 1: server identity (3 inline fields).
     embed.add_field(name="Stack", value=f"`{stack}`", inline=True)
     embed.add_field(name="Tier", value=f"`{tier}`", inline=True)
     embed.add_field(name="Uptime", value=f"`{uptime}`", inline=True)
 
-    # Linha 2: players — destaque porque é o que mais interessa.
+    # Row 2: players (highlighted).
     players_str = ", ".join(f"`{p}`" for p in players) if players else "_ninguém online_"
     embed.add_field(
         name=f"👥 Players ({player_count}/{max_players if max_players else '?'})",
@@ -199,7 +174,7 @@ def status_online(status: dict[str, Any]) -> discord.Embed:
         inline=False,
     )
 
-    # Linha 3: recursos.
+    # Row 3: resources.
     mem_str = f"`{mem_used} / {mem_max} MB`" if mem_max else f"`{mem_used} MB`"
     embed.add_field(name="Memória", value=mem_str, inline=True)
     embed.add_field(name="Agente", value=f"`v{version}`", inline=True)
@@ -209,7 +184,7 @@ def status_online(status: dict[str, Any]) -> discord.Embed:
 
 
 def status_offline(service: str) -> discord.Embed:
-    """Embed para /mc status quando servidor está offline."""
+    """Embed for /mc status when server is offline."""
     return _base_embed(
         f"Status — {service}",
         color=Colors.OFFLINE,
@@ -219,7 +194,7 @@ def status_offline(service: str) -> discord.Embed:
 
 
 def players_list(status: dict[str, Any]) -> discord.Embed:
-    """Embed para /mc players."""
+    """Embed for /mc players."""
     players = status.get("players") or []
     count = int(status.get("player_count", 0) or 0)
     max_p = int(status.get("max_players", 0) or 0)
@@ -230,7 +205,7 @@ def players_list(status: dict[str, Any]) -> discord.Embed:
             "O servidor está vazio no momento.",
         )
 
-    # Lista numerada para facilitar leitura quando há muitos players.
+    # Numbered list for readability with many players.
     lines = [f"**{i}.** `{p}`" for i, p in enumerate(players, start=1)]
     capacity = f" ({count}/{max_p})" if max_p else f" ({count})"
     return _base_embed(
@@ -242,10 +217,7 @@ def players_list(status: dict[str, Any]) -> discord.Embed:
 
 
 def health_report(h: dict[str, Any]) -> discord.Embed:
-    """Embed para /mc health.
-
-    Mostra: healthy, RCON, porta e mensagem. Cores variam com estado.
-    """
+    """Embed for /mc health showing healthy, RCON, port, and message."""
     healthy = bool(h.get("healthy"))
     rcon_ok = bool(h.get("rcon_responsive"))
     port = h.get("port", "—")
@@ -259,11 +231,11 @@ def health_report(h: dict[str, Any]) -> discord.Embed:
         emoji="🏥",
     )
 
-    # Status principal em destaque.
+    # Main status highlighted.
     status_emoji = "✅ Saudável" if healthy else "⚠️ com problemas"
     embed.add_field(name="Estado", value=status_emoji, inline=True)
 
-    # Indicadores individuais.
+    # Individual indicators.
     rcon_str = "✅ respondendo" if rcon_ok else "❌ sem resposta"
     embed.add_field(name="RCON", value=rcon_str, inline=True)
     embed.add_field(name="Porta", value=f"`{port}`", inline=True)
@@ -275,7 +247,7 @@ def health_report(h: dict[str, Any]) -> discord.Embed:
 
 
 def say_confirmation(message: str) -> discord.Embed:
-    """Embed de confirmação para /mc say."""
+    """Confirmation embed for /mc say."""
     return success(
         "Mensagem enviada no chat",
         f"Mensagem entregue via RCON:\n```\n{message}\n```",
@@ -283,7 +255,7 @@ def say_confirmation(message: str) -> discord.Embed:
 
 
 def console_stream_started(channel_mention: str) -> discord.Embed:
-    """Embed quando /mc console ativa o stream."""
+    """Embed when /mc console enables the stream."""
     return success(
         "Stream de console ativado",
         f"Postando logs em tempo real em {channel_mention}.\n"
@@ -292,7 +264,7 @@ def console_stream_started(channel_mention: str) -> discord.Embed:
 
 
 def console_stream_stopped() -> discord.Embed:
-    """Embed quando /mc console desativa o stream."""
+    """Embed when /mc console disables the stream."""
     return info(
         "Stream de console desativado",
         "Não vou postar mais logs em tempo real.",
@@ -300,7 +272,7 @@ def console_stream_stopped() -> discord.Embed:
 
 
 def console_stream_error(detail: str) -> discord.Embed:
-    """Embed quando o stream de console cai."""
+    """Embed when console stream fails."""
     return error(
         "Stream de console parou",
         f"Erro durante o stream:\n```\n{detail}\n```",
@@ -308,15 +280,12 @@ def console_stream_error(detail: str) -> discord.Embed:
 
 
 # ---------------------------------------------------------------------------
-# Embeds para eventos push (event_bridge → #controle).
+# Push event embeds (event_bridge -> #controle).
 # ---------------------------------------------------------------------------
 
 
 def event_embed(ev: dict[str, Any]) -> discord.Embed | None:
-    """Converte evento do agente em embed estruturado.
-
-    Retorna None se o evento não for reconhecido (caller decide o que fazer).
-    """
+    """Convert agent event to structured embed; return None if unknown."""
     event_type = ev.get("event_type", "")
     metadata = ev.get("metadata", {}) or {}
     service = ev.get("service", "")
@@ -370,20 +339,19 @@ def event_embed(ev: dict[str, Any]) -> discord.Embed | None:
             embed.add_field(name="Stack", value=f"`{stack}`", inline=True)
         return embed
 
-    # Evento desconhecido — retorna None para caller decidir.
+    # Unknown event: return None for caller to handle.
     return None
 
 
 # ---------------------------------------------------------------------------
-# Helpers de formatação.
+# Formatting helpers.
 # ---------------------------------------------------------------------------
 
 
 def _format_uptime(seconds: int) -> str:
-    """Formata uptime em 'Xs', 'Xm', 'Xh Ym' ou 'Xd Yh'.
+    """Format uptime as 'Xs', 'Xm', 'Xh Ym' or 'Xd Yh'.
 
-    Duplicada do bot.py para manter o módulo embeds auto-contido (evita import
-    circular). Manter em sincronia com bot._format_uptime.
+    Duplicated from bot.py to avoid circular import; keep in sync.
     """
     if seconds < 60:
         return f"{seconds}s"

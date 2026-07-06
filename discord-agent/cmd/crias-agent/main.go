@@ -1,12 +1,4 @@
-// cmd/crias-agent/main.go é o entry point do agente Crias.
-//
-// O agente é um binário Go estático que:
-//
-//  1. Lê /etc/crias/agent.yaml
-//  2. Inicia servidor gRPC em localhost:8473 (ou TLS se configurado)
-//  3. Autentica via metadata x-api-token
-//  4. Delega comandos para sudo systemctl e mc-manager.sh
-//  5. Monitora players via RCON e emite eventos
+// Crias agent entry point: loads config, starts gRPC server, runs monitors.
 package main
 
 import (
@@ -63,7 +55,6 @@ func main() {
 		version, cfg.Server.Stack, cfg.Server.ServiceName,
 		cfg.Agent.BindAddress, cfg.Agent.Port, cfg.Agent.TLSCert != "")
 
-	// Inicializa componentes.
 	rconClient := rcon.NewClient(
 		cfg.Server.RCON.Host,
 		cfg.Server.RCON.Port,
@@ -74,11 +65,8 @@ func main() {
 
 	bus := events.NewBus()
 
-	// GO-007: versão injetada via construtor para que StatusResponse.Version
-	// reflita a versão real do build (não o default "dev").
 	srv := server.New(cfg, rconClient, bus, version)
 
-	// Inicia monitores em background.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -86,16 +74,13 @@ func main() {
 	go srv.StartHealthMonitor(ctx)
 	go srv.StartAutoShutdownMonitor(ctx)
 
-	// Configura servidor gRPC.
 	addr := fmt.Sprintf("%s:%d", cfg.Agent.BindAddress, cfg.Agent.Port)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatalf("escutar %s: %v", addr, err)
 	}
 
-	// GO-004 + GO-006: opcional TLS/mTLS + interceptors de recovery custom.
-	// Recovery é implementado inline (sem depender de google.golang.org/grpc/recovery
-	// que foi movido para google.golang.org/grpc/interceptor/recovery em v1.65+).
+	// Recovery interceptors are inlined (grpc/recovery moved to grpc/interceptor/recovery in v1.65+).
 	grpcOpts := []grpc.ServerOption{
 		grpc.ChainUnaryInterceptor(
 			recoveryUnaryInterceptor,
@@ -105,15 +90,12 @@ func main() {
 			recoveryStreamInterceptor,
 			server.StreamAuthInterceptor(cfg.Agent.AuthToken),
 		),
-		grpc.MaxRecvMsgSize(64 * 1024),       // 64 KB por mensagem (comando RCON não precisa ser grande)
-		grpc.MaxSendMsgSize(1 * 1024 * 1024), // 1 MB para stream de console
+		grpc.MaxRecvMsgSize(64 * 1024),       // 64 KB per message (RCON commands are short)
+		grpc.MaxSendMsgSize(1 * 1024 * 1024), // 1 MB for console stream
 	}
 
-	// GO-004: TLS/mTLS opcional. Obrigatório quando bind != loopback
-	// (validado em config.Load — GO-005).
-	// 2B-010: construímos tls.Config explicitamente com MinVersion TLS 1.2
-	// em vez de usar credentials.NewServerTLSFromFile (que cria tls.Config{}
-	// com MinVersion=0 e depende do default do Go, frágil a refactor futuro).
+	// TLS is required when bind != loopback (enforced in config.Load).
+	// Explicit tls.Config with MinVersion TLS 1.2 avoids relying on Go's default.
 	if cfg.Agent.TLSCert != "" && cfg.Agent.TLSKey != "" {
 		creds, err := loadTLSCreds(cfg.Agent.TLSCert, cfg.Agent.TLSKey)
 		if err != nil {
@@ -122,9 +104,6 @@ func main() {
 		grpcOpts = append(grpcOpts, grpc.Creds(creds))
 		log.Printf("TLS habilitado: cert=%s", cfg.Agent.TLSCert)
 	} else {
-		// Loopback sem TLS — explicitamente marca como insecure credentials
-		// para clareza (gRPC-Go vai warning se nenhuma Creds for setada em
-		// versões futuras).
 		grpcOpts = append(grpcOpts, grpc.Creds(insecure.NewCredentials()))
 	}
 
@@ -133,26 +112,18 @@ func main() {
 	criasv1.RegisterServerControlServer(grpcSrv, srv)
 	criasv1.RegisterEventBusServer(grpcSrv, srv)
 
-	// Graceful shutdown.
-	// GO-030: buffer 2 para não perder sinais em rajada; segundo sinal força
-	// Stop() imediato (não-graceful).
-	//
-	// 2B-004: a goroutine do segundo-signal DEVE ser lançada ANTES de
-	// GracefulStop(). Antes, ela era lançada depois — se GracefulStop
-	// pendurava (e.g., stream hung), o segundo sinal nunca interrompia.
-	// Agora lançamos um listener que fica pronto durante GracefulStop e
-	// força Stop() quando chega o segundo sinal.
+	// Graceful shutdown: first signal triggers GracefulStop, second forces Stop.
+	// The second-signal listener is started BEFORE GracefulStop so a stuck
+	// GracefulStop can still be interrupted.
 	go func() {
 		sigCh := make(chan os.Signal, 2)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		defer signal.Stop(sigCh)
 
-		sig := <-sigCh // primeiro sinal: graceful
+		sig := <-sigCh
 		log.Printf("sinal %v recebido, parando graciosamente...", sig)
 		cancel()
 
-		// Lança um segundo listener ANTES de GracefulStop. Se GracefulStop
-		// pendurar, o segundo sinal força Stop() imediato.
 		secondSig := make(chan os.Signal, 1)
 		signal.Notify(secondSig, syscall.SIGINT, syscall.SIGTERM)
 		go func() {
@@ -162,13 +133,11 @@ func main() {
 		}()
 
 		grpcSrv.GracefulStop()
-		// GracefulStop retornou normalmente — limpa o segundo listener.
 		signal.Stop(secondSig)
 	}()
 
 	log.Printf("servindo gRPC em %s", addr)
-	// NÃO usar log.Fatalf aqui — ele chama os.Exit(1) e pula defer cancel()
-	// e defer rconClient.Close(). Retornar normalmente garante cleanup.
+	// Do not use log.Fatalf here: os.Exit skips the deferred cancel() and rconClient.Close().
 	if err := grpcSrv.Serve(lis); err != nil {
 		log.Printf("gRPC Serve falhou: %v", err)
 		return
@@ -177,11 +146,7 @@ func main() {
 	log.Printf("crias-agent finalizado")
 }
 
-// recoveryUnaryInterceptor recupera de panics em handlers gRPC unários.
-// GO-006: previne que um panic derrube o processo inteiro; loga estruturado
-// e retorna codes.Internal ao cliente.
-// 2B-006: loga stack trace via runtime/debug.Stack() — sem isso, debugar
-// panics em produção é praticamente impossível.
+// recoveryUnaryInterceptor recovers from panics in unary handlers, logging the stack trace.
 func recoveryUnaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 	defer func() {
 		if p := recover(); p != nil {
@@ -192,9 +157,7 @@ func recoveryUnaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServ
 	return handler(ctx, req)
 }
 
-// recoveryStreamInterceptor recupera de panics em handlers gRPC de stream.
-// GO-006: análogo ao unário mas para streams (SubscribeEvents, StreamConsole).
-// 2B-006: inclui stack trace.
+// recoveryStreamInterceptor recovers from panics in stream handlers, logging the stack trace.
 func recoveryStreamInterceptor(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
 	defer func() {
 		if p := recover(); p != nil {
@@ -205,10 +168,7 @@ func recoveryStreamInterceptor(srv any, ss grpc.ServerStream, info *grpc.StreamS
 	return handler(srv, ss)
 }
 
-// loadTLSCreds carrega certificado/chave TLS do disco e retorna gRPC creds
-// com tls.Config explícito (MinVersion TLS 1.2, cipher suites modernas).
-// 2B-010: substitui credentials.NewServerTLSFromFile que dependia do
-// default do Go para MinVersion (frágil a refactor futuro).
+// loadTLSCreds loads the TLS cert/key pair and returns gRPC credentials with MinVersion TLS 1.2.
 func loadTLSCreds(certFile, keyFile string) (credentials.TransportCredentials, error) {
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
@@ -216,7 +176,7 @@ func loadTLSCreds(certFile, keyFile string) (credentials.TransportCredentials, e
 	}
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS12, // 2B-010: rejeita SSLv3/TLS 1.0/1.1 explicitamente
+		MinVersion:   tls.VersionTLS12,
 		ClientAuth:   tls.NoClientCert,
 	}
 	return credentials.NewTLS(tlsConfig), nil

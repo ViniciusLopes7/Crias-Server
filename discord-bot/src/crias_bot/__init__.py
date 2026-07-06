@@ -1,6 +1,6 @@
-"""Crias Discord Bot — controle remoto do servidor de jogo via gRPC.
+"""Crias Discord Bot — remote game server control via gRPC.
 
-Package principal do bot. Setup feito em __main__.py.
+Main package; setup lives in __main__.py.
 """
 
 from __future__ import annotations

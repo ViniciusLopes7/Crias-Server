@@ -1,9 +1,6 @@
-"""Entry point do bot Discord.
+"""Bot entry point.
 
-Uso:
-  python -m crias_bot        # via pyproject.toml [tool.poetry.scripts]
-  python -m discord-bot      # direto
-  poetry run crias-bot       # via Poetry
+Run with: python -m crias_bot, python -m discord-bot, or poetry run crias-bot.
 """
 
 from __future__ import annotations
@@ -48,7 +45,7 @@ def main() -> None:
 
 
 async def _run(bot: CriasBot, token: str) -> None:
-    """Conecta ao agente gRPC primeiro, depois inicia o bot Discord."""
+    """Connect to gRPC agent first, then start the Discord bot."""
     log = logging.getLogger("crias-bot")
     log.info("Conectando ao agente em %s ...", bot.config.agent_host)
     try:

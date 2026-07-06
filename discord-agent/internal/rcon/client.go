@@ -1,5 +1,4 @@
-// Package rcon fornece um cliente RCON para o agente consultar players
-// e executar comandos no servidor Minecraft.
+// Package rcon provides an RCON client for querying players and executing commands on the Minecraft server.
 package rcon
 
 import (
@@ -11,27 +10,25 @@ import (
 	"github.com/gorcon/rcon"
 )
 
-// Client wraps uma conexão RCON com cache curto (30s) para evitar
-// reconnects desnecessários. É seguro para uso concorrente (múltiplas
-// goroutines podem chamar Execute simultaneamente).
+// Client wraps an RCON connection with a short (30s) cache to avoid reconnects.
+// Safe for concurrent use.
 type Client struct {
 	host     string
 	port     int
 	password string
 	enabled  bool
 
-	// mu protege conn e lastUse contra data races.
+	// mu protects conn and lastUse from data races.
 	mu       sync.Mutex
 	conn     *rcon.Conn
 	lastUse  time.Time
 	cacheTTL time.Duration
 
-	// Hooks para testes (podem ser substituídos).
+	// Hooks for tests (can be replaced).
 	dialer func(host string, port int, password string) (*rcon.Conn, error)
 }
 
-// NewClient cria um cliente RCON. Se enabled=false, todas as operações
-// retornam ErrRCONDisabled.
+// NewClient creates an RCON client. When enabled=false, all operations return ErrRCONDisabled.
 func NewClient(host string, port int, password string, enabled bool) *Client {
 	c := &Client{
 		host:     host,
@@ -44,41 +41,29 @@ func NewClient(host string, port int, password string, enabled bool) *Client {
 	return c
 }
 
-// ErrRCONDisabled é retornado quando RCON está desabilitado na config.
+// ErrRCONDisabled is returned when RCON is disabled in the config.
 var ErrRCONDisabled = fmt.Errorf("rcon desabilitado na configuração")
 
-// defaultDialer abre conexão RCON real.
-// Nota: gorcon/rcon v1.3.5 não suporta WithDialTimeout; o timeout default
-// interno da lib é 5s. Para versões mais recentes que suportem a opção,
-// pode ser adicionada de volta.
+// defaultDialer opens a real RCON connection.
+// Note: gorcon/rcon v1.3.5 has no WithDialTimeout option; the library's internal default is 5s.
 func defaultDialer(host string, port int, password string) (*rcon.Conn, error) {
 	addr := fmt.Sprintf("%s:%d", host, port)
 	return rcon.Dial(addr, password)
 }
 
-// Execute executa um comando RCON com timeout de 10s.
+// Execute runs an RCON command with a 10s timeout.
 //
-// 2B-007: antes, Execute segurava c.mu durante toda a I/O de rede
-// (conn.Execute + dial). Se o servidor RCON estivesse hung, TODAS as
-// chamadas concorrentes (GetStatus, GetHealth, SendRconCommand,
-// monitor poll, auto-shutdown poll) bloqueavam no mutex indefinidamente.
-// gorcon v1.3.5 não tem context support.
-//
-// Agora Execute roda executeLocked numa goroutine e faz select entre
-// resultado e timeout de 10s. Em timeout, fechamos a conexão atual — isso
-// desbloqueia a goroutine (conn.Execute retorna erro de broken pipe) e
-// libera o mutex para o próximo caller, que vai dialar uma nova conexão.
-//
-// Seguro para uso concorrente: serializa acessos via c.mu (dentro de
-// executeLocked). Cada caller espera até 10s pelo resultado.
+// The I/O runs in a goroutine so concurrent callers don't block on the mutex
+// if the RCON server hangs (gorcon v1.3.5 has no context support). On timeout
+// the current connection is closed to unblock the goroutine; the next caller
+// dials a fresh connection.
 func (c *Client) Execute(command string) (string, error) {
 	if !c.enabled {
 		return "", ErrRCONDisabled
 	}
 
-	// Captura a conexão atual para poder fechá-la em caso de timeout.
-	// A goroutine de executeLocked pode estar mid-I/O segurando c.mu; fechar
-	// a conexão por fora faz conn.Execute falhar e a goroutine liberar o lock.
+	// Capture the current connection so we can close it on timeout, unblocking
+	// the goroutine holding c.mu mid-I/O.
 	c.mu.Lock()
 	currentConn := c.conn
 	c.mu.Unlock()
@@ -97,16 +82,13 @@ func (c *Client) Execute(command string) (string, error) {
 	case r := <-resultCh:
 		return r.resp, r.err
 	case <-time.After(10 * time.Second):
-		// Timeout: fecha a conexão para desbloquear a goroutine que
-		// segura o mutex. conn.Close() é safe-to-call concorrentemente
-		// com conn.Execute (ambos operam no net.Conn subjacente).
+		// Timeout: close the connection to unblock the goroutine holding the mutex.
+		// conn.Close() is safe to call concurrently with conn.Execute (both operate on the underlying net.Conn).
 		if currentConn != nil {
 			_ = currentConn.Close()
 		}
-		// Invalida o cache para que o próximo caller dial uma nova conexão.
-		// Pode haver uma race benigna aqui: executeLocked pode já ter
-		// substituído c.conn por uma nova conexão (fallback dial). Nesse
-		// caso, não desejamos invalidar a nova conexão.
+		// Invalidate the cache so the next caller dials fresh.
+		// Benign race: executeLocked may have already replaced c.conn with a new connection.
 		c.mu.Lock()
 		if c.conn == currentConn {
 			c.conn = nil
@@ -116,21 +98,20 @@ func (c *Client) Execute(command string) (string, error) {
 	}
 }
 
-// executeLocked faz o trabalho real de Execute segurando c.mu.
-// Reusa conexão cacheada se válida; em erro de conexão, dials nova e
-// tenta novamente (uma única vez).
+// executeLocked does the actual work of Execute while holding c.mu.
+// Reuses a cached connection if valid; on connection error, dials a new one and retries once.
 func (c *Client) executeLocked(command string) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Reusa conexão se foi usada nos últimos cacheTTL segundos.
+	// Reuse the connection if used within the last cacheTTL seconds.
 	if c.conn != nil && time.Since(c.lastUse) < c.cacheTTL {
 		c.lastUse = time.Now()
 		out, err := c.conn.Execute(command)
 		if err == nil {
 			return out, nil
 		}
-		// Conexão morreu — fecha e tenta reconectar.
+		// Connection died — close and reconnect.
 		_ = c.conn.Close()
 		c.conn = nil
 	}
@@ -149,7 +130,7 @@ func (c *Client) executeLocked(command string) (string, error) {
 	return out, nil
 }
 
-// Close fecha a conexão RCON se aberta. Seguro para uso concorrente.
+// Close closes the RCON connection if open. Safe for concurrent use.
 func (c *Client) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -161,9 +142,9 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// PlayerList consulta RCON "list" e parseia a resposta.
-// Resposta típica do Minecraft: "There are 2 of a max of 20 players online: player1, player2"
-// Retorna (players, max_players, error).
+// PlayerList queries the RCON "list" command and parses the response.
+// Typical Minecraft response: "There are 2 of a max of 20 players online: player1, player2"
+// Returns (players, max_players, error).
 func (c *Client) PlayerList() ([]string, int, error) {
 	out, err := c.Execute("list")
 	if err != nil {
@@ -172,9 +153,9 @@ func (c *Client) PlayerList() ([]string, int, error) {
 	return parseListResponse(out), parseMaxPlayers(out), nil
 }
 
-// parseListResponse extrai lista de players da resposta do RCON "list".
-// Formato: "There are N of a max of M players online: p1, p2, p3"
-// Se não houver players online: "There are 0 of a max of M players online: "
+// parseListResponse extracts the player list from the RCON "list" response.
+// Format: "There are N of a max of M players online: p1, p2, p3"
+// Empty case: "There are 0 of a max of M players online: "
 func parseListResponse(raw string) []string {
 	idx := strings.LastIndex(raw, ":")
 	if idx < 0 {
@@ -195,9 +176,9 @@ func parseListResponse(raw string) []string {
 	return players
 }
 
-// parseMaxPlayers extrai o número máximo de players da resposta "list".
+// parseMaxPlayers extracts the max player count from the "list" response.
 func parseMaxPlayers(raw string) int {
-	// Procura por "max of N players"
+	// Look for "max of N players".
 	idx := strings.Index(raw, "max of ")
 	if idx < 0 {
 		return 0
@@ -216,8 +197,7 @@ func parseMaxPlayers(raw string) int {
 	return n
 }
 
-// whitelistedCommands é declarado em package-level (imutável) para evitar
-// realocação a cada chamada de IsCommandAllowed em hot paths.
+// whitelistedCommands is a package-level immutable map to avoid reallocation on each IsCommandAllowed call.
 var whitelistedCommands = map[string]bool{
 	"say":        true,
 	"list":       true,
@@ -238,10 +218,10 @@ var whitelistedCommands = map[string]bool{
 	"save-on":    true,
 }
 
-// WhitelistedCommands retorna uma cópia do map de comandos permitidos.
-// Para lookup em hot paths, use IsCommandAllowed (mais eficiente).
+// WhitelistedCommands returns a copy of the allowed-commands map.
+// For hot-path lookups, prefer IsCommandAllowed (more efficient).
 func WhitelistedCommands() map[string]bool {
-	// Retorna cópia para evitar mutação externa do mapa package-level.
+	// Return a copy to prevent external mutation of the package-level map.
 	out := make(map[string]bool, len(whitelistedCommands))
 	for k, v := range whitelistedCommands {
 		out[k] = v
@@ -249,7 +229,7 @@ func WhitelistedCommands() map[string]bool {
 	return out
 }
 
-// IsCommandAllowed verifica se o primeiro token do comando é whitelistado.
+// IsCommandAllowed returns true if the command's first token is whitelisted.
 func IsCommandAllowed(command string) bool {
 	command = strings.TrimSpace(command)
 	if command == "" {

@@ -1,9 +1,8 @@
 #!/bin/bash
 # minecraft/start-server.sh
 #
-# Launcher runtime do Minecraft com tuning dinâmico baseado em runtime.env.
-# JAVA_OPTS construído como array nativo (item 6.4 do plano) para preservar
-# flags com espaços (ex.: -javaagent:/path com space.jar).
+# Minecraft runtime launcher with dynamic tuning from runtime.env.
+# JAVA_OPTS built as native array to preserve flags with spaces.
 
 set -euo pipefail
 
@@ -80,9 +79,8 @@ if [ "$min_ram_mb" -ge "$max_ram_mb" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# JAVA_OPTS como array nativo (item 6.4 do plano).
-# Substitui o pattern antigo de string concatenada + read -a split,
-# que quebrava com paths contendo espaços.
+# JAVA_OPTS as native array. Replaces concatenated string + read -a split
+# which broke on paths with spaces.
 # ---------------------------------------------------------------------------
 JAVA_OPTS=()
 JAVA_OPTS+=("-Xms${MIN_RAM}")
@@ -151,5 +149,5 @@ echo "Java: $JAVA_VERSION_RAW"
 echo "Porta: $SERVER_PORT"
 echo "=========================================="
 
-# Executa java com array nativo (preserva flags com espaços corretamente).
+# Run java with native array (preserves flags with spaces).
 exec java "${JAVA_OPTS[@]}" -jar "$SERVER_JAR" nogui

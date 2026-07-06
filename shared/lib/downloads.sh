@@ -1,23 +1,17 @@
 #!/bin/bash
 # shared/lib/downloads.sh
 #
-# Helper para downloads com verificação SHA256 (OBRIGATÓRIO por padrão),
-# retry com backoff exponencial, e suporte a DRY_RUN.
+# Download helper with mandatory SHA256 verification, retry with backoff,
+# and DRY_RUN support.
 #
-# Itens do plano atendidos:
-#   S2 - SHA256 obrigatório (require_checksum=true como default)
-#   S4 - DRY_RUN previne requisições de rede
-#   Supply chain - retry com backoff para 429/5xx
-#
-# Uso:
+# Usage:
 #   download_and_verify <url> <dest> <sha_env_var> [require_checksum]
-#
-#   - <sha_env_var>: nome da variável de ambiente contendo o SHA256 esperado.
-#   - require_checksum: "true" (default) para falhar quando checksum ausente.
-#                       "false" para permiter download sem verificação.
+#   - <sha_env_var>: env var name holding expected SHA256.
+#   - require_checksum: "true" (default) to fail when checksum missing,
+#                       "false" to allow unverified download.
 
 # ---------------------------------------------------------------------------
-# Verifica se devemos pular rede em DRY_RUN.
+# Skip network in DRY_RUN.
 # ---------------------------------------------------------------------------
 should_skip_network() {
     if is_true "${DRY_RUN:-false}"; then
@@ -27,8 +21,7 @@ should_skip_network() {
 }
 
 # ---------------------------------------------------------------------------
-# Faz o curl com retry exponencial para 429/5xx e timeouts sane.
-# Retorna 0 em sucesso, não-zero em falha definitiva.
+# curl with exponential backoff for 429/5xx and sane timeouts.
 # ---------------------------------------------------------------------------
 _curl_with_retry() {
     local url="$1"
@@ -46,14 +39,14 @@ _curl_with_retry() {
             delay=$((delay * 2))
         fi
 
-        # -f: fail em HTTP 4xx/5xx (sem body de erro)
+        # -f: fail on HTTP 4xx/5xx
         # -S: show errors
         # -s: silent
         # -L: follow redirects
         # --retry: retry transient errors (DNS, timeout)
-        # --retry-all-errors: inclui HTTP 5xx no retry interno do curl
-        # --connect-timeout: limite para conectar
-        # --max-time: limite total
+        # --retry-all-errors: include HTTP 5xx in curl's internal retry
+        # --connect-timeout: connection limit
+        # --max-time: total limit
         if http_code=$(curl -fsSL \
             --retry 3 \
             --retry-delay 2 \
@@ -63,22 +56,22 @@ _curl_with_retry() {
             -w '%{http_code}' \
             -o "$output" \
             "$url" 2>/dev/null); then
-            # Sucesso
+            # Success
             return 0
         fi
 
-        # Falha: distinguir 429/5xx (retry) de 4xx definitivo (aborta)
+        # Distinguish retryable 429/5xx from definitive 4xx.
         case "$http_code" in
             429|500|502|503|504)
-                # Retryable
+                # Retryable.
                 print_warning "HTTP $http_code em tentativa $attempt (retryable)"
                 ;;
             0|"")
-                # Erro de rede/DNS — curl já tentou internamente
+                # Network/DNS error — curl already retried internally.
                 print_warning "Erro de rede em tentativa $attempt"
                 ;;
             *)
-                # 4xx não-retryable
+                # Non-retryable 4xx.
                 print_error "HTTP $http_code (nao-retryable); abortando."
                 return 1
                 ;;
@@ -92,13 +85,9 @@ _curl_with_retry() {
 }
 
 # ---------------------------------------------------------------------------
-# Função principal: baixa, verifica SHA256, move para destino.
-# Retorna:
-#   0 - sucesso
-#   1 - falha de rede
-#   2 - checksum inválido
-#   3 - checksum obrigatório ausente
-#   4 - checksum com formato inválido
+# Download, verify SHA256, move to destination.
+# Returns: 0=success, 1=network, 2=bad checksum, 3=missing required checksum,
+#         4=malformed checksum.
 # ---------------------------------------------------------------------------
 download_and_verify() {
     local url="$1"
@@ -107,18 +96,15 @@ download_and_verify() {
     local require_checksum="${4:-true}"
     local tmpfile
 
-    # S4: DRY_RUN previne requisições de rede.
+    # DRY_RUN prevents network requests.
     if should_skip_network; then
         print_step "[DRY_RUN] Pulando download de $url"
-        # Não cria arquivo: callers em DRY_RUN devem checar DRY_RUN antes
-        # de depender do arquivo. Esta função apenas sinaliza skip.
+        # No file created; callers in DRY_RUN must check before relying on it.
         return 0
     fi
 
     tmpfile=$(mktemp)
-    # 2D-008: cleanup garantido em qualquer caminho de saída (set -e, return,
-    # erro de rede, checksum inválido). Antes deste trap, múltiplos `rm -f`
-    # espalhados pela função podiam ser pulados em paths de erro.
+    # Cleanup temp file on exit.
     # shellcheck disable=SC2064
     trap 'rm -f -- "$tmpfile"' RETURN
     mkdir -p "$(dirname "$dest")"
@@ -129,7 +115,7 @@ download_and_verify() {
         return 1
     fi
 
-    # S2: checksum é obrigatório por default.
+    # Checksum required by default.
     if [ -z "$sha_env_var" ] || [ -z "${!sha_env_var:-}" ]; then
         if [ "$require_checksum" = "true" ]; then
             print_error "Checksum SHA256 obrigatorio nao fornecido para $url"
@@ -140,12 +126,8 @@ download_and_verify() {
         fi
 
         print_warning "Nenhum checksum SHA256 fornecido para $url; procedendo sem verificacao (NAO RECOMENDADO)"
-        # 2D-018: usar `install` em vez de `mv` para garantir cópia atômica
-        # cross-device. `mv` entre filesystems diferentes faz copy+delete não
-        # atômico; se interrompido, $dest fica parcial. `install` abre o
-        # destino com O_CREAT|O_TRUNC e escreve; se falhar, $dest pode ficar
-        # parcial mas o source ($tmpfile) ainda existe para retry. Após
-        # sucesso, removemos o source explicitamente.
+        # Use `install` for atomic cross-device copy. `mv` between filesystems
+        # falls back to copy+delete (non-atomic).
         install -m 0644 "$tmpfile" "$dest"
         rm -f "$tmpfile"
         return 0
@@ -169,17 +151,16 @@ download_and_verify() {
         return 2
     fi
 
-    # 2D-018: usar `install` em vez de `mv` (ver comentário acima).
+    # Use `install` for atomic cross-device copy.
     install -m 0644 "$tmpfile" "$dest"
     rm -f "$tmpfile"
     return 0
 }
 
 # ---------------------------------------------------------------------------
-# Helper para baixar mod do Modrinth com retry.
-# Encapsula a lógica de consulta à API + download do arquivo.
-# Uso: download_modrinth_mod <slug> <loader> <game_version> <dest_dir> <file_name> [sha_env_var]
-# Retorna 0 se baixou com sucesso, 1 caso contrário (caller pode continuar).
+# Download a Modrinth mod with retry. Wraps API query + file download.
+# Usage: download_modrinth_mod <slug> <loader> <game_version> <dest_dir> <file_name> [sha_env_var]
+# Returns 0 on success, 1 on failure.
 # ---------------------------------------------------------------------------
 download_modrinth_mod() {
     local slug="$1"
@@ -197,11 +178,11 @@ download_modrinth_mod() {
     local api_url
     local mod_url
 
-    # Primeira tentativa: filtra por loader + game_version.
+    # First attempt: filter by loader + game_version.
     api_url="https://api.modrinth.com/v2/project/$slug/version?loaders=%5B%22${loader}%22%5D&game_versions=%5B%22${game_version}%22%5D"
     mod_url=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors --connect-timeout 10 --max-time 30 "$api_url" 2>/dev/null | jq -r '.[0].files[0].url // empty' 2>/dev/null || true)
 
-    # Fallback: sem filtro de game_version.
+    # Fallback: without game_version filter.
     if [ -z "$mod_url" ]; then
         api_url="https://api.modrinth.com/v2/project/$slug/version?loaders=%5B%22${loader}%22%5D"
         mod_url=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors --connect-timeout 10 --max-time 30 "$api_url" 2>/dev/null | jq -r '.[0].files[0].url // empty' 2>/dev/null || true)

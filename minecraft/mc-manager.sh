@@ -1,9 +1,8 @@
 #!/bin/bash
 # minecraft/mc-manager.sh
 #
-# CLI de gerenciamento do Minecraft. Centraliza log()/warn()/err() em
-# shared/lib/common.sh (item 6.4 do plano) e gera show_help dinamicamente
-# via declare -F.
+# Minecraft CLI manager. Uses log()/warn()/err() from common.sh and
+# generates show_help dynamically via declare -F.
 
 set -euo pipefail
 
@@ -37,7 +36,7 @@ SERVER_USER="${SERVER_USER:-minecraft}"
 
 if [ -d "$SERVER_DIR" ]; then
     if ! id "$SERVER_USER" >/dev/null 2>&1; then
-        # detected_owner é temporário; script é top-level (não há `local` em escopo global).
+        # detected_owner is temporary; script is top-level (no `local` in global scope).
         detected_owner=$(stat -c '%U' "$SERVER_DIR" 2>/dev/null || true) || detected_owner=""
         if [ -n "$detected_owner" ]; then
             SERVER_USER="$detected_owner"
@@ -78,8 +77,7 @@ if [ -f "$COMMON_LIB" ]; then
     source "$COMMON_LIB"
 fi
 
-# log()/warn()/err() centralizados em common.sh (item 6.4 do plano).
-# Não redefinimos localmente para evitar divergência de formato.
+# log()/warn()/err() centralized in common.sh. Do not redefine locally.
 
 get_prop() {
     local key="$1"
@@ -238,7 +236,7 @@ cmd_health() {
 }
 
 # ---------------------------------------------------------------------------
-# show_help gerado dinamicamente via declare -F (item 6.4 do plano).
+# show_help generated dynamically via declare -F.
 # ---------------------------------------------------------------------------
 show_help() {
     cat << EOF
@@ -246,7 +244,7 @@ Uso: $0 <comando>
 
 Comandos disponiveis:
 EOF
-    # Lista funções cmd_* dinamicamente e mapeia para descrição.
+    # List cmd_* functions dynamically and map to description.
     local fn
     while IFS= read -r fn; do
         local cmd="${fn#cmd_}"

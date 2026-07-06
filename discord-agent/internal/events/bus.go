@@ -1,5 +1,5 @@
-// Package events implementa um bus de eventos em memória com fan-out
-// para múltiplos subscribers (clients gRPC conectados ao SubscribeEvents).
+// Package events implements an in-memory event bus with fan-out to multiple subscribers
+// (gRPC clients connected to SubscribeEvents).
 package events
 
 import (
@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Event é um evento emitido pelo agente (ServerStarted, PlayerJoined, etc.).
+// Event is an agent-emitted event (ServerStarted, PlayerJoined, etc.).
 type Event struct {
 	EventID       string            `json:"event_id"`
 	EventType     string            `json:"event_type"`
@@ -19,22 +19,21 @@ type Event struct {
 	Metadata      map[string]string `json:"metadata"`
 }
 
-// Bus é um bus de eventos em memória com suporte a múltiplos subscribers.
+// Bus is an in-memory event bus supporting multiple subscribers.
 type Bus struct {
 	mu          sync.RWMutex
 	subscribers map[string]chan Event
 }
 
-// NewBus cria um novo bus de eventos.
+// NewBus creates a new event bus.
 func NewBus() *Bus {
 	return &Bus{
 		subscribers: make(map[string]chan Event),
 	}
 }
 
-// Subscribe registra um novo subscriber. Retorna o canal de eventos e
-// uma função de cancelamento (unsubscribe).
-// O canal tem buffer de 64 eventos; eventos extras são descartados (não bloqueia o emitter).
+// Subscribe registers a subscriber and returns the event channel plus an unsubscribe function.
+// The channel is buffered with 64 events; extras are dropped (non-blocking for the emitter).
 func (b *Bus) Subscribe(filter []string) (<-chan Event, func()) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -52,7 +51,7 @@ func (b *Bus) Subscribe(filter []string) (<-chan Event, func()) {
 		}
 	}
 
-	// Se houver filtro, wrap o canal com um filtro.
+	// If a filter is set, wrap the channel with a filter goroutine.
 	if len(filter) > 0 {
 		filterSet := make(map[string]bool, len(filter))
 		for _, t := range filter {
@@ -65,7 +64,7 @@ func (b *Bus) Subscribe(filter []string) (<-chan Event, func()) {
 					select {
 					case filteredCh <- ev:
 					default:
-						// descarta se subscriber está lento
+						// drop if the subscriber is slow
 					}
 				}
 			}
@@ -77,8 +76,8 @@ func (b *Bus) Subscribe(filter []string) (<-chan Event, func()) {
 	return ch, cancel
 }
 
-// Publish emite um evento para todos os subscribers.
-// Non-blocking: se um subscriber não tem buffer, o evento é descartado.
+// Publish emits an event to all subscribers.
+// Non-blocking: events are dropped if a subscriber's buffer is full.
 func (b *Bus) Publish(ev Event) {
 	if ev.EventID == "" {
 		ev.EventID = uuid.NewString()
@@ -94,12 +93,12 @@ func (b *Bus) Publish(ev Event) {
 		select {
 		case ch <- ev:
 		default:
-			// subscriber lento — descarta evento para não bloquear o agente
+			// slow subscriber — drop the event to avoid blocking the agent
 		}
 	}
 }
 
-// SubscriberCount retorna o número de subscribers ativos (para debug).
+// SubscriberCount returns the number of active subscribers (for debugging).
 func (b *Bus) SubscriberCount() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()

@@ -1,4 +1,4 @@
-// Package server helpers para monitorar players e emitir eventos.
+// Package server monitors players and health, emitting events.
 package server
 
 import (
@@ -8,9 +8,8 @@ import (
 	"github.com/ViniciusLopes7/Crias-Server/discord-agent/internal/events"
 )
 
-// StartPlayerMonitor inicia uma goroutine que consulta RCON a cada 30s
-// e emite eventos PlayerJoined/PlayerLeft quando a lista muda.
-// Retorna quando ctx é cancelado.
+// StartPlayerMonitor polls RCON every 30s and emits PlayerJoined/PlayerLeft when the list changes.
+// Returns when ctx is cancelled.
 func (s *Server) StartPlayerMonitor(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -25,12 +24,8 @@ func (s *Server) StartPlayerMonitor(ctx context.Context) {
 	}
 }
 
-// pollPlayers consulta RCON "list", compara com knownPlayers e emite eventos.
-//
-// 2B-009: coleta eventos DEPOIS de soltar o lock. Antes, Publish era
-// chamado com s.mu segurada, estendendo a critical section e podendo
-// deadlockar se Publish algum dia bloqueasse (atualmente é non-blocking,
-// mas a regra de nunca segurar lock durante I/O externa é defense-in-depth).
+// pollPlayers queries the RCON "list", diffs against knownPlayers, and emits join/leave events.
+// Events are collected under the lock but published after release to keep the critical section short.
 func (s *Server) pollPlayers(ctx context.Context) {
 	if s.rcon == nil {
 		return
@@ -41,7 +36,7 @@ func (s *Server) pollPlayers(ctx context.Context) {
 		return
 	}
 
-	// Monta set de players atuais e coleta eventos DEPOIS de soltar o lock.
+	// Build the current player set; collect events to publish after releasing the lock.
 	currentSet := make(map[string]bool, len(players))
 	for _, p := range players {
 		currentSet[p] = true
@@ -73,22 +68,16 @@ func (s *Server) pollPlayers(ctx context.Context) {
 	s.knownPlayers = currentSet
 	s.mu.Unlock()
 
-	// Publica eventos FORA do lock — Publish pode chamar subscribers
-	// (que rodam em goroutines próprias), então nem sequer tocamos s.mu aqui.
+	// Publish events outside the lock — Publish may invoke subscribers.
 	for _, e := range joins {
 		s.bus.Publish(e)
 	}
 	for _, e := range leaves {
 		s.bus.Publish(e)
 	}
-
-	// GO-027: lastPlayerPoll field removido do Server struct (era dead code
-	// — escrito mas nunca lido). Se precisar tracker do último poll no futuro,
-	// re-adicione o campo em server.go antes de usar aqui.
 }
 
-// StartHealthMonitor inicia goroutine que verifica saúde a cada N segundos
-// e emite HealthWarning se servidor estiver degradado.
+// StartHealthMonitor polls service health at the configured interval and emits HealthWarning on degradation.
 func (s *Server) StartHealthMonitor(ctx context.Context) {
 	interval := time.Duration(s.cfg.Features.HealthCheck.IntervalSeconds) * time.Second
 	if interval < 60*time.Second {
@@ -108,8 +97,7 @@ func (s *Server) StartHealthMonitor(ctx context.Context) {
 	}
 }
 
-// checkHealth verifica se serviço está ativo e RCON responde.
-// Só notifica em caso de problema (passivo).
+// checkHealth emits a HealthWarning if the service is inactive or RCON is unresponsive.
 func (s *Server) checkHealth(ctx context.Context) {
 	if !s.isServiceActive(ctx, s.cfg.Server.ServiceName) {
 		s.bus.Publish(events.Event{

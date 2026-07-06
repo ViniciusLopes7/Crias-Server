@@ -12,20 +12,13 @@ source "$SCRIPT_DIR/shared/lib/common.sh"
 source "$SCRIPT_DIR/shared/lib/config-parser.sh"
 
 # shellcheck source=/dev/null
-# downloads.sh define download_and_verify() usada por install_crias_agent_if_enabled()
-# e por minecraft/install.sh (via stack-installer.sh). Sem este source, a função
-# não está disponível quando install.sh chama download_and_verify diretamente.
+# Provides download_and_verify() for this script and stack installers.
 source "$SCRIPT_DIR/shared/lib/downloads.sh"
 
-# 2D-011: apply_config_with_env_precedence é chamado UMA vez no top-level
-# (aqui, antes dos defaults) para que os defaults `${VAR:-...}` nas linhas
-# abaixo não capturem valores falsos. A chamada duplicada que existia dentro
-# de main() foi removida — ela re-capturava os defaults como "env overrides"
-# e sobrescrevia valores legítimos do config.env.
+# Load config once before defaults to avoid capturing false values.
 apply_config_with_env_precedence "$CONFIG_FILE"
 
-# Defaults (precedencia: defaults < config.env < variaveis de ambiente).
-# Initialize only variables that are still undefined after config loading.
+# Defaults (precedence: defaults < config.env < env vars).
 SERVER_TYPE="${SERVER_TYPE:-}"
 FORCE_HARDWARE_TIER="${FORCE_HARDWARE_TIER:-}"
 INSTALL_TAILSCALE="${INSTALL_TAILSCALE:-true}"
@@ -35,13 +28,13 @@ CLEANUP_OTHER_STACK="${CLEANUP_OTHER_STACK:-true}"
 DRY_RUN="${DRY_RUN:-false}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-false}"
 
-# R1: thresholds de hardware com defaults sane.
+# Hardware tier thresholds.
 HW_LOW_TIER_MAX_RAM_MB="${HW_LOW_TIER_MAX_RAM_MB:-3072}"
 HW_LOW_TIER_MAX_CPU_CORES="${HW_LOW_TIER_MAX_CPU_CORES:-2}"
 HW_MID_TIER_MAX_RAM_MB="${HW_MID_TIER_MAX_RAM_MB:-12288}"
 HW_MID_TIER_MAX_CPU_CORES="${HW_MID_TIER_MAX_CPU_CORES:-6}"
 
-# S8: detecção de virtualização (auto = skip em container/VPS, force = sempre aplica).
+# Virtualization tuning: auto skips containers/VPS, force always applies.
 VIRT_TUNING_BEHAVIOR="${VIRT_TUNING_BEHAVIOR:-auto}"
 
 MINECRAFT_USER="${MINECRAFT_USER:-minecraft}"
@@ -54,12 +47,12 @@ MINECRAFT_LOADER="${MINECRAFT_LOADER:-fabric}"
 MINECRAFT_INSTALL_MODPACK="${MINECRAFT_INSTALL_MODPACK:-true}"
 MINECRAFT_ADRENALINE_VERSION="${MINECRAFT_ADRENALINE_VERSION:-}"
 MINECRAFT_INSTALL_QOL_MODS="${MINECRAFT_INSTALL_QOL_MODS:-true}"
-# R2: QoL mods via CSV.
+# QoL mods CSV list.
 MINECRAFT_QOL_MODS="${MINECRAFT_QOL_MODS:-chunky:chunky,essential-commands:essential-commands,universal-graves:universal-graves,tabtps:tabtps,styled-chat:styled-chat,polymer:polymer,placeholder-api:placeholder-api}"
-# R3: modpack source.
+# Modpack source.
 MINECRAFT_MODPACK_SOURCE="${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
 MINECRAFT_MODPACK_SLUG="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
-# S3: versão pinada do mrpack-install.
+# Pinned mrpack-install version.
 MRPACK_INSTALL_VERSION="${MRPACK_INSTALL_VERSION:-v0.21.0-beta}"
 MRPACK_INSTALL_SHA256="${MRPACK_INSTALL_SHA256:-}"
 ACCEPT_EULA="${ACCEPT_EULA:-false}"
@@ -71,7 +64,7 @@ TERRARIA_WORLD_NAME="${TERRARIA_WORLD_NAME:-world}"
 TERRARIA_MOTD="${TERRARIA_MOTD:-Servidor Terraria gerenciado por Crias-Server}"
 TERRARIA_DOWNLOAD_URL="${TERRARIA_DOWNLOAD_URL:-https://terraria.org/api/download/pc-dedicated-server/terraria-server-1456.zip}"
 
-# Fase 1+: instalação opcional do agente de controle remoto (crias-agent).
+# Optional remote control agent install.
 INSTALL_AGENT="${INSTALL_AGENT:-}"
 
 select_server_type() {
@@ -201,12 +194,11 @@ install_tailscale_if_enabled() {
 
     print_step "Instalando Tailscale..."
 
-    # Já está instalado? (comum em hosts que deram boot pela ISO Crias, onde
-    # Tailscale já vem pré-instalado no airootfs via packages.x86_64).
+    # Skip download if already installed (e.g., from Crias ISO).
     if command_exists tailscale; then
         print_step "Tailscale já está instalado — pulando download."
     else
-        # Host sem ISO Crias (instalação direta em Arch limpo): baixa via pacman.
+        # Install via pacman on bare Arch.
         outdated_packages="$(pacman -Qu 2>/dev/null || true)"
         if [ -n "$outdated_packages" ]; then
             print_warning "Foram detectados pacotes desatualizados no sistema."
@@ -219,20 +211,19 @@ install_tailscale_if_enabled() {
             fi
         fi
 
-        # Tentativa 1: pacman (repo Arch oficial).
+        # Try pacman first.
         if ! pacman -S --needed --noconfirm tailscale; then
             print_warning "pacman -S tailscale falhou. Tentando via repo oficial Tailscale..."
-            # Tentativa 2: script oficial (https://pkgs.tailscale.com/stable/#arch).
-            # Adiciona repo [tailscale] ao pacman.conf e instala.
+            # Fallback: add Tailscale repo to pacman.conf.
             local tmpdir
             tmpdir="$(mktemp -d)"
-            # 2D-008: cleanup garantido do tmpdir em qualquer caminho de saída.
+            # Cleanup tmpdir on exit.
             # shellcheck disable=SC2064
             trap 'rm -rf -- "$tmpdir"' RETURN
             if curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 10 \
                     -o "$tmpdir/tailscale.repo" \
                     https://pkgs.tailscale.com/stable/arch/tailscale.repo 2>/dev/null; then
-                # Adiciona repo [tailscale] ao pacman.conf temporariamente.
+                # Add [tailscale] repo to pacman.conf.
                 if ! grep -q '^\[tailscale\]' /etc/pacman.conf 2>/dev/null; then
                     cat >> /etc/pacman.conf <<'EOF'
 
@@ -240,10 +231,7 @@ install_tailscale_if_enabled() {
 Server = https://pkgs.tailscale.com/stable/arch/$arch
 EOF
                 fi
-                # 2D-009: Popula key do repo Tailscale (justin@tailscale.com).
-                # Não usar `|| true` — falha aqui deve abortar (key import é
-                # pré-requisito para pacman -Syy tailscale). Captura erro com
-                # diagnóstico claro em vez de mascarar com `|| true`.
+                # Import and sign Tailscale repo key.
                 if ! pacman-key --recv-key 999EAC3D9BD5B7F7 2>&1 | sed 's/^/[pacman-key] /'; then
                     print_error "pacman-key --recv-key falhou para 999EAC3D9BD5B7F7 (chave Tailscale)."
                     print_error "Verifique conectividade com o keyserver e tente novamente."
@@ -271,8 +259,7 @@ EOF
         fi
     fi
 
-    # 2D-010: não mascarar falhas de systemctl nem exibir success enganoso.
-    # Tailscale pronto só é exibido se tailscaled realmente ativar.
+    # Only report success if tailscaled is actually active.
     local tailscale_activated=false
     if command_exists systemctl; then
         if systemctl enable tailscaled >/dev/null 2>&1 && \
@@ -349,8 +336,8 @@ cleanup_stale_alias_autoload_entries() {
     fi
 
     tmp_file="$(mktemp)"
-    # 2D-008: cleanup garantido mesmo em set -e / return prematuro.
-    # shellcheck disable=SC2064  # queremos expansão imediata do path
+    # Cleanup tmp file on exit.
+    # shellcheck disable=SC2064
     trap 'rm -f -- "$tmp_file"' RETURN
 
     while IFS= read -r line || [ -n "$line" ]; do
@@ -363,7 +350,7 @@ cleanup_stale_alias_autoload_entries() {
         printf '%s\n' "$line" >> "$tmp_file"
     done < "$profiled_path"
 
-    # 2D-003: mv atômico (mesmo filesystem) — arquivo entra inteiro ou não entra.
+    # Atomic mv.
     mv -f "$tmp_file" "$profiled_path"
     chmod 0644 "$profiled_path"
 }
@@ -384,7 +371,7 @@ remove_alias_autoload_entry() {
     fi
 
     tmp_file="$(mktemp)"
-    # 2D-008: cleanup garantido mesmo em set -e / return prematuro.
+    # Cleanup tmp file on exit.
     # shellcheck disable=SC2064
     trap 'rm -f -- "$tmp_file"' RETURN
 
@@ -394,7 +381,7 @@ remove_alias_autoload_entry() {
 
     grep -Fv "$source_line" "$profiled_path" | grep -Fv '# Generated by Crias-Server installer - do not edit manually' > "$tmp_file" || true
 
-    # 2D-003: mv atômico.
+    # Atomic mv.
     mv -f "$tmp_file" "$profiled_path"
     chmod 0644 "$profiled_path"
 }
@@ -404,17 +391,14 @@ write_stack_env_file() {
 
     env_file="$(mktemp "${TMPDIR:-/tmp}/crias_stack_env.XXXXXX")"
     chmod 600 "$env_file"
-    # 2D-008: Esta função retorna o path via stdout para o caller consumir;
-    # o cleanup é responsabilidade do caller (run_selected_stack_installer),
-    # que já faz `rm -f "$env_file"` em belt-and-suspenders. Para garantir
-    # cleanup mesmo se falhar ANTES de imprimir o path, validamos a escrita:
+    # Caller cleans up; validate write before returning path.
     if ! {
         printf 'FORCE_HARDWARE_TIER=%q\n' "$FORCE_HARDWARE_TIER"
         printf 'APPLY_SYSTEM_TUNING=%q\n' "$APPLY_SYSTEM_TUNING"
         printf 'SYSTEM_TUNING_SCOPE=%q\n' "$SYSTEM_TUNING_SCOPE"
         printf 'DRY_RUN=%q\n' "$DRY_RUN"
         printf 'NON_INTERACTIVE=%q\n' "$NON_INTERACTIVE"
-        # R1: thresholds propagados para o stack installer.
+        # Hardware tier thresholds.
         printf 'HW_LOW_TIER_MAX_RAM_MB=%q\n' "${HW_LOW_TIER_MAX_RAM_MB:-3072}"
         printf 'HW_LOW_TIER_MAX_CPU_CORES=%q\n' "${HW_LOW_TIER_MAX_CPU_CORES:-2}"
         printf 'HW_MID_TIER_MAX_RAM_MB=%q\n' "${HW_MID_TIER_MAX_RAM_MB:-12288}"
@@ -433,11 +417,11 @@ write_stack_env_file() {
             printf 'MINECRAFT_INSTALL_QOL_MODS=%q\n' "$MINECRAFT_INSTALL_QOL_MODS"
             printf 'ACCEPT_EULA=%q\n' "${ACCEPT_EULA:-false}"
             printf 'MRPACK_SHA256=%q\n' "${MRPACK_SHA256:-}"
-            # R2/R3: QoL mods e modpack source configuráveis via config.env.
+            # QoL mods and modpack source.
             printf 'MINECRAFT_QOL_MODS=%q\n' "${MINECRAFT_QOL_MODS:-}"
             printf 'MINECRAFT_MODPACK_SOURCE=%q\n' "${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
             printf 'MINECRAFT_MODPACK_SLUG=%q\n' "${MINECRAFT_MODPACK_SLUG:-adrenaline}"
-            # S3: versão pinada do mrpack-install.
+            # Pinned mrpack-install version.
             printf 'MRPACK_INSTALL_VERSION=%q\n' "${MRPACK_INSTALL_VERSION:-v0.21.0-beta}"
             printf 'MRPACK_INSTALL_SHA256=%q\n' "${MRPACK_INSTALL_SHA256:-}"
         else
@@ -526,10 +510,7 @@ cleanup_stack_by_type() {
         return 0
     fi
 
-    # 2D-014: usar grep -F (literal) em vez de regex, para evitar regex
-    # injection se service_name vier a conter metacaracteres. service_name é
-    # hardcoded para minecraft/terraria hoje, mas a defesa em profundidade
-    # protege contra regressões se cleanup_stack_by_type for estendido.
+    # Use grep -F (literal) to avoid regex injection.
     if systemctl list-unit-files | grep -Fq "${service_name}.service"; then
         systemctl stop "$service_name" >/dev/null 2>&1 || true
         systemctl disable "$service_name" >/dev/null 2>&1 || true
@@ -550,7 +531,7 @@ cleanup_stack_by_type() {
         if crontab -u "$server_user_var" -l 2>/dev/null | grep -Fq "$stack_dir/backup-cron.sh"; then
             local tmp_cron_file
             tmp_cron_file="$(mktemp "${TMPDIR:-/tmp}/crias_cron.XXXXXX")"
-            # 2D-008: cleanup garantido em qualquer caminho de saída.
+            # Cleanup tmp file on exit.
             # shellcheck disable=SC2064
             trap 'rm -f -- "$tmp_cron_file"' RETURN
             crontab -u "$server_user_var" -l 2>/dev/null | grep -Fv "$stack_dir/backup-cron.sh" > "$tmp_cron_file" || true
@@ -566,7 +547,7 @@ cleanup_stack_by_type() {
         if crontab -l 2>/dev/null | grep -Fq "$stack_dir/backup-cron.sh"; then
             local tmp_cron_root_file
             tmp_cron_root_file="$(mktemp "${TMPDIR:-/tmp}/crias_cron_root.XXXXXX")"
-            # 2D-008: cleanup garantido em qualquer caminho de saída.
+            # Cleanup tmp file on exit.
             # shellcheck disable=SC2064
             trap 'rm -f -- "$tmp_cron_root_file"' RETURN
             crontab -l 2>/dev/null | grep -Fv "$stack_dir/backup-cron.sh" > "$tmp_cron_root_file" || true
@@ -611,7 +592,7 @@ cleanup_other_stack_if_needed() {
         has_existing_data=true
     fi
 
-    # 2D-014: grep -F (literal) — consistência com cleanup_stack_by_type.
+    # Use grep -F (literal).
     if systemctl list-unit-files | grep -Fq "${other_stack}.service"; then
         has_existing_data=true
     fi
@@ -630,14 +611,8 @@ cleanup_other_stack_if_needed() {
 }
 
 # ---------------------------------------------------------------------------
-# Fase 1+ do plano: instalação opcional do agente de controle remoto (crias-agent).
-#
-# O agente é um binário Go que escuta em localhost:8473 e é exposto via
-# Tailscale Funnel. Permite controle remoto do servidor via gRPC + bot Discord.
-#
-# Esta função é chamada APÓS o stack principal ser instalado, pois precisa
-# de server.properties (Minecraft) ou serverconfig.txt (Terraria) para
-# configurar RCON no agent.yaml.
+# Optional remote control agent install. Runs after stack install to read
+# RCON config from server.properties / serverconfig.txt.
 # ---------------------------------------------------------------------------
 install_crias_agent_if_enabled() {
     local stack_dir
@@ -684,9 +659,7 @@ install_crias_agent_if_enabled() {
         stack_port="$TERRARIA_PORT"
     fi
 
-    # Tier de hardware efetivo (vindo do stack installer ou FORCE_HARDWARE_TIER).
-    # Usado para popular agent.yaml → server.hardware_tier, que o bot Discord
-    # mostra no /mc status (item v1.1.0).
+    # Effective hardware tier for agent.yaml.
     local agent_hardware_tier="${FORCE_HARDWARE_TIER:-}"
     if [ -z "$agent_hardware_tier" ] && [ -f "$stack_dir/.hardware-tier" ]; then
         agent_hardware_tier="$(cat "$stack_dir/.hardware-tier" 2>/dev/null || true)"
@@ -704,8 +677,7 @@ install_crias_agent_if_enabled() {
     mkdir -p /opt/crias-agent /etc/crias /var/log/crias-agent
     chown -R crias-agent:crias-agent /opt/crias-agent /var/log/crias-agent
 
-    # Validação de inputs antes de gerar config/sudoers (item 7.4 do plano).
-    # Prevenir YAML/sudoers malformado por caracteres especiais em paths/user.
+    # Validate inputs before generating config/sudoers.
     if ! [[ "$stack_user" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
         print_error "stack_user inválido para sudoers: $stack_user (use apenas [a-z0-9_-])"
         return 1
@@ -719,23 +691,12 @@ install_crias_agent_if_enabled() {
         return 1
     fi
 
-    # 3. Baixa binário do último release (GitHub API).
-    # A CI cria releases com tag v*.*.* (ex: v2026.07.02-342c3f9) que contêm
-    # o asset crias-agent-linux-amd64. Buscamos a última release que tenha
-    # esse asset (sem filtrar por prefixo de tag, pois não existe agent-latest).
-    #
-    # SH-008: usar autenticação Bearer quando GITHUB_TOKEN disponível
-    # (aumenta rate-limit de 60 para 5000 req/hora) e pinar versão da API
-    # (X-GitHub-Api-Version: 2022-11-28) para evitar mudanças silenciosas
-    # de contrato. Referência:
-    #   https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
-    #   https://docs.github.com/rest/overview/api-versions
+    # 3. Find latest release asset via GitHub API.
+    # Use Bearer auth when GITHUB_TOKEN is set (raises rate limit) and pin API version.
     local agent_url
     local agent_sha=""
     local api_url="https://api.github.com/repos/ViniciusLopes7/Crias-Server/releases?per_page=10"
-    # Estratégia: lista as 10 releases mais recentes, procura a primeira que
-    # tem o asset "crias-agent-linux-amd64" e extrai a URL de download +
-    # digest (sha256) quando disponível.
+    # Search recent releases for the crias-agent-linux-amd64 asset.
     local curl_auth_headers=()
     if [ -n "${GITHUB_TOKEN:-}" ]; then
         curl_auth_headers=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
@@ -751,8 +712,7 @@ install_crias_agent_if_enabled() {
     agent_url=$(printf '%s' "$api_response" \
         | jq -r '[.[] | .assets[] | select(.name=="crias-agent-linux-amd64") | .browser_download_url] | .[0] // empty' 2>/dev/null || true)
 
-    # SH-002: extrair digest (sha256) do asset quando disponível. O campo
-    # `digest` vem no formato "sha256:<hex>" em assets publicados após 2023.
+    # Extract sha256 digest from asset if available.
     if [ -n "$agent_url" ]; then
         local agent_digest
         agent_digest=$(printf '%s' "$api_response" \
@@ -774,19 +734,15 @@ install_crias_agent_if_enabled() {
 
     print_step "URL do agente: $agent_url"
 
-    # SH-002: exigir checksum SHA256 obrigatório (require_checksum=true).
-    # Prioridade para CRIAS_AGENT_SHA256:
-    #   1. Variável de ambiente/config.env (pinagem explícita pelo operador).
-    #   2. agent_sha extraído do campo `digest` do asset via GitHub API.
+    # Require SHA256 checksum: env override or asset digest.
     if [ -z "${CRIAS_AGENT_SHA256:-}" ] && [ -n "$agent_sha" ]; then
         CRIAS_AGENT_SHA256="$agent_sha"
     fi
 
-    # SH-001/SH-002: usar mktemp -d para path privado e não-reutilizável
-    # (CWE-377 — Insecure Temporary File). trap RETURN garante limpeza.
+    # Use mktemp -d for private temp dir; cleanup via trap.
     local agent_tmp_dir
     agent_tmp_dir="$(mktemp -d -t crias-agent-XXXXXX)"
-    # shellcheck disable=SC2064  # queremos expansão imediata do path
+    # shellcheck disable=SC2064
     trap 'rm -rf -- "$agent_tmp_dir"' RETURN
     local agent_local="${agent_tmp_dir}/crias-agent"
 
@@ -829,10 +785,7 @@ install_crias_agent_if_enabled() {
         fi
     fi
 
-    # 2D-006/007: Validar rcon_password e rcon_port para YAML seguro.
-    # - rcon_password: rejeitar newlines, aspas (duplas e simples) e backslash
-    #   (YAML interpreta \ em strings double-quoted; aspas quebram o quoting).
-    # - rcon_port: validar range 1-65535; será emitido como quoted string YAML.
+    # Validate rcon_password for YAML safety (no newlines/quotes/backslash).
     if [ -n "$rcon_password" ]; then
         if [[ "$rcon_password" == *$'\n'* ]] || [[ "$rcon_password" == *'"'* ]] || \
            [[ "$rcon_password" == *"'"* ]] || [[ "$rcon_password" == *'\'* ]]; then
@@ -842,9 +795,7 @@ install_crias_agent_if_enabled() {
         fi
     fi
 
-    # 2D-007: Validar stack_port e rcon_port ANTES de emitir YAML. Os valores
-    # vindos de config.env não foram validados neste escopo (validação ocorre
-    # dentro do stack installer em subshell). Fail-fast aqui evita YAML inválido.
+    # Validate port range before emitting YAML.
     if ! [[ "$stack_port" =~ ^[0-9]+$ ]] || [ "$stack_port" -lt 1 ] || [ "$stack_port" -gt 65535 ]; then
         print_error "stack_port inválido para YAML: $stack_port (deve ser 1-65535)"
         return 1
@@ -854,7 +805,7 @@ install_crias_agent_if_enabled() {
         return 1
     fi
 
-    # 2D-023: Validar agent_hardware_tier contra whitelist antes de YAML.
+    # Validate hardware tier against whitelist.
     case "$agent_hardware_tier" in
         LOW|MID|HIGH|unknown)
             ;;
@@ -864,10 +815,7 @@ install_crias_agent_if_enabled() {
             ;;
     esac
 
-    # 6. Gera /etc/crias/agent.yaml.
-    # 2D-003: escrever em tmpfile, validar, e instalar atomicamente com
-    # `install -m 0640` para evitar arquivo parcial em /etc/crias/ se o
-    # script for interrompido mid-write.
+    # 6. Write agent.yaml atomically.
     local agent_yaml_tmp
     agent_yaml_tmp="$(mktemp "${TMPDIR:-/tmp}/crias_agent_yaml.XXXXXX")"
     # shellcheck disable=SC2064
@@ -900,20 +848,12 @@ features:
     interval_seconds: 300
     passive: true
 EOF
-    # 2D-003: install faz cópia atômica (open + rename) com modo 0640.
+    # Atomic install with mode 0640.
     install -m 0640 -o root -g crias-agent "$agent_yaml_tmp" /etc/crias/agent.yaml
     rm -f "$agent_yaml_tmp"
 
-    # 7. Configura sudoers (item 7.4 do plano).
-    # SH-005: substituir wildcard `mc-manager.sh *` por lista explícita de
-    # subcomandos permitidos (princípio do menor privilégio). Referência:
-    #   man sudoers — "Using a wildcard in a command specification can allow
-    #   users to run commands they should not be able to."
-    #   https://www.sudo.ws/docs/man/sudoers.man/#Wildcards
-    #
-    # 2D-003: escrever em tmpfile, validar com visudo -cf ANTES de mover
-    # para /etc/sudoers.d/. Evita sudoers quebrado em produção se o cat
-    # for interrompido ou se o conteúdo falhar validação.
+    # 7. Write sudoers with explicit subcommands (least privilege).
+    # Validate with visudo -cf before installing.
     local sudoers_tmp
     sudoers_tmp="$(mktemp "${TMPDIR:-/tmp}/crias_sudoers.XXXXXX")"
     # shellcheck disable=SC2064
@@ -926,8 +866,7 @@ crias-agent ALL=(root) NOPASSWD: /usr/bin/systemctl start $service_name, /usr/bi
 crias-agent ALL=($stack_user) NOPASSWD: $stack_dir/backup-cron.sh, $stack_dir/mc-manager.sh start, $stack_dir/mc-manager.sh stop, $stack_dir/mc-manager.sh restart, $stack_dir/mc-manager.sh status, $stack_dir/mc-manager.sh backup, $stack_dir/mc-manager.sh health, $stack_dir/mc-manager.sh hardware-report
 EOF
 
-    # Valida sintaxe sudoers (item 7.4 do plano — não trustar input cegamente).
-    # 2D-003: validação feita no tmpfile ANTES de instalar em /etc/sudoers.d/.
+    # Validate sudoers before install.
     if command -v visudo >/dev/null 2>&1; then
         if ! visudo -cf "$sudoers_tmp" >/dev/null 2>&1; then
             print_error "Sintaxe sudoers inválida; arquivo NÃO foi instalado em /etc/sudoers.d/."
@@ -940,9 +879,7 @@ EOF
     install -m 0440 -o root -g root "$sudoers_tmp" /etc/sudoers.d/crias-agent
     rm -f "$sudoers_tmp"
 
-    # 8. Instala systemd unit.
-    # 2D-003: escrever em tmpfile e mover atomicamente. systemd-analyze verify
-    # valida antes do daemon-reload, evitando carregar unit quebrada.
+    # 8. Write and verify systemd unit atomically.
     local unit_tmp
     unit_tmp="$(mktemp "${TMPDIR:-/tmp}/crias_unit.XXXXXX")"
     # shellcheck disable=SC2064
@@ -982,7 +919,7 @@ RestrictRealtime=yes
 RestrictNamespaces=yes
 RemoveIPC=yes
 LockPersonality=yes
-# Go binário é AOT-compiled: pode aplicar MemoryDenyWriteExecute com segurança.
+# Go binary is AOT-compiled: MemoryDenyWriteExecute is safe.
 MemoryDenyWriteExecute=yes
 CapabilityBoundingSet=
 AmbientCapabilities=
@@ -993,11 +930,11 @@ UMask=0027
 [Install]
 WantedBy=multi-user.target
 EOF
-    # 2D-026: opcionalmente valida com systemd-analyze verify antes de mover.
+    # Optionally validate with systemd-analyze.
     if command -v systemd-analyze >/dev/null 2>&1; then
         if ! systemd-analyze verify "$unit_tmp" >/dev/null 2>&1; then
             print_warning "systemd-analyze verify reportou problemas no unit file; verifique $unit_tmp"
-            # Não aborta — alguns avisos são benignos (ex.: DependsOn sem target).
+            # Don't abort on benign warnings.
         fi
     fi
     install -m 0644 -o root -g root "$unit_tmp" /etc/systemd/system/crias-agent.service
@@ -1007,7 +944,7 @@ EOF
     systemctl enable crias-agent >/dev/null 2>&1 || true
     systemctl restart crias-agent >/dev/null 2>&1 || print_warning "crias-agent nao iniciou imediatamente; verifique /var/log/crias-agent/"
 
-    # 9. Instruções finais (token NÃO é impresso em stdout por segurança).
+    # 9. Final instructions (token not printed).
     print_success "crias-agent instalado em /opt/crias-agent/crias-agent"
     print_success "Token de autenticacao gerado em /etc/crias/agent.yaml (chmod 0640)"
     print_step "Para visualizar o token (protected file):"
@@ -1022,13 +959,9 @@ EOF
 
 main() {
     print_header
-    # 2D-011: config já foi carregado no top-level (antes dos defaults).
-    # Removida a segunda chamada que sobrescrevia valores do config com
-    # defaults já aplicados.
+    # Config already loaded at top-level.
 
-    # 2D-013: ERR trap incondicional (não só em DRY_RUN). Em modo normal,
-    # falhas de set -e saíam sem diagnóstico de função/linha, dificultando
-    # debug em produção. Trap executa em ambos os modos agora.
+    # ERR trap for diagnostics in both modes.
     trap 'echo "[install.sh] erro (exit=$?) em DRY_RUN=${DRY_RUN:-false}" >&2; echo "Funcao: ${FUNCNAME[1]:-unknown}, Linha: ${BASH_LINENO[0]}" >&2; echo "Arquivo: ${BASH_SOURCE[1]:-unknown}" >&2' ERR
 
     if is_true "$DRY_RUN"; then

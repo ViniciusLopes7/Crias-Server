@@ -108,10 +108,8 @@ compute_minecraft_tuning() {
     if [ "$max_allowed_mb" -ge "$min_allowed_mb" ]; then
         service_memory_mb=$(clamp_value "$service_memory_mb" "$min_allowed_mb" "$max_allowed_mb")
     else
-        # If the computed min allowed exceeds the max allowed, prefer the
-        # highest safe value we can set (max_allowed_mb) as long as it's
-        # greater than Xmx. This ensures systemd memory cap stays above
-        # the JVM Xmx where possible (tests expect this).
+        # If computed min exceeds max, use max as long as it stays above Xmx.
+        # Ensures systemd memory cap stays above JVM Xmx where possible.
         if [ "$max_allowed_mb" -gt "$xmx_mb" ]; then
             service_memory_mb="$max_allowed_mb"
         else

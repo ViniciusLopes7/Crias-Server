@@ -1,9 +1,7 @@
 #!/bin/bash
 # minecraft/install.sh
 #
-# Installer do stack Minecraft usando o framework shared/lib/stack-installer.sh.
-# Mantém compatibilidade com os testes em tests/install-contracts.sh e
-# tests/quick-script-tests.sh (nomes de função e padrões de grep preservados).
+# Minecraft stack installer using shared/lib/stack-installer.sh framework.
 
 set -euo pipefail
 
@@ -24,7 +22,7 @@ source "$ROOT_DIR/shared/lib/downloads.sh"
 source "$ROOT_DIR/shared/lib/stack-installer.sh"
 
 # ---------------------------------------------------------------------------
-# Configuração do stack (variáveis de ambiente com defaults).
+# Stack config (env variables with defaults).
 # ---------------------------------------------------------------------------
 MINECRAFT_USER="${MINECRAFT_USER:-minecraft}"
 MINECRAFT_SERVER_DIR="${MINECRAFT_SERVER_DIR:-/opt/minecraft-server}"
@@ -36,19 +34,16 @@ MINECRAFT_INSTALL_MODPACK="${MINECRAFT_INSTALL_MODPACK:-true}"
 MINECRAFT_ADRENALINE_VERSION="${MINECRAFT_ADRENALINE_VERSION:-}"
 MINECRAFT_INSTALL_QOL_MODS="${MINECRAFT_INSTALL_QOL_MODS:-true}"
 MINECRAFT_MOTD="${MINECRAFT_MOTD:-§6§l🏰 REINO DOS CRIAS 🏰\\n§eAdrenaline + QoL §7| §aA resenha nunca morre...§r}"
-# R1/R2/R3: QoL mods e modpack source configuráveis via config.env.
-# CSV de slugs Modrinth no formato "file_name:slug,file_name:slug,...".
-# Ex.: "chunky:chunky,essential-commands:essential-commands"
+# QoL mods and modpack source config.
+# CSV of Modrinth slugs as "file_name:slug,file_name:slug,...".
+# E.g.: "chunky:chunky,essential-commands:essential-commands"
 MINECRAFT_QOL_MODS="${MINECRAFT_QOL_MODS:-chunky:chunky,essential-commands:essential-commands,universal-graves:universal-graves,tabtps:tabtps,styled-chat:styled-chat,polymer:polymer,placeholder-api:placeholder-api}"
-# Modpack source: "adrenaline" (default) ou "modrinth" (genérico).
+# Modpack source: "adrenaline" (default) or "modrinth" (generic).
 MINECRAFT_MODPACK_SOURCE="${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
 MINECRAFT_MODPACK_SLUG="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
-# Item S3: versão pinada do mrpack-install + checksum.
-# IMPORTANTE: MRPACK_INSTALL_SHA256 é OBRIGATÓRIO para instalação real (não-DRY_RUN).
-# Default vazio força o download_and_verify a falhar com código 3 (checksum ausente),
-# instruindo o usuário a definir o valor correto em config.env.
-# Para obter o SHA256 do release v0.21.0-beta:
-#   curl -fsSL https://github.com/nothub/mrpack-install/releases/download/v0.21.0-beta/mrpack-install-linux | sha256sum
+# Pinned mrpack-install version + checksum.
+# MRPACK_INSTALL_SHA256 is required for non-DRY_RUN installs; empty default
+# forces download_and_verify to fail with code 3 (missing checksum).
 MRPACK_INSTALL_VERSION="${MRPACK_INSTALL_VERSION:-v0.21.0-beta}"
 MRPACK_INSTALL_SHA256="${MRPACK_INSTALL_SHA256:-}"
 FORCE_HARDWARE_TIER="${FORCE_HARDWARE_TIER:-}"
@@ -58,9 +53,8 @@ MINECRAFT_SERVER_DIR_PREEXISTED="${MINECRAFT_SERVER_DIR_PREEXISTED:-false}"
 MINECRAFT_INSTALL_SUCCEEDED="${MINECRAFT_INSTALL_SUCCEEDED:-false}"
 
 # ---------------------------------------------------------------------------
-# Configuração do framework stack-installer.
-# Estas variáveis são lidas por shared/lib/stack-installer.sh (sourced abaixo).
-# shellcheck disable=SC2034  # variáveis usadas por stack-installer.sh
+# stack-installer framework config. Variables read by shared/lib/stack-installer.sh.
+# shellcheck disable=SC2034  # variables used by stack-installer.sh
 # ---------------------------------------------------------------------------
 STACK_NAME="minecraft"
 STACK_USER="$MINECRAFT_USER"
@@ -83,10 +77,10 @@ STACK_SHARED_LIBS=(
 )
 
 # ---------------------------------------------------------------------------
-# Hooks do framework.
+# Framework hooks.
 # ---------------------------------------------------------------------------
 
-# Validação de inputs (item: validate_port_number "MINECRAFT_PORT" "$MINECRAFT_PORT").
+# Validate inputs.
 stack_validate_inputs() {
     validate_minecraft_inputs
     validate_minecraft_eula
@@ -126,7 +120,7 @@ validate_minecraft_inputs() {
 }
 
 validate_minecraft_eula() {
-    # Policy gate: mesmo em DRY_RUN exigimos EULA explicito.
+    # Require explicit EULA acceptance even in DRY_RUN.
     if is_true "${NON_INTERACTIVE:-false}"; then
         if ! is_true "${ACCEPT_EULA:-false}"; then
             print_error "ACCEPT_EULA must be set to true in non-interactive mode to accept Mojang EULA. Aborting."
@@ -169,13 +163,9 @@ stack_install_dependencies() {
         jq
 }
 
-# Item S3: pinar mrpack-install versão + checksum hardcoded.
-# Os releases do mrpack-install disponibilizam:
-#   - mrpack-install_<version>_linux_amd64.tar.gz  (tarball com binário + LICENSE)
-#   - mrpack-install_<version>_linux_amd64.pkg.tar.zst  (pacote Arch)
-#   - .deb / .rpm / .apk  (pacotes distro-specific)
-# Não existe mais asset "mrpack-install-linux" direto. Baixamos o .tar.gz
-# linux amd64 e extraímos o binário.
+# Pinned mrpack-install version + checksum.
+# Releases provide .pkg.tar.zst, .tar.gz, .deb, .rpm, .apk assets.
+# We download the .tar.gz linux amd64 and extract the binary.
 install_mrpack_install() {
     if is_true "$DRY_RUN"; then
         print_step "[DRY_RUN] Pulando instalacao do mrpack-install."
@@ -184,33 +174,30 @@ install_mrpack_install() {
 
     print_step "Instalando mrpack-install (versao pinada: $MRPACK_INSTALL_VERSION)..."
 
-    # Preferência 1: pacote Arch nativo (.pkg.tar.zst) se disponível no repo.
+    # Preference 1: native Arch package (.pkg.tar.zst) from repo.
     if pacman -Si mrpack-install >/dev/null 2>&1; then
         print_step "Pacote mrpack-install encontrado no repositorio. Instalando via pacman..."
         pacman -S --needed --noconfirm mrpack-install
         return 0
     fi
 
-    # Preferência 2: pacote .pkg.tar.zst do release GitHub (mais idiomático em Arch).
+    # Preference 2: .pkg.tar.zst from GitHub release (idiomatic on Arch).
     local arch_pkg_url="https://github.com/nothub/mrpack-install/releases/download/${MRPACK_INSTALL_VERSION}/mrpack-install_${MRPACK_INSTALL_VERSION#v}_linux_amd64.pkg.tar.zst"
 
-    # Fallback: tarball linux amd64 com binário solto dentro.
+    # Fallback: linux amd64 tarball with loose binary inside.
     local tarball_url="https://github.com/nothub/mrpack-install/releases/download/${MRPACK_INSTALL_VERSION}/mrpack-install_${MRPACK_INSTALL_VERSION#v}_linux_amd64.tar.gz"
 
-    # SH-001: usar mktemp -d para paths privados e não-reutilizáveis, evitando
-    # symlink attacks em /tmp (CWE-377). O trap RETURN garante limpeza mesmo
-    # em caso de falha (set -e) ou return prematuro.
+    # Use mktemp -d for private temp dir; trap RETURN ensures cleanup.
     local mrpack_tmp_dir
     mrpack_tmp_dir="$(mktemp -d -t crias-mrpack-XXXXXX)"
-    # shellcheck disable=SC2064  # queremos expansão imediata do path
+    # shellcheck disable=SC2064
     trap 'rm -rf -- "$mrpack_tmp_dir"' RETURN
 
     local arch_pkg_local="${mrpack_tmp_dir}/mrpack-install.pkg"
     local tarball_local="${mrpack_tmp_dir}/mrpack-install-bin.tgz"
 
-    # Tenta .pkg.tar.zst primeiro (instalação limpa via pacman -U).
-    # Nota: stderr suprimido apenas neste curl de probe (não é comando tar).
-    # O pacman valida integridade do .pkg.tar.zst (assina o controle do upstream).
+    # Try .pkg.tar.zst first (clean install via pacman -U).
+    # pacman validates .pkg.tar.zst integrity.
     if curl -fsSL --connect-timeout 10 --max-time 60 -o "$arch_pkg_local.zst" "$arch_pkg_url" 2>/dev/null; then
         if pacman -U --noconfirm "$arch_pkg_local.zst"; then
             print_success "mrpack-install instalado via pacman -U (.pkg.tar.zst)"
@@ -220,7 +207,7 @@ install_mrpack_install() {
         rm -f "$arch_pkg_local.zst"
     fi
 
-    # Fallback: baixa tarball linux amd64, valida SHA256, extrai binário.
+    # Fallback: download linux amd64 tarball, verify SHA256, extract binary.
     if ! download_and_verify "$tarball_url" "$tarball_local" MRPACK_INSTALL_SHA256; then
         print_error "Falha ao baixar/validar mrpack-install $MRPACK_INSTALL_VERSION"
         print_error "URL tentada: $tarball_url"
@@ -230,7 +217,7 @@ install_mrpack_install() {
         exit 1
     fi
 
-    # Extrai apenas o binário 'mrpack-install' do tarball dentro do mesmo tmpdir.
+    # Extract only the 'mrpack-install' binary from the tarball.
     local tmp_extract_dir="${mrpack_tmp_dir}/extract"
     mkdir -p "$tmp_extract_dir"
     if ! tar -xzf "$tarball_local" -C "$tmp_extract_dir"; then
@@ -261,7 +248,7 @@ stack_download_and_install() {
 
     cd "$MINECRAFT_SERVER_DIR" || exit 1
 
-    # R3: modpack source configurável. Default: adrenaline.
+    # Modpack source selectable via config.
     case "$MINECRAFT_MODPACK_SOURCE" in
         adrenaline)
             if [ -n "$MINECRAFT_ADRENALINE_VERSION" ]; then
@@ -271,7 +258,7 @@ stack_download_and_install() {
             fi
             ;;
         modrinth)
-            # Modpack genérico via slug Modrinth.
+            # Generic modpack via Modrinth slug.
             local slug="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
             timeout 300 mrpack-install "$slug" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
             ;;
@@ -287,12 +274,12 @@ stack_download_and_install() {
     echo "eula=true" > "$MINECRAFT_SERVER_DIR/eula.txt"
 }
 
-# R2: QoL mods via CSV em config.env (MINECRAFT_QOL_MODS).
+# QoL mods via CSV in config.env (MINECRAFT_QOL_MODS).
 stack_install_qol_mods() {
     install_minecraft_qol_mods
 }
 
-# Mantém nome legado para compat com tests/quick-script-tests.sh.
+# Legacy name kept for tests/quick-script-tests.sh compatibility.
 install_minecraft_qol_mods() {
     if ! is_true "$MINECRAFT_INSTALL_QOL_MODS"; then
         return 0
@@ -317,24 +304,20 @@ install_minecraft_qol_mods() {
     print_step "Instalando mods QoL..."
     mkdir -p "$MINECRAFT_SERVER_DIR/mods"
 
-    # Parser do CSV "file_name:slug,file_name:slug,...".
-    # set -f previne glob expansion em entries (improvável em slugs Modrinth, mas defensivo).
+    # Parse CSV "file_name:slug,file_name:slug,...".
+    # set -f prevents glob expansion (defensive).
     local entry file_name slug
     local IFS=','
     set -f
     for entry in $MINECRAFT_QOL_MODS; do
         file_name="${entry%%:*}"
         slug="${entry#*:}"
-        # Fallback: se não houver ":", file_name == slug.
+        # Fallback: if no ":", file_name == slug.
         if [ -z "$slug" ] || [ "$slug" = "$entry" ]; then
             slug="$file_name"
         fi
 
-        # SH-006: validar file_name e slug contra path traversal (CWE-22).
-        # Sem esta checagem, um config.env malicioso com
-        # `MINECRAFT_QOL_MODS=../../../etc/cron.d/evil:evil` permitiria
-        # gravar arquivo .jar fora de $MINECRAFT_SERVER_DIR/mods.
-        # Rejeitamos: "..", "/", null bytes (impossíveis via read mas defensivo).
+        # Validate file_name and slug against path traversal.
         local _bad_part=""
         if [[ "$file_name" == *..* ]] || [[ "$file_name" == */* ]] || [[ "$file_name" == *$'\0'* ]]; then
             _bad_part="file_name='$file_name'"
@@ -351,18 +334,18 @@ install_minecraft_qol_mods() {
     set +f
 }
 
-# Mantém file_name_norm="${file_name//-/_}" literal para satisfazer teste.
+# Legacy name kept for tests/quick-script-tests.sh compatibility.
 download_qol_mod() {
     local file_name="$1"
     local slug="$2"
     local mod_sha_var
-    # Normaliza mod name: hifens -> underscores para derivar env var válida.
+    # Normalize mod name: hyphens -> underscores to derive valid env var.
     local file_name_norm
     file_name_norm="${file_name//-/_}"
     mod_sha_var="MOD_${file_name_norm^^}_SHA256"
 
     if ! download_modrinth_mod "$slug" "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" "$MINECRAFT_SERVER_DIR/mods" "$file_name" "$mod_sha_var"; then
-        return 0  # warn já foi emitido dentro do helper
+        return 0  # warning already emitted inside helper
     fi
 }
 
@@ -372,7 +355,7 @@ stack_configure_runtime() {
     detect_hardware_profile "$MINECRAFT_SERVER_DIR" "$FORCE_HARDWARE_TIER"
     compute_minecraft_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER"
 
-    # STACK_SERVICE_MEMORY_MAX_MB é lido por install_stack_service (stack-installer.sh).
+    # STACK_SERVICE_MEMORY_MAX_MB read by install_stack_service (stack-installer.sh).
     # shellcheck disable=SC2034
     STACK_SERVICE_MEMORY_MAX_MB="$MC_SERVICE_MEMORY_MAX_MB"
 
@@ -434,7 +417,7 @@ EOF
     fi
 }
 
-# Mantém nome legado para compat com tests/quick-script-tests.sh.
+# Legacy name kept for tests/quick-script-tests.sh compatibility.
 install_minecraft_logrotate_config() {
     stack_install_logrotate
 }
@@ -468,7 +451,7 @@ stack_create_extra_dirs() {
 }
 
 stack_deploy_extra_assets() {
-    # Deploy server icon if available
+    # Deploy server icon if available.
     if [ -f "$ROOT_DIR/assets/images/branding/server-icon.png" ]; then
         run_or_dry_run "Copiando server icon para $MINECRAFT_SERVER_DIR/server-icon.png" cp "$ROOT_DIR/assets/images/branding/server-icon.png" "$MINECRAFT_SERVER_DIR/server-icon.png"
         if ! dry_run_enabled; then
@@ -510,13 +493,13 @@ $MINECRAFT_SERVER_DIR/eula.txt
 EOF
 }
 
-# Alias para preservar nome usado pelo install.sh raiz.
+# Alias preserving name used by root install.sh.
 run_minecraft_install() {
     run_stack_install
 }
 
-# Aliases para compat retroativa com testes que chamam funções legadas
-# (tests/arch-dry-install.sh chama deploy_minecraft_scripts diretamente).
+# Aliases for backward compat with legacy test functions
+# (tests/arch-dry-install.sh calls deploy_minecraft_scripts directly).
 deploy_minecraft_scripts() {
     deploy_stack_scripts
 }
