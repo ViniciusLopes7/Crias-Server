@@ -130,6 +130,19 @@ if [ "$SOURCE_MODE" = "clone" ]; then
 
     log "Clonando repositório do GitHub..."
     CRIAS_REPO_REF="${CRIAS_REPO_REF:-main}"
+    # 2A-019: valida CRIAS_REPO_REF contra whitelist (tag vX.Y.Z ou commit SHA).
+    # Impede injeção via kernel cmdline ou ISO maliciosa apontando para branch
+    # arbitrária do mesmo repositório.
+    case "$CRIAS_REPO_REF" in
+        main) ;;
+        v[0-9]*.[0-9]*.[0-9]*) ;;
+        [a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9]) ;;
+        *)
+            err "CRIAS_REPO_REF inválido: $CRIAS_REPO_REF"
+            err "Valores aceitos: main | tag vX.Y.Z | commit SHA (40 hex)"
+            exit 1
+            ;;
+    esac
     if ! git clone --depth 1 --branch "$CRIAS_REPO_REF" https://github.com/ViniciusLopes7/Crias-Server; then
         err "Falha no git clone. Verifique rede e tente manualmente:"
         err "  git clone https://github.com/ViniciusLopes7/Crias-Server"

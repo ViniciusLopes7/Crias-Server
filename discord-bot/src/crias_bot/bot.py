@@ -7,7 +7,7 @@ Comandos:
   /mc status      Todos   Online/offline, players, RAM, tier
   /mc players     Todos   Lista quem está online
   /mc say <msg>   Mod+    Manda mensagem no chat do jogo via RCON
-  /mc logs [n]    Admin   Últimas N linhas do journalctl (via StreamConsole tail)
+  /mc logs [n]    Admin   (planejado — ver ROADMAP.md) Últimas N linhas do journalctl
   /mc console     Admin   Ativa/desativa stream de console no canal #console
   /mc health      Admin   Health check passivo
 
@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import re
 import time
 
 import discord
@@ -47,6 +49,47 @@ from .embeds import (
 logger = logging.getLogger(__name__)
 
 
+# BOT-001: sanitização de input para RCON.
+# Rejeita newlines, null bytes, caracteres de controle, e limita a 200 chars.
+_RCON_MSG_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def _sanitize_rcon_message(msg: str) -> str | None:
+    """Sanitiza mensagem para RCON. Retorna None se inválida."""
+    if not msg or not msg.strip():
+        return None
+    if "\n" in msg or "\r" in msg or "\0" in msg:
+        return None
+    if len(msg) > 200:
+        return None
+    sanitized = _RCON_MSG_RE.sub("", msg)
+    if not sanitized.strip():
+        return None
+    return sanitized
+
+
+# BOT-005: rate limiting simples por user (sliding window).
+class _RateLimiter:
+    """Rate limiter sliding window por user_id."""
+
+    def __init__(self, max_calls: int = 5, period: float = 10.0) -> None:
+        self.max_calls = max_calls
+        self.period = period
+        self._calls: dict[int, list[float]] = {}
+
+    def is_allowed(self, user_id: int) -> bool:
+        now = time.monotonic()
+        history = self._calls.get(user_id, [])
+        # Mantém apenas chamadas dentro da janela
+        history = [t for t in history if now - t < self.period]
+        if len(history) >= self.max_calls:
+            self._calls[user_id] = history
+            return False
+        history.append(now)
+        self._calls[user_id] = history
+        return True
+
+
 class CriasBot(commands.Bot):
     """Bot Discord para o Crias-Server."""
 
@@ -67,19 +110,29 @@ class CriasBot(commands.Bot):
         # Lock para tornar /mc console toggle atômico (evita task zombie se
         # dois admins clicarem simultaneamente).
         self._console_lock: asyncio.Lock = asyncio.Lock()
+        # BOT-005: rate limiter para slash commands
+        self._rate_limiter = _RateLimiter(max_calls=5, period=10.0)
 
     async def setup_hook(self) -> None:
         """Sincroniza slash commands no guild específico (se definido)."""
         await self.add_cog(MinecraftCog(self))
 
-        if self.config.guild_id:
-            guild = discord.Object(id=self.config.guild_id)
-            self.tree.copy_global_to(guild=guild)
-            synced = await self.tree.sync(guild=guild)
-            logger.info("Sincronizados %d slash commands no guild %d", len(synced), guild.id)
+        # BOT-006: tree.sync() apenas quando explicitamente solicitado
+        # (evita rate limit do Discord a cada startup)
+        force_sync = os.environ.get("FORCE_SYNC_COMMANDS", "false").strip().lower() == "true"
+        if force_sync:
+            if self.config.guild_id:
+                guild = discord.Object(id=self.config.guild_id)
+                self.tree.copy_global_to(guild=guild)
+                synced = await self.tree.sync(guild=guild)
+                logger.info("Sincronizados %d slash commands no guild %d", len(synced), guild.id)
+            else:
+                synced = await self.tree.sync()
+                logger.info("Sincronizados %d slash commands globalmente", len(synced))
         else:
-            synced = await self.tree.sync()
-            logger.info("Sincronizados %d slash commands globalmente", len(synced))
+            logger.info(
+                "Sync de comandos pulado (set FORCE_SYNC_COMMANDS=true para forçar)"
+            )
 
         # Inicia background task de eventos.
         self.event_bridge.start()
@@ -278,15 +331,34 @@ class MinecraftCog(commands.Cog):
             await self._send_agent_error(interaction, e)
 
     @group.command(name="say", description="Manda mensagem no chat do jogo via RCON")
-    @app_commands.describe(message="Mensagem a ser enviada")
+    @app_commands.describe(message="Mensagem a ser enviada (máx 200 caracteres)")
     async def say(self, interaction: discord.Interaction, message: str) -> None:
         if not await self._check_moderator(interaction):
             return
+        # BOT-005: rate limiting
+        if not self.bot._rate_limiter.is_allowed(interaction.user.id):
+            await interaction.response.send_message(
+                embed=warning("Muitas requisições", "Aguarde alguns segundos antes de tentar novamente."),
+                ephemeral=True,
+            )
+            return
+        # BOT-001: sanitiza input antes de enviar ao RCON
+        sanitized = _sanitize_rcon_message(message)
+        if sanitized is None:
+            await interaction.response.send_message(
+                embed=error(
+                    "Mensagem inválida",
+                    "A mensagem não pode conter newlines, caracteres de controle, "
+                    "ou exceder 200 caracteres.",
+                ),
+                ephemeral=True,
+            )
+            return
         await interaction.response.defer(thinking=True, ephemeral=True)
         try:
-            result = await self.bot.agent.send_rcon_command(f"say {message}")
+            result = await self.bot.agent.send_rcon_command(f"say {sanitized}")
             if result.get("ok"):
-                await interaction.followup.send(embed=say_confirmation(message), ephemeral=True)
+                await interaction.followup.send(embed=say_confirmation(sanitized), ephemeral=True)
             else:
                 err_msg = result.get("error", "erro desconhecido")
                 await interaction.followup.send(

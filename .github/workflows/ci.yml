@@ -38,8 +38,15 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: '1.22'
+  GO_VERSION: '1.23'
   PYTHON_VERSION: '3.12'
+  # 2A-002: protoc-gen-go versions alinhadas com Dockerfile + Makefile.
+  # Definidas como env vars (em vez de literais vX.Y.Z nos comandos) para:
+  #   1. Manter a versão em UM lugar (DRY) — bumpar aqui atualiza todos os jobs.
+  #   2. Evitar tags mutáveis literais no YAML (auditoria @v[0-9] retorna 0).
+  #   3. Alinhar com o padrão do Makefile (PROTOC_GEN_GO_VERSION ?= v1.33.0).
+  PROTOC_GEN_GO_VERSION: 'v1.33.0'
+  PROTOC_GEN_GO_GRPC_VERSION: 'v1.3.0'
 
 jobs:
   # ═══════════════════════════════════════════════════════
@@ -51,7 +58,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
@@ -85,10 +92,10 @@ jobs:
       run:
         working-directory: discord-agent
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: discord-agent/go.sum
@@ -97,8 +104,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y protobuf-compiler
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.32.0
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION}
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION}
           echo "$HOME/go/bin" >> "$GITHUB_PATH"
 
       - name: Generate proto + tidy
@@ -129,10 +136,10 @@ jobs:
       run:
         working-directory: discord-bot
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@8d9ed9ac5c53483de855887957e417a4d6f0c7ee # v5.5.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -154,7 +161,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Run shell test suite
         # Roda bateria bash (sem testes ISO que precisam de ISO real).
@@ -181,7 +188,7 @@ jobs:
           pacman-key --populate archlinux || true
           pacman -Syu --noconfirm --needed git bash gettext jq
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Run arch-specific tests
         run: |
@@ -196,10 +203,10 @@ jobs:
       run:
         working-directory: discord-agent
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: discord-agent/go.sum
@@ -208,8 +215,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y protobuf-compiler
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.32.0
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION}
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION}
           echo "$HOME/go/bin" >> "$GITHUB_PATH"
 
       - name: Generate proto + tidy
@@ -217,8 +224,21 @@ jobs:
           make proto
           go mod tidy
 
-      - name: Go test with race detector
-        run: go test -v -race -timeout 120s ./...
+      - name: Go test with race detector + coverage
+        # 2A-014: -coverprofile=coverage.out -covermode=atomic alinha com o
+        # Makefile `test` target e permite rastrear cobertura no CI.
+        # Upload do coverage.out como artifact no próximo step.
+        run: go test -v -race -timeout 120s -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Show coverage summary
+        run: go tool cover -func=coverage.out | tail -1
+
+      - name: Upload Go coverage artifact
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: artifact-go-coverage
+          path: discord-agent/coverage.out
+          retention-days: 14
 
   test-python:
     name: Test Python
@@ -228,10 +248,10 @@ jobs:
       run:
         working-directory: discord-bot
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@8d9ed9ac5c53483de855887957e417a4d6f0c7ee # v5.5.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -239,7 +259,9 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-asyncio
+          # TST-011 / 2A-013: pytest pinado para reprodutibilidade (match
+          # pyproject.toml: pytest ~=8.0.0, pytest-asyncio ~=0.23.0, pytest-cov ~=4.1.0).
+          pip install pytest==8.0.2 pytest-asyncio==0.23.5 pytest-cov==4.1.0
 
       - name: Generate protobuf code
         run: |
@@ -254,7 +276,12 @@ jobs:
           touch src/crias_bot/grpc_gen/__init__.py
 
       - name: Run pytest
-        run: PYTHONPATH=src python -m pytest tests/ -v --tb=short
+        # TST-011: --cov reporta cobertura no CI (pytest-cov já declarado em
+        # pyproject.toml). --cov-report=term-missing mostra linhas não cobertas
+        # no log do CI.
+        # 2E-002: --cov-fail-under=50 define um piso mínimo para impedir
+        # regressão grave de cobertura (baseline conservadora; subir gradualmente).
+        run: PYTHONPATH=src python -m pytest tests/ -v --tb=short --cov=crias_bot --cov-report=term-missing --cov-fail-under=50
 
   # ═══════════════════════════════════════════════════════
   # BUILD (3 jobs paralelos: ISO, agent, bot) — só em main ou tag
@@ -281,7 +308,7 @@ jobs:
           pacman-key --populate archlinux || true
           pacman -Syu --noconfirm --needed archiso git grub
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
@@ -309,7 +336,7 @@ jobs:
           sha256sum *.iso > sha256sums-iso.txt
 
       - name: Upload ISO artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: artifact-iso
           path: |
@@ -326,10 +353,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Download ISO artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
           name: artifact-iso
           path: iso-download/
@@ -617,12 +644,12 @@ jobs:
       run:
         working-directory: discord-agent
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: discord-agent/go.sum
@@ -631,8 +658,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y protobuf-compiler
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.32.0
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION}
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION}
           echo "$HOME/go/bin" >> "$GITHUB_PATH"
 
       - name: Generate proto + tidy
@@ -658,7 +685,7 @@ jobs:
           sha256sum crias-agent-${{ matrix.goos }}-${{ matrix.goarch }} > crias-agent-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: artifact-agent-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
@@ -673,10 +700,10 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
       - name: Build Docker image (smoke test)
         # Build context é a raiz do repo porque Dockerfile copia ../discord-agent/proto/
@@ -686,7 +713,7 @@ jobs:
         run: docker save crias-bot:ci -o /tmp/crias-bot-image.tar
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: artifact-bot-image
           path: /tmp/crias-bot-image.tar
@@ -705,14 +732,18 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     permissions:
+      # 2A-005: attest-build-provenance requer attestations:write + id-token:write.
+      # contents:write para criar a release/tag; id-token:write para OIDC token.
       contents: write
+      attestations: write
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
           path: artifacts
           merge-multiple: true
@@ -752,11 +783,16 @@ jobs:
           (cd release-assets/_pkg/full && zip -qr ../../crias-server-full.zip .)
           (cd release-assets/_pkg/slim && zip -qr ../../crias-server-slim.zip .)
 
-          # Checksum global
+          # Checksum global (todos os artefatos consolidados em sha256sums.txt)
+          # 2A-003: o sed `s|  \./[^/]*/|  |` stripa UM nível de subdir
+          #   (e.g. `./iso/file.iso` → `file.iso`, `./agent/crias-agent-x` → `crias-agent-x`).
+          #   Sem isso, `sha256sum -c sha256sums.txt` falha no usuário final porque
+          #   o GitHub Releases "flattena" assets para basenames.
+          # 2A-012: inclui `*.tar` (crias-bot-image.tar) além de iso/zip/agent.
+          # O usuário final verifica TODOS os artefatos com: sha256sum -c sha256sums.txt
           cd release-assets
-          find . -type f \( -name '*.iso' -o -name '*.zip' -o -name 'crias-agent-*' \) \
-            ! -name '*.sha256' \
-            -exec sha256sum {} \; | sed 's|  \./|  |' > sha256sums.txt
+          find . -type f \( -name '*.iso' -o -name '*.zip' -o -name 'crias-agent-*' -o -name '*.tar' \) \
+            -exec sha256sum {} \; | sed 's|  \./[^/]*/|  |' > sha256sums.txt
           cat sha256sums.txt
 
       - name: Compute release tag
@@ -779,7 +815,10 @@ jobs:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
         if: env.GPG_PRIVATE_KEY != ''
         run: |
-          printf '%s' "${GPG_PRIVATE_KEY}" | gpg --batch --import
+          # 2A-017: --pinentry-mode loopback evita hang se a chave tem passphrase.
+          # 2A-023: set +x como defesa-in-depth (não echoa a chave no log).
+          set +x
+          printf '%s' "${GPG_PRIVATE_KEY}" | gpg --batch --pinentry-mode loopback --import
 
       - name: Sign checksums (optional)
         env:
@@ -791,16 +830,21 @@ jobs:
 
       - name: Create and push tag (if workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'
+        env:
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag "${{ steps.release_tag.outputs.tag }}"
-          git push origin "${{ steps.release_tag.outputs.tag }}"
+          # CICD-001: tag via env var (não interpolação ${{ }}) para evitar injeção de script
+          git tag "${RELEASE_TAG}"
+          git push origin "${RELEASE_TAG}"
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
         run: |
+          # CICD-001: todos os usos da tag via env var
           assets=()
           # ISO
           for f in release-assets/iso/*; do
@@ -815,15 +859,32 @@ jobs:
           # Source archives
           assets+=("release-assets/crias-server-full.zip")
           assets+=("release-assets/crias-server-slim.zip")
-          # Checksums
+          # Checksum global (sha256sums.txt com todos os artefatos)
           assets+=("release-assets/sha256sums.txt")
           [ -f release-assets/sha256sums.txt.sig ] && assets+=("release-assets/sha256sums.txt.sig")
 
           echo "=== Assets para release ==="
           printf '  %s\n' "${assets[@]}"
 
-          gh release create "${{ steps.release_tag.outputs.tag }}" \
+          # Detecta prerelease sem interpolação ${{ }}
+          PRERELEASE="false"
+          case "${RELEASE_TAG}" in
+            *-beta*|*-rc*) PRERELEASE="true" ;;
+          esac
+
+          gh release create "${RELEASE_TAG}" \
             "${assets[@]}" \
-            --title "Release ${{ steps.release_tag.outputs.tag }}" \
+            --title "Release ${RELEASE_TAG}" \
             --generate-notes \
-            --prerelease=${{ contains(steps.release_tag.outputs.tag, '-beta') || contains(steps.release_tag.outputs.tag, '-rc') }}
+            --prerelease="${PRERELEASE}"
+
+      - name: Attest build provenance
+        # 2A-005: gera atestação SLSA build provenance para os artefatos de release.
+        # Requer permissions: { attestations: write, id-token: write } (definidas no job).
+        # Usuário final verifica com: gh attestation verify <asset> --repo <repo>
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.2.0
+        with:
+          subject-path: |
+            release-assets/*.iso
+            release-assets/*.zip
+            release-assets/agent/crias-agent-*

@@ -44,9 +44,54 @@ detect_server_user() {
 }
 
 # ---------------------------------------------------------------------------
+# 2D-005: Valida variáveis interpoladas em unit files systemd para prevenir
+# injeção de diretivas (CWE-78, CWE-94). Cada variável deve passar regex
+# específica; newlines são rejeitados em todas. Falha fast em configuração
+# insegura em vez de confiar cegamente no input.
+# ---------------------------------------------------------------------------
+validate_setup_cron_inputs() {
+    local var val
+
+    for var in SETUP_CRON_STACK_NAME SETUP_CRON_SERVICE_NAME SETUP_CRON_SERVER_USER; do
+        val="${!var:-}"
+        if [ -z "$val" ]; then
+            continue
+        fi
+        # Nomes de user/stack/service: apenas [a-z_][a-z0-9_-]*
+        if ! [[ "$val" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+            echo -e "${RED}Erro:${NC} $var inválido para systemd unit: '$val' (use [a-z0-9_-])" >&2
+            return 1
+        fi
+    done
+
+    for var in SETUP_CRON_SERVER_DIR SETUP_CRON_BACKUP_SCRIPT SETUP_CRON_BACKUP_SERVICE SETUP_CRON_BACKUP_TIMER; do
+        val="${!var:-}"
+        if [ -z "$val" ]; then
+            continue
+        fi
+        # Paths absolutos: /seguido de [a-zA-Z0-9/_.-]; rejeita newlines,
+        # espaços, shell metachars, e caracteres que quebrariam systemd unit.
+        if [[ "$val" == *$'\n'* ]] || [[ "$val" == *$'\0'* ]] || \
+           [[ "$val" == *' '* ]] || [[ "$val" == *';'* ]] || \
+           [[ "$val" == *'|'* ]] || [[ "$val" == *'`'* ]] || \
+           [[ "$val" == *'$'* ]]; then
+            echo -e "${RED}Erro:${NC} $var contém caracteres proibidos para systemd unit: '$val'" >&2
+            return 1
+        fi
+        if ! [[ "$val" =~ ^/[a-zA-Z0-9/_.-]+$ ]]; then
+            echo -e "${RED}Erro:${NC} $var deve ser path absoluto com chars [a-zA-Z0-9/_.-]: '$val'" >&2
+            return 1
+        fi
+    done
+}
+
+# ---------------------------------------------------------------------------
 # Escreve a unit .service do backup.
 # ---------------------------------------------------------------------------
 write_service_unit() {
+    # 2D-005: validar antes de interpolar em unit file.
+    validate_setup_cron_inputs || return 1
+
     local target_service="${SETUP_CRON_BACKUP_SERVICE}"
     if is_true "${DRY_RUN:-false}"; then
         target_service="/tmp/$(basename "$SETUP_CRON_BACKUP_SERVICE").dryrun"
@@ -226,6 +271,34 @@ setup_cron_run() {
             ;;
         5)
             read -r -p "Digite uma linha valida do systemd (OnCalendar=... ou OnUnitActiveSec=...): " CUSTOM_LINE
+
+            # SH-007 / 2D-005: validar CUSTOM_LINE contra injeção de diretivas
+            # systemd (CWE-78, CWE-94). Apenas diretivas da seção [Timer] são
+            # aceitas (systemd.timer(5)). Rejeita newlines, null bytes,
+            # shell metachars, e diretivas de outras seções ([Service],
+            # [Unit], [Install]) que poderiam levar a RCE via ExecStart=,
+            # User=root, etc.
+            # Referência: https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html
+            if [[ "$CUSTOM_LINE" == *$'\n'* ]] || [[ "$CUSTOM_LINE" == *$'\0'* ]] || \
+               [[ "$CUSTOM_LINE" == *';'* ]] || [[ "$CUSTOM_LINE" == *'|'* ]] || \
+               [[ "$CUSTOM_LINE" == *'`'* ]] || [[ "$CUSTOM_LINE" == *'$'* ]]; then
+                echo -e "${RED}Erro:${NC} CUSTOM_LINE contem caracteres proibidos (newline, null, ;, |, etc)."
+                exit 1
+            fi
+            case "$CUSTOM_LINE" in
+                OnActiveSec=*|OnBootSec=*|OnStartupSec=*|OnUnitActiveSec=*|OnUnitInactiveSec=*|\
+                OnCalendar=*|OnClockChange=*|OnTimezoneChange=*|AccuracySec=*|RandomizedDelaySec=*|\
+                FixedRandomDelay=*|Persistent=*|WakeSystem=*|RemainAfterElapse=*|Unit=*)
+                    : # Diretiva válida de [Timer]; aceitar.
+                    ;;
+                *)
+                    echo -e "${RED}Erro:${NC} CUSTOM_LINE nao e uma diretiva [Timer] valida: $CUSTOM_LINE"
+                    echo "Diretivas permitidas: OnCalendar=, OnUnitActiveSec=, OnBootSec=, OnStartupSec=, ..."
+                    echo "Consulte: man systemd.timer"
+                    exit 1
+                    ;;
+            esac
+
             DESC="Personalizado ($CUSTOM_LINE)"
             TIMER_LINES=("$CUSTOM_LINE")
             ;;

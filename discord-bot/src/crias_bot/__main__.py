@@ -35,6 +35,8 @@ def main() -> None:
         host=cfg.agent_host,
         token=cfg.agent_token,
         max_reconnect_delay=cfg.reconnect_max_delay,
+        tls_ca_path=cfg.agent_tls_ca_path,
+        use_tls=cfg.agent_use_tls,
     )
 
     bot = CriasBot(cfg, agent)

@@ -102,6 +102,6 @@ sudo journalctl -u terraria-backup.service -n 50
 ## Veja também
 
 - [../tutorial.md](../tutorial.md) — Tutorial de operação passo-a-passo
-- [../tailscale.md](../tailscale.md) — Conexão via Tailscale
+- [../Tailscale.md](../Tailscale.md) — Conexão via Tailscale
 - [../restore.md](../restore.md) — Restore de backups
 - [../security.md](../security.md) — Firewall, logs, hardening

@@ -5,19 +5,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-echo "[arch-smoke] Verificando sintaxe bash..."
-mapfile -t scripts < <(find . -type f -name "*.sh" -not -path "./.git/*" | sort)
-
-if [ "${#scripts[@]}" -eq 0 ]; then
-    echo "Nenhum script .sh encontrado para validar." >&2
-    exit 1
-fi
-
-for script in "${scripts[@]}"; do
-    bash -n "$script"
-done
-
 echo "[arch-smoke] Verificando calculos de tuning por tier..."
+
+# TST-002: a checagem de sintaxe (`bash -n`) de TODOS os .sh do repositório
+# é responsabilidade exclusiva de `tests/run-all.sh` (canonical test runner).
+# Executá-la aqui também era redundante (3x em CI). Para validar sintaxe,
+# rode: `bash tests/run-all.sh`.
 # shellcheck source=/dev/null
 source shared/lib/common.sh
 # shellcheck source=/dev/null

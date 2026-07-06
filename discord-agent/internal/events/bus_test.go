@@ -111,6 +111,10 @@ func TestBus_SlowSubscriberDoesNotBlock(t *testing.T) {
 	ch, cancel := bus.Subscribe(nil)
 	defer cancel()
 
+	// 2E-009: além de verificar que o buffer é capped em 64, adicionamos
+	// uma assertion de timing — se Publish() bloquear (regressão), o
+	// teste falha em vez de passar silenciosamente.
+	start := time.Now()
 	// Publicar 100 eventos — buffer é 64, então ~36 serão descartados.
 	for i := 0; i < 100; i++ {
 		bus.Publish(Event{
@@ -118,6 +122,13 @@ func TestBus_SlowSubscriberDoesNotBlock(t *testing.T) {
 			ServiceName: "minecraft",
 			Metadata:    map[string]string{"i": "x"},
 		})
+	}
+	elapsed := time.Since(start)
+	// 100 Publish() com subscriber lento deve levar < 100ms (cada chamada
+	// é O(1) — select-default em canal buffered). Se ultrapassar, é
+	// provável que Publish está bloqueando (regressão de non-blocking).
+	if elapsed > 100*time.Millisecond {
+		t.Errorf("Publish bloqueou: 100 calls levaram %v (esperado < 100ms)", elapsed)
 	}
 
 	// Deve ter pelo menos 64 no buffer.

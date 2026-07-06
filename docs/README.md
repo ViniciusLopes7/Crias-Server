@@ -15,7 +15,7 @@
 | Documento | Descrição |
 |-----------|-----------|
 | [tutorial.md](tutorial.md) | Fluxo único: instalar → operar → troubleshoot |
-| [tailscale.md](tailscale.md) | Conexão via Tailscale (VPN + Funnel para crias-agent) |
+| [Tailscale.md](Tailscale.md) | Conexão via Tailscale (VPN + Funnel para crias-agent) |
 | [hardware-tuning.md](hardware-tuning.md) | Tuning por hardware (tiers LOW/MID/HIGH, thresholds, recalibração) |
 | [restore.md](restore.md) | Restore de backups (passo-a-passo Minecraft + Terraria) |
 | [security.md](security.md) | Firewall, logs, health checks, hardening systemd, cleanup do stack oposto |
@@ -44,7 +44,7 @@
 
 ## CI/CD
 
-Workflow único: [../.github/workflows/ci.yml](../.github/workflows/ci.yml) — 11 jobs em paralelo + release consolidada.
+Workflow único: [../.github/workflows/ci.yml](../.github/workflows/ci.yml) — 12 jobs em paralelo + release consolidada.
 
 ### Lint + Test (paralelos, rodam em todo push/PR)
 
@@ -56,7 +56,7 @@ Workflow único: [../.github/workflows/ci.yml](../.github/workflows/ci.yml) — 
 | `test-shell` | Quick tests + contracts + static-audit + stack-installer |
 | `test-shell-arch` | `arch-smoke` + `arch-dry-install` (Arch container) |
 | `test-go` | `go test -race` (após `go mod tidy` + proto) |
-| `test-python` | `pytest` em Python 3.11 e 3.12 (matrix) |
+| `test-python` | `pytest` em Python 3.12 |
 
 ### Build (paralelos, só em push to main ou tag `v*`)
 
@@ -75,7 +75,7 @@ Workflow único: [../.github/workflows/ci.yml](../.github/workflows/ci.yml) — 
 ## Testes
 
 ```bash
-# Bateria completa (22 testes bash + 36 testes Python)
+# Bateria completa (22 testes bash + 124 testes Python + 55 testes Go)
 bash tests/run-all.sh
 
 # Apenas bash rápido

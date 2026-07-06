@@ -17,7 +17,11 @@ source "$SCRIPT_DIR/shared/lib/config-parser.sh"
 # não está disponível quando install.sh chama download_and_verify diretamente.
 source "$SCRIPT_DIR/shared/lib/downloads.sh"
 
-# Apply config with proper precedence: defaults < config.env < environment variables
+# 2D-011: apply_config_with_env_precedence é chamado UMA vez no top-level
+# (aqui, antes dos defaults) para que os defaults `${VAR:-...}` nas linhas
+# abaixo não capturem valores falsos. A chamada duplicada que existia dentro
+# de main() foi removida — ela re-capturava os defaults como "env overrides"
+# e sobrescrevia valores legítimos do config.env.
 apply_config_with_env_precedence "$CONFIG_FILE"
 
 # Defaults (precedencia: defaults < config.env < variaveis de ambiente).
@@ -222,6 +226,9 @@ install_tailscale_if_enabled() {
             # Adiciona repo [tailscale] ao pacman.conf e instala.
             local tmpdir
             tmpdir="$(mktemp -d)"
+            # 2D-008: cleanup garantido do tmpdir em qualquer caminho de saída.
+            # shellcheck disable=SC2064
+            trap 'rm -rf -- "$tmpdir"' RETURN
             if curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 10 \
                     -o "$tmpdir/tailscale.repo" \
                     https://pkgs.tailscale.com/stable/arch/tailscale.repo 2>/dev/null; then
@@ -233,9 +240,21 @@ install_tailscale_if_enabled() {
 Server = https://pkgs.tailscale.com/stable/arch/$arch
 EOF
                 fi
-                # Popula key do repo Tailscale (justin@tailscale.com).
-                pacman-key --recv-key 999EAC3D9BD5B7F7 || true
-                pacman-key --lsign-key 999EAC3D9BD5B7F7 || true
+                # 2D-009: Popula key do repo Tailscale (justin@tailscale.com).
+                # Não usar `|| true` — falha aqui deve abortar (key import é
+                # pré-requisito para pacman -Syy tailscale). Captura erro com
+                # diagnóstico claro em vez de mascarar com `|| true`.
+                if ! pacman-key --recv-key 999EAC3D9BD5B7F7 2>&1 | sed 's/^/[pacman-key] /'; then
+                    print_error "pacman-key --recv-key falhou para 999EAC3D9BD5B7F7 (chave Tailscale)."
+                    print_error "Verifique conectividade com o keyserver e tente novamente."
+                    rm -rf "$tmpdir"
+                    return 1
+                fi
+                if ! pacman-key --lsign-key 999EAC3D9BD5B7F7 2>&1 | sed 's/^/[pacman-key] /'; then
+                    print_error "pacman-key --lsign-key falhou para 999EAC3D9BD5B7F7 (chave Tailscale)."
+                    rm -rf "$tmpdir"
+                    return 1
+                fi
                 if ! pacman -Syy --noconfirm tailscale; then
                     print_error "Falha ao instalar Tailscale via repo oficial."
                     print_error "Instale manualmente depois: sudo pacman -S tailscale"
@@ -252,9 +271,23 @@ EOF
         fi
     fi
 
-    systemctl enable tailscaled >/dev/null 2>&1 || true
-    systemctl start tailscaled >/dev/null 2>&1 || true
-    print_success "Tailscale pronto. Execute 'sudo tailscale up' para autenticar."
+    # 2D-010: não mascarar falhas de systemctl nem exibir success enganoso.
+    # Tailscale pronto só é exibido se tailscaled realmente ativar.
+    local tailscale_activated=false
+    if command_exists systemctl; then
+        if systemctl enable tailscaled >/dev/null 2>&1 && \
+           systemctl start tailscaled >/dev/null 2>&1 && \
+           systemctl is-active --quiet tailscaled; then
+            tailscale_activated=true
+        fi
+    fi
+
+    if [ "$tailscale_activated" = "true" ]; then
+        print_success "Tailscale pronto. Execute 'sudo tailscale up' para autenticar."
+    else
+        print_warning "Tailscale foi instalado mas o serviço tailscaled não está ativo."
+        print_warning "Verifique manualmente: sudo systemctl status tailscaled"
+    fi
 }
 
 stack_alias_script() {
@@ -316,6 +349,9 @@ cleanup_stale_alias_autoload_entries() {
     fi
 
     tmp_file="$(mktemp)"
+    # 2D-008: cleanup garantido mesmo em set -e / return prematuro.
+    # shellcheck disable=SC2064  # queremos expansão imediata do path
+    trap 'rm -f -- "$tmp_file"' RETURN
 
     while IFS= read -r line || [ -n "$line" ]; do
         if [[ "$line" =~ ^\[\ -f\ \"([^\"]+)\"\ \]\ \&\&\ \.\ \"([^\"]+)\"$ ]]; then
@@ -327,7 +363,8 @@ cleanup_stale_alias_autoload_entries() {
         printf '%s\n' "$line" >> "$tmp_file"
     done < "$profiled_path"
 
-    mv "$tmp_file" "$profiled_path"
+    # 2D-003: mv atômico (mesmo filesystem) — arquivo entra inteiro ou não entra.
+    mv -f "$tmp_file" "$profiled_path"
     chmod 0644 "$profiled_path"
 }
 
@@ -347,6 +384,9 @@ remove_alias_autoload_entry() {
     fi
 
     tmp_file="$(mktemp)"
+    # 2D-008: cleanup garantido mesmo em set -e / return prematuro.
+    # shellcheck disable=SC2064
+    trap 'rm -f -- "$tmp_file"' RETURN
 
     # Remove lines that exactly match the generated source line or the generated header comment.
     local source_line
@@ -354,7 +394,8 @@ remove_alias_autoload_entry() {
 
     grep -Fv "$source_line" "$profiled_path" | grep -Fv '# Generated by Crias-Server installer - do not edit manually' > "$tmp_file" || true
 
-    mv "$tmp_file" "$profiled_path"
+    # 2D-003: mv atômico.
+    mv -f "$tmp_file" "$profiled_path"
     chmod 0644 "$profiled_path"
 }
 
@@ -363,8 +404,11 @@ write_stack_env_file() {
 
     env_file="$(mktemp "${TMPDIR:-/tmp}/crias_stack_env.XXXXXX")"
     chmod 600 "$env_file"
-
-    {
+    # 2D-008: Esta função retorna o path via stdout para o caller consumir;
+    # o cleanup é responsabilidade do caller (run_selected_stack_installer),
+    # que já faz `rm -f "$env_file"` em belt-and-suspenders. Para garantir
+    # cleanup mesmo se falhar ANTES de imprimir o path, validamos a escrita:
+    if ! {
         printf 'FORCE_HARDWARE_TIER=%q\n' "$FORCE_HARDWARE_TIER"
         printf 'APPLY_SYSTEM_TUNING=%q\n' "$APPLY_SYSTEM_TUNING"
         printf 'SYSTEM_TUNING_SCOPE=%q\n' "$SYSTEM_TUNING_SCOPE"
@@ -405,7 +449,11 @@ write_stack_env_file() {
             printf 'TERRARIA_DOWNLOAD_URL=%q\n' "$TERRARIA_DOWNLOAD_URL"
             printf 'TERRARIA_SHA256=%q\n' "${TERRARIA_SHA256:-}"
         fi
-    } > "$env_file"
+    } > "$env_file"; then
+        rm -f "$env_file"
+        print_error "Falha ao escrever stack env file."
+        return 1
+    fi
 
     printf '%s\n' "$env_file"
 }
@@ -478,7 +526,11 @@ cleanup_stack_by_type() {
         return 0
     fi
 
-    if systemctl list-unit-files | grep -q "^${service_name}.service"; then
+    # 2D-014: usar grep -F (literal) em vez de regex, para evitar regex
+    # injection se service_name vier a conter metacaracteres. service_name é
+    # hardcoded para minecraft/terraria hoje, mas a defesa em profundidade
+    # protege contra regressões se cleanup_stack_by_type for estendido.
+    if systemctl list-unit-files | grep -Fq "${service_name}.service"; then
         systemctl stop "$service_name" >/dev/null 2>&1 || true
         systemctl disable "$service_name" >/dev/null 2>&1 || true
     fi
@@ -498,6 +550,9 @@ cleanup_stack_by_type() {
         if crontab -u "$server_user_var" -l 2>/dev/null | grep -Fq "$stack_dir/backup-cron.sh"; then
             local tmp_cron_file
             tmp_cron_file="$(mktemp "${TMPDIR:-/tmp}/crias_cron.XXXXXX")"
+            # 2D-008: cleanup garantido em qualquer caminho de saída.
+            # shellcheck disable=SC2064
+            trap 'rm -f -- "$tmp_cron_file"' RETURN
             crontab -u "$server_user_var" -l 2>/dev/null | grep -Fv "$stack_dir/backup-cron.sh" > "$tmp_cron_file" || true
             if [ -s "$tmp_cron_file" ]; then
                 crontab -u "$server_user_var" "$tmp_cron_file" >/dev/null 2>&1 || true
@@ -511,6 +566,9 @@ cleanup_stack_by_type() {
         if crontab -l 2>/dev/null | grep -Fq "$stack_dir/backup-cron.sh"; then
             local tmp_cron_root_file
             tmp_cron_root_file="$(mktemp "${TMPDIR:-/tmp}/crias_cron_root.XXXXXX")"
+            # 2D-008: cleanup garantido em qualquer caminho de saída.
+            # shellcheck disable=SC2064
+            trap 'rm -f -- "$tmp_cron_root_file"' RETURN
             crontab -l 2>/dev/null | grep -Fv "$stack_dir/backup-cron.sh" > "$tmp_cron_root_file" || true
             if [ -s "$tmp_cron_root_file" ]; then
                 crontab "$tmp_cron_root_file" >/dev/null 2>&1 || true
@@ -553,7 +611,8 @@ cleanup_other_stack_if_needed() {
         has_existing_data=true
     fi
 
-    if systemctl list-unit-files | grep -q "^${other_stack}.service"; then
+    # 2D-014: grep -F (literal) — consistência com cleanup_stack_by_type.
+    if systemctl list-unit-files | grep -Fq "${other_stack}.service"; then
         has_existing_data=true
     fi
 
@@ -664,14 +723,45 @@ install_crias_agent_if_enabled() {
     # A CI cria releases com tag v*.*.* (ex: v2026.07.02-342c3f9) que contêm
     # o asset crias-agent-linux-amd64. Buscamos a última release que tenha
     # esse asset (sem filtrar por prefixo de tag, pois não existe agent-latest).
+    #
+    # SH-008: usar autenticação Bearer quando GITHUB_TOKEN disponível
+    # (aumenta rate-limit de 60 para 5000 req/hora) e pinar versão da API
+    # (X-GitHub-Api-Version: 2022-11-28) para evitar mudanças silenciosas
+    # de contrato. Referência:
+    #   https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
+    #   https://docs.github.com/rest/overview/api-versions
     local agent_url
+    local agent_sha=""
     local api_url="https://api.github.com/repos/ViniciusLopes7/Crias-Server/releases?per_page=10"
     # Estratégia: lista as 10 releases mais recentes, procura a primeira que
-    # tem o asset "crias-agent-linux-amd64" e extrai a URL de download.
-    agent_url=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors --connect-timeout 10 --max-time 60 \
+    # tem o asset "crias-agent-linux-amd64" e extrai a URL de download +
+    # digest (sha256) quando disponível.
+    local curl_auth_headers=()
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        curl_auth_headers=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+    fi
+
+    local api_response
+    api_response=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors --connect-timeout 10 --max-time 60 \
+        "${curl_auth_headers[@]}" \
         -H "Accept: application/vnd.github+json" \
-        "$api_url" 2>/dev/null \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
+        "$api_url" 2>/dev/null || true)
+
+    agent_url=$(printf '%s' "$api_response" \
         | jq -r '[.[] | .assets[] | select(.name=="crias-agent-linux-amd64") | .browser_download_url] | .[0] // empty' 2>/dev/null || true)
+
+    # SH-002: extrair digest (sha256) do asset quando disponível. O campo
+    # `digest` vem no formato "sha256:<hex>" em assets publicados após 2023.
+    if [ -n "$agent_url" ]; then
+        local agent_digest
+        agent_digest=$(printf '%s' "$api_response" \
+            | jq -r --arg url "$agent_url" \
+                '[.[] | .assets[] | select(.name=="crias-agent-linux-amd64" and .browser_download_url==$url) | .digest] | .[0] // empty' 2>/dev/null || true)
+        if [ -n "$agent_digest" ] && [[ "$agent_digest" == sha256:* ]]; then
+            agent_sha="${agent_digest#sha256:}"
+        fi
+    fi
 
     if [ -z "$agent_url" ]; then
         print_error "Não foi possível encontrar o asset crias-agent-linux-amd64 em nenhuma release do GitHub."
@@ -684,15 +774,32 @@ install_crias_agent_if_enabled() {
 
     print_step "URL do agente: $agent_url"
 
+    # SH-002: exigir checksum SHA256 obrigatório (require_checksum=true).
+    # Prioridade para CRIAS_AGENT_SHA256:
+    #   1. Variável de ambiente/config.env (pinagem explícita pelo operador).
+    #   2. agent_sha extraído do campo `digest` do asset via GitHub API.
+    if [ -z "${CRIAS_AGENT_SHA256:-}" ] && [ -n "$agent_sha" ]; then
+        CRIAS_AGENT_SHA256="$agent_sha"
+    fi
+
+    # SH-001/SH-002: usar mktemp -d para path privado e não-reutilizável
+    # (CWE-377 — Insecure Temporary File). trap RETURN garante limpeza.
+    local agent_tmp_dir
+    agent_tmp_dir="$(mktemp -d -t crias-agent-XXXXXX)"
+    # shellcheck disable=SC2064  # queremos expansão imediata do path
+    trap 'rm -rf -- "$agent_tmp_dir"' RETURN
+    local agent_local="${agent_tmp_dir}/crias-agent"
+
     local agent_sha_var="CRIAS_AGENT_SHA256"
-    if ! download_and_verify "$agent_url" /tmp/crias-agent "$agent_sha_var" "false"; then
-        print_error "Falha ao baixar crias-agent. Instalacao do agente pulada."
+    if ! download_and_verify "$agent_url" "$agent_local" "$agent_sha_var" "true"; then
+        print_error "Falha ao baixar/validar crias-agent (checksum SHA256 obrigatório)."
+        print_error "Defina CRIAS_AGENT_SHA256 (64 hex) em config.env ou certifique-se de que"
+        print_error "o asset no GitHub release tenha o campo digest (sha256) populado."
         print_warning "Voce pode instalar manualmente depois: ver discord-agent/README.md"
         return 1
     fi
 
-    install -m 755 -o crias-agent -g crias-agent /tmp/crias-agent /opt/crias-agent/crias-agent
-    rm -f /tmp/crias-agent
+    install -m 755 -o crias-agent -g crias-agent "$agent_local" /opt/crias-agent/crias-agent
 
     # 4. Gera token aleatório (32 bytes hex = 64 chars).
     local agent_token
@@ -722,17 +829,51 @@ install_crias_agent_if_enabled() {
         fi
     fi
 
-    # Validar rcon_password para YAML: não pode conter " ou \n (quebra YAML).
+    # 2D-006/007: Validar rcon_password e rcon_port para YAML seguro.
+    # - rcon_password: rejeitar newlines, aspas (duplas e simples) e backslash
+    #   (YAML interpreta \ em strings double-quoted; aspas quebram o quoting).
+    # - rcon_port: validar range 1-65535; será emitido como quoted string YAML.
     if [ -n "$rcon_password" ]; then
-        if [[ "$rcon_password" == *'"'* ]] || [[ "$rcon_password" == *$'\n'* ]]; then
-            print_error "rcon.password em server.properties contém caracteres invalidos (aspas duplas ou newline)."
+        if [[ "$rcon_password" == *$'\n'* ]] || [[ "$rcon_password" == *'"'* ]] || \
+           [[ "$rcon_password" == *"'"* ]] || [[ "$rcon_password" == *'\'* ]]; then
+            print_error "rcon.password em server.properties contém caracteres invalidos para YAML (newline, aspas ou backslash)."
             print_error "Altere a senha do RCON no servidor antes de instalar o agente."
             return 1
         fi
     fi
 
+    # 2D-007: Validar stack_port e rcon_port ANTES de emitir YAML. Os valores
+    # vindos de config.env não foram validados neste escopo (validação ocorre
+    # dentro do stack installer em subshell). Fail-fast aqui evita YAML inválido.
+    if ! [[ "$stack_port" =~ ^[0-9]+$ ]] || [ "$stack_port" -lt 1 ] || [ "$stack_port" -gt 65535 ]; then
+        print_error "stack_port inválido para YAML: $stack_port (deve ser 1-65535)"
+        return 1
+    fi
+    if ! [[ "$rcon_port" =~ ^[0-9]+$ ]] || [ "$rcon_port" -lt 1 ] || [ "$rcon_port" -gt 65535 ]; then
+        print_error "rcon_port inválido para YAML: $rcon_port (deve ser 1-65535)"
+        return 1
+    fi
+
+    # 2D-023: Validar agent_hardware_tier contra whitelist antes de YAML.
+    case "$agent_hardware_tier" in
+        LOW|MID|HIGH|unknown)
+            ;;
+        *)
+            print_error "agent_hardware_tier inválido para YAML: $agent_hardware_tier (esperado LOW/MID/HIGH/unknown)"
+            return 1
+            ;;
+    esac
+
     # 6. Gera /etc/crias/agent.yaml.
-    cat > /etc/crias/agent.yaml << EOF
+    # 2D-003: escrever em tmpfile, validar, e instalar atomicamente com
+    # `install -m 0640` para evitar arquivo parcial em /etc/crias/ se o
+    # script for interrompido mid-write.
+    local agent_yaml_tmp
+    agent_yaml_tmp="$(mktemp "${TMPDIR:-/tmp}/crias_agent_yaml.XXXXXX")"
+    # shellcheck disable=SC2064
+    trap 'rm -f -- "$agent_yaml_tmp"' RETURN
+
+    cat > "$agent_yaml_tmp" << EOF
 agent:
   bind_address: "127.0.0.1"
   port: 8473
@@ -743,12 +884,12 @@ server:
   service_name: "$service_name"
   manager_script: "$stack_dir/mc-manager.sh"
   server_dir: "$stack_dir"
-  server_port: $stack_port
+  server_port: "$stack_port"
   hardware_tier: "$agent_hardware_tier"
   rcon:
     enabled: $rcon_enabled
     host: "$rcon_host"
-    port: $rcon_port
+    port: "$rcon_port"
     password: "$rcon_password"
 
 features:
@@ -759,31 +900,55 @@ features:
     interval_seconds: 300
     passive: true
 EOF
-    chmod 0640 /etc/crias/agent.yaml
-    chown root:crias-agent /etc/crias/agent.yaml
+    # 2D-003: install faz cópia atômica (open + rename) com modo 0640.
+    install -m 0640 -o root -g crias-agent "$agent_yaml_tmp" /etc/crias/agent.yaml
+    rm -f "$agent_yaml_tmp"
 
     # 7. Configura sudoers (item 7.4 do plano).
-    cat > /etc/sudoers.d/crias-agent << EOF
+    # SH-005: substituir wildcard `mc-manager.sh *` por lista explícita de
+    # subcomandos permitidos (princípio do menor privilégio). Referência:
+    #   man sudoers — "Using a wildcard in a command specification can allow
+    #   users to run commands they should not be able to."
+    #   https://www.sudo.ws/docs/man/sudoers.man/#Wildcards
+    #
+    # 2D-003: escrever em tmpfile, validar com visudo -cf ANTES de mover
+    # para /etc/sudoers.d/. Evita sudoers quebrado em produção se o cat
+    # for interrompido ou se o conteúdo falhar validação.
+    local sudoers_tmp
+    sudoers_tmp="$(mktemp "${TMPDIR:-/tmp}/crias_sudoers.XXXXXX")"
+    # shellcheck disable=SC2064
+    trap 'rm -f -- "$agent_yaml_tmp" "$sudoers_tmp"' RETURN
+
+    cat > "$sudoers_tmp" << EOF
 # /etc/sudoers.d/crias-agent
 # Generated by Crias-Server installer - do not edit manually
 crias-agent ALL=(root) NOPASSWD: /usr/bin/systemctl start $service_name, /usr/bin/systemctl stop $service_name, /usr/bin/systemctl restart $service_name, /usr/bin/systemctl status $service_name, /usr/bin/systemctl is-active $service_name
-crias-agent ALL=($stack_user) NOPASSWD: $stack_dir/backup-cron.sh, $stack_dir/mc-manager.sh *
+crias-agent ALL=($stack_user) NOPASSWD: $stack_dir/backup-cron.sh, $stack_dir/mc-manager.sh start, $stack_dir/mc-manager.sh stop, $stack_dir/mc-manager.sh restart, $stack_dir/mc-manager.sh status, $stack_dir/mc-manager.sh backup, $stack_dir/mc-manager.sh health, $stack_dir/mc-manager.sh hardware-report
 EOF
-    chmod 0440 /etc/sudoers.d/crias-agent
 
     # Valida sintaxe sudoers (item 7.4 do plano — não trustar input cegamente).
+    # 2D-003: validação feita no tmpfile ANTES de instalar em /etc/sudoers.d/.
     if command -v visudo >/dev/null 2>&1; then
-        if ! visudo -cf /etc/sudoers.d/crias-agent >/dev/null 2>&1; then
-            print_error "Sintaxe sudoers inválida em /etc/sudoers.d/crias-agent; removendo."
-            rm -f /etc/sudoers.d/crias-agent
+        if ! visudo -cf "$sudoers_tmp" >/dev/null 2>&1; then
+            print_error "Sintaxe sudoers inválida; arquivo NÃO foi instalado em /etc/sudoers.d/."
+            rm -f "$sudoers_tmp"
             return 1
         fi
     else
-        print_warning "visudo não disponível; sudoers não validado. Verifique manualmente: cat /etc/sudoers.d/crias-agent"
+        print_warning "visudo não disponível; sudoers não validado. Verifique manualmente após install: cat /etc/sudoers.d/crias-agent"
     fi
+    install -m 0440 -o root -g root "$sudoers_tmp" /etc/sudoers.d/crias-agent
+    rm -f "$sudoers_tmp"
 
     # 8. Instala systemd unit.
-    cat > /etc/systemd/system/crias-agent.service << 'EOF'
+    # 2D-003: escrever em tmpfile e mover atomicamente. systemd-analyze verify
+    # valida antes do daemon-reload, evitando carregar unit quebrada.
+    local unit_tmp
+    unit_tmp="$(mktemp "${TMPDIR:-/tmp}/crias_unit.XXXXXX")"
+    # shellcheck disable=SC2064
+    trap 'rm -f -- "$agent_yaml_tmp" "$sudoers_tmp" "$unit_tmp"' RETURN
+
+    cat > "$unit_tmp" << 'EOF'
 [Unit]
 Description=Crias Agent - Remote control bridge
 After=network-online.target tailscaled.service
@@ -828,7 +993,15 @@ UMask=0027
 [Install]
 WantedBy=multi-user.target
 EOF
-    chmod 0644 /etc/systemd/system/crias-agent.service
+    # 2D-026: opcionalmente valida com systemd-analyze verify antes de mover.
+    if command -v systemd-analyze >/dev/null 2>&1; then
+        if ! systemd-analyze verify "$unit_tmp" >/dev/null 2>&1; then
+            print_warning "systemd-analyze verify reportou problemas no unit file; verifique $unit_tmp"
+            # Não aborta — alguns avisos são benignos (ex.: DependsOn sem target).
+        fi
+    fi
+    install -m 0644 -o root -g root "$unit_tmp" /etc/systemd/system/crias-agent.service
+    rm -f "$unit_tmp"
 
     systemctl daemon-reload
     systemctl enable crias-agent >/dev/null 2>&1 || true
@@ -849,12 +1022,18 @@ EOF
 
 main() {
     print_header
-    apply_config_with_env_precedence "$CONFIG_FILE"
+    # 2D-011: config já foi carregado no top-level (antes dos defaults).
+    # Removida a segunda chamada que sobrescrevia valores do config com
+    # defaults já aplicados.
+
+    # 2D-013: ERR trap incondicional (não só em DRY_RUN). Em modo normal,
+    # falhas de set -e saíam sem diagnóstico de função/linha, dificultando
+    # debug em produção. Trap executa em ambos os modos agora.
+    trap 'echo "[install.sh] erro (exit=$?) em DRY_RUN=${DRY_RUN:-false}" >&2; echo "Funcao: ${FUNCNAME[1]:-unknown}, Linha: ${BASH_LINENO[0]}" >&2; echo "Arquivo: ${BASH_SOURCE[1]:-unknown}" >&2' ERR
 
     if is_true "$DRY_RUN"; then
         print_warning "Modo DRY_RUN ativo: nenhuma alteracao destrutiva no host sera aplicada."
         # Keep fail-fast enabled even in DRY_RUN to catch logic errors without exposing secrets.
-        trap 'echo "[install.sh] erro em DRY_RUN (exit=$?)" >&2; echo "Funcao: ${FUNCNAME[1]:-unknown}, Linha: ${BASH_LINENO[0]}" >&2; echo "Arquivo: ${BASH_SOURCE[1]:-unknown}" >&2' ERR
     else
         check_root
         check_arch

@@ -46,6 +46,23 @@ class AgentClientError(Exception):
     """Erro de comunicação com o agente."""
 
 
+# BOT-003: timeout default para RPCs unary (segundos).
+DEFAULT_RPC_TIMEOUT: float = 10.0
+
+
+def _is_localhost(host: str) -> bool:
+    """Verifica se o host aponta para localhost (BOT-002)."""
+    # Remove esquema se presente
+    clean = host
+    for scheme in ("https://", "http://"):
+        if clean.startswith(scheme):
+            clean = clean[len(scheme):]
+            break
+    # Remove porta
+    clean = clean.split(":", 1)[0].rstrip("/")
+    return clean in ("127.0.0.1", "localhost", "::1", "[::1]")
+
+
 class AgentClient:
     """Cliente gRPC assíncrono para o crias-agent.
 
@@ -54,10 +71,20 @@ class AgentClient:
     para evitar duplicação de channels em retries concorrentes.
     """
 
-    def __init__(self, host: str, token: str, max_reconnect_delay: int = 60) -> None:
+    def __init__(
+        self,
+        host: str,
+        token: str,
+        max_reconnect_delay: int = 60,
+        *,
+        tls_ca_path: str | None = None,
+        use_tls: bool = False,
+    ) -> None:
         self.host = host
         self.token = token
         self.max_reconnect_delay = max_reconnect_delay
+        self._tls_ca_path = tls_ca_path
+        self._force_tls = use_tls
 
         self._channel: grpc_aio.Channel | None = None
         self._stub: crias_pb2_grpc.ServerControlStub | None = None
@@ -66,6 +93,9 @@ class AgentClient:
         # Lock para serializar connect() chamado concorrentemente por
         # _ensure_connected() de múltiplas coroutines.
         self._connect_lock: asyncio.Lock = asyncio.Lock()
+
+        # 2C-002: event sinaliza close() para quebrar retry loop do connect().
+        self._closing: asyncio.Event = asyncio.Event()
 
         # Cache de GetStatus.
         self._status_cache: tuple[crias_pb2.StatusResponse, float] | None = None
@@ -84,6 +114,10 @@ class AgentClient:
 
             delay = 1.0
             while True:
+                # 2C-002: se close() foi chamado, aborta retry.
+                if self._closing.is_set():
+                    return
+
                 # Fecha channel anterior se existir (evita resource leak).
                 if self._channel is not None:
                     try:
@@ -95,24 +129,7 @@ class AgentClient:
                     self._event_stub = None
 
                 try:
-                    target = self.host
-                    if target.startswith("https://"):
-                        # Tailscale Funnel: HTTPS com TLS.
-                        target = target[len("https://") :]
-                        creds = grpc.ssl_channel_credentials()
-                        self._channel = grpc_aio.secure_channel(
-                            target,
-                            creds,
-                            options=[
-                                ("grpc.max_receive_message_length", 1 * 1024 * 1024),
-                            ],
-                        )
-                    elif target.startswith("http://"):
-                        target = target[len("http://") :]
-                        self._channel = grpc_aio.insecure_channel(target)
-                    else:
-                        # Asume host:port sem esquema = insecure.
-                        self._channel = grpc_aio.insecure_channel(target)
+                    self._channel = self._create_channel()
 
                     # Aguarda channel estar pronto (timeout 5s).
                     await asyncio.wait_for(self._channel.channel_ready(), timeout=5.0)
@@ -122,7 +139,7 @@ class AgentClient:
                     logger.info("conectado ao agente em %s", self.host)
                     return
                 except (grpc.RpcError, TimeoutError, OSError) as e:
-                    logger.warning("connect falhou (tentativa próxima em %.1fs): %s", delay, e)
+                    logger.warning("connect falhou (próxima tentativa em %.1fs): %s", delay, e)
                     # Fecha channel parcialmente criado para evitar leak.
                     if self._channel is not None:
                         try:
@@ -130,14 +147,75 @@ class AgentClient:
                         except Exception:
                             pass
                         self._channel = None
-                    await asyncio.sleep(min(delay, self.max_reconnect_delay))
+                    # 2C-002: espera com interrupção por _closing
+                    try:
+                        await asyncio.wait_for(self._closing.wait(), timeout=min(delay, self.max_reconnect_delay))
+                        return  # closing setou, aborta
+                    except asyncio.TimeoutError:
+                        pass
                     delay *= 2
 
+    def _create_channel(self) -> grpc_aio.Channel:
+        """Cria canal gRPC com TLS enforcement (BOT-002).
+
+        - HTTPS/Tailscale Funnel ou use_tls=True → secure_channel
+        - localhost → insecure_channel (permitido)
+        - host não-localhost sem TLS → ERRO (token em cleartext é proibido)
+        """
+        target = self.host
+        # Determina esquema e target limpo
+        if target.startswith("https://"):
+            target = target[len("https://"):]
+            use_tls = True
+        elif target.startswith("http://"):
+            target = target[len("http://"):]
+            use_tls = False
+        else:
+            use_tls = self._force_tls
+
+        is_local = _is_localhost(target)
+
+        if not use_tls and not is_local:
+            # BOT-002: canal inseguro para host não-localhost vazaria o token em cleartext
+            raise AgentClientError(
+                f"Canal inseguro não permitido para host não-localhost: {target}. "
+                "Use HTTPS (https://...) ou configure CRIAS_AGENT_USE_TLS=true."
+            )
+
+        if use_tls:
+            if self._tls_ca_path:
+                with open(self._tls_ca_path, "rb") as f:
+                    creds = grpc_aio.ssl_channel_credentials(root_certificates=f.read())
+            else:
+                creds = grpc_aio.ssl_channel_credentials()
+            return grpc_aio.secure_channel(
+                target,
+                creds,
+                options=[
+                    ("grpc.max_receive_message_length", 1 * 1024 * 1024),
+                    # BOT-026: keepalive para detectar conexões mortas
+                    ("grpc.keepalive_time_ms", 30000),
+                    ("grpc.keepalive_timeout_ms", 10000),
+                ],
+            )
+
+        # localhost insecure
+        return grpc_aio.insecure_channel(
+            target,
+            options=[("grpc.max_receive_message_length", 1 * 1024 * 1024)],
+        )
+
     async def close(self) -> None:
-        """Fecha o canal gRPC."""
+        """Fecha o canal gRPC (BOT-015: timeout de 5s para evitar hang)."""
+        self._closing.set()  # 2C-002: sinaliza para connect() abortar
         async with self._connect_lock:
             if self._channel is not None:
-                await self._channel.close()
+                try:
+                    await asyncio.wait_for(self._channel.close(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    logger.warning("timeout ao fechar canal gRPC (5s)")
+                except Exception as e:
+                    logger.warning("erro ao fechar canal gRPC: %s", e)
                 self._channel = None
                 self._stub = None
                 self._event_stub = None
@@ -159,6 +237,7 @@ class AgentClient:
             resp = await self._stub.StartServer(
                 crias_pb2.StartRequest(),
                 metadata=self._metadata(),
+                timeout=DEFAULT_RPC_TIMEOUT,
             )
             return {"ok": resp.ok, "message": resp.message, "service": resp.service_name}
         except grpc.RpcError as e:
@@ -172,6 +251,7 @@ class AgentClient:
             resp = await self._stub.StopServer(
                 crias_pb2.StopRequest(),
                 metadata=self._metadata(),
+                timeout=DEFAULT_RPC_TIMEOUT,
             )
             return {"ok": resp.ok, "message": resp.message, "service": resp.service_name}
         except grpc.RpcError as e:
@@ -185,6 +265,7 @@ class AgentClient:
             resp = await self._stub.RestartServer(
                 crias_pb2.RestartRequest(),
                 metadata=self._metadata(),
+                timeout=DEFAULT_RPC_TIMEOUT,
             )
             return {"ok": resp.ok, "message": resp.message, "service": resp.service_name}
         except grpc.RpcError as e:
@@ -207,6 +288,7 @@ class AgentClient:
             resp = await self._stub.GetStatus(
                 crias_pb2.GetStatusRequest(),
                 metadata=self._metadata(),
+                timeout=DEFAULT_RPC_TIMEOUT,
             )
             self._status_cache = (resp, time.monotonic())
             return _status_to_dict(resp)
@@ -221,6 +303,7 @@ class AgentClient:
             resp = await self._stub.GetHealth(
                 crias_pb2.GetHealthRequest(),
                 metadata=self._metadata(),
+                timeout=DEFAULT_RPC_TIMEOUT,
             )
             return {
                 "healthy": resp.healthy,
@@ -241,6 +324,7 @@ class AgentClient:
             resp = await self._stub.SendRconCommand(
                 crias_pb2.SendRconCommandRequest(command=command),
                 metadata=self._metadata(),
+                timeout=DEFAULT_RPC_TIMEOUT,
             )
             return {"ok": resp.ok, "output": resp.output, "error": resp.error}
         except grpc.RpcError as e:

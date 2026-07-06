@@ -2,10 +2,13 @@
 #
 # Alternativa ao Poetry: instale via `pip install -r requirements.txt`.
 # Para produção no Railway, recomendado usar Poetry (vide pyproject.toml).
+#
+# Pinagem exata por versão para reprodutibilidade (DEP-002).
+# Para hash pinning (SLSA L3), gerar com:
+#   pip-compile --generate-hashes --output-file=requirements.txt requirements.in
 
-discord.py>=2.4.0,<3.0.0
-grpcio>=1.62.0,<2.0.0
-grpcio-tools>=1.62.0,<2.0.0
-protobuf>=4.25.0,<5.0.0
-pyyaml>=6.0.1,<7.0.0
-python-dotenv>=1.0.1,<2.0.0
+discord.py==2.4.0
+grpcio==1.62.3
+grpcio-tools==1.62.3
+protobuf==4.25.3
+python-dotenv==1.0.1

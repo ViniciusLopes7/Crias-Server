@@ -180,6 +180,6 @@ Requer `mcrcon` instalado (AUR). Veja a seção "Backup com RCON save-lock" acim
 
 - [mods.md](mods.md) — Guias dos mods QoL
 - [../tutorial.md](../tutorial.md) — Tutorial de operação passo-a-passo
-- [../tailscale.md](../tailscale.md) — Conexão via Tailscale
+- [../Tailscale.md](../Tailscale.md) — Conexão via Tailscale
 - [../restore.md](../restore.md) — Restore de backups
 - [../security.md](../security.md) — Firewall, logs, hardening

@@ -1,7 +1,7 @@
 # ROADMAP — Crias-Server
 
 > Status de implementação e próximos passos.
-> Última atualização: 2026-06-29.
+> Última atualização: 2026-07-05.
 
 ## ✅ Implementado (v1.0.0)
 
@@ -18,16 +18,16 @@
 | **Bot Discord** (`discord-bot/`) | ✅ | discord.py 2.x, slash commands `/mc start|stop|restart|status|players|say|console|health`, `asyncio.Lock` em `connect()`, backoff exponencial 1s→60s, cache de status 15s |
 | **Eventos push** | ✅ | `ServerStarted`/`Stopped`, `PlayerJoined`/`Left`, `HealthWarning` → bot posta em `#controle` |
 | **Streaming console** | ✅ | `StreamConsole` RPC (journalctl -f) → bot posta em `#console` com buffer 2s + chunks 1800 chars |
-| **CI/CD** | ✅ | Workflow único `ci.yml` com 9 jobs paralelos + release unificado (ISO + slim.zip + full.zip + agent binaries + sha256sums) |
+| **CI/CD** | ✅ | Workflow único `ci.yml` com 12 jobs paralelos + release unificado (ISO + slim.zip + full.zip + agent binaries + sha256sums) |
 | **Releases** | ✅ | Release unificado em tag `v*`: ISO + `crias-server-full.zip` + `crias-server-slim.zip` + `crias-agent-linux-amd64` + `sha256sums.txt` (+ GPG sig opcional) |
-| **Testes** | ✅ | 22 testes bash + 36 testes Python + 3 testes Go (race-safe) |
+| **Testes** | ✅ | 22 testes bash + 124 testes Python + 55 testes Go (race-safe) |
 
 ### Decisões arquiteturais finais
 
 | Decisão | Escolha | Justificativa |
 |---------|---------|---------------|
 | Branch única | `main` (monorepo) | Sem complexidade de merge entre branches; `discord-agent/` e `discord-bot/` como subdirs |
-| Agente: linguagem | Go 1.22 | Binário estático, 5-10 MB RAM ocioso, sem runtime |
+| Agente: linguagem | Go 1.23 | Binário estático, 5-10 MB RAM ocioso, sem runtime |
 | Agente: protocolo | gRPC + protobuf | Streaming bidi + tipagem forte + codegen Go/Python |
 | Agente: escuta | `127.0.0.1:8473` apenas | Tailscale Funnel faz proxy HTTPS externo |
 | Agente: auth | Token via metadata gRPC | `subtle.ConstantTimeCompare` previne timing attack |
@@ -46,7 +46,6 @@
 ### Alta prioridade
 
 - [ ] **Métricas Prometheus no agente** — `crias_agent_grpc_requests_total`, `crias_agent_rcon_errors_total`, `crias_agent_players_online`, `crias_agent_memory_used_bytes`
-- [ ] **Testes de integração Go** — mock de `exec.Command`/`journalctl` para cobrir `server.go` (atualmente sem `server_test.go`)
 - [ ] **Wake-on-LAN endpoint** no agente — para ligar PC do jogador remotamente
 - [ ] **TLS nativo no agente** — não depender exclusivamente de Tailscale Funnel (útil para quem quer usar Cloudflare Tunnel ou Caddy reverse proxy)
 
@@ -66,7 +65,6 @@
 - [ ] **`tests/quick-script-tests.sh`** — usar `find -print0` para paths com newlines (extremamente raro)
 - [ ] **Backup remoto via rsync** — `BACKUP_REMOTE_PATH` já declarado em `config.env` mas não implementado
 - [ ] **Webhook de notificação de backup** — `BACKUP_NOTIFY_WEBHOOK` já declarado mas não implementado
-- [ ] **`server_test.go`** — testes unitários para `validateToken`, `runSystemctl`, `eventToProto` com mocks
 
 ---
 
@@ -74,18 +72,18 @@
 
 | Suíte | Tests | Status |
 |-------|-------|--------|
-| `tests/run-all.sh` (orquestrador) | 22 testes bash | ✅ Todos PASS |
-| `discord-bot/tests/` (pytest) | 36 testes Python | ✅ Todos PASS |
-| `discord-agent/internal/{config,rcon,events}/` | 18 testes Go | ✅ Todos PASS (`-race`) |
+| `tests/run-all.sh` (orquestrador) | 22 testes bash + 124 testes Python + 55 testes Go | ✅ Todos PASS |
+| `discord-bot/tests/` (pytest) | 124 testes Python | ✅ Todos PASS |
+| `discord-agent/internal/{config,rcon,events,server}/` | 55 testes Go (config=19, rcon=12, events=6, server=18) | ✅ Todos PASS (`-race`) |
 | `tests/iso-initramfs-validate.sh` | ISO real | ⏭️ SKIP (requer ISO construída) |
 | `tests/iso-live-credentials-validate.sh` | ISO real | ⏭️ SKIP (requer ISO construída) |
 | `tests/iso-qemu-boot.sh` | ISO real | ⏭️ SKIP (requer ISO construída) |
 
 ### Lacunas de cobertura conhecidas
 
-- `discord-agent/internal/server/server.go` (403 linhas, gRPC handlers) — **sem `server_test.go`**
-- `discord-bot/src/crias_bot/agent_client.py` — testes só cobrem init/metadata/cache, não `connect()`/`close()`/RPCs
-- `discord-agent/internal/rcon/client_test.go::TestClient_Execute_Mock` — faz conexão RCON real (deveria mockar `dialer`)
+- `discord-agent/internal/server/server.go` (gRPC handlers) — `server_test.go` existe (18 testes) mas algumas RPCs de streaming ainda usam mocks simplificados
+- `discord-bot/src/crias_bot/agent_client.py` — cobertura expandida em `test_agent_client.py` (40 testes) cobrindo `connect()`/`close()`/todas as RPCs
+- `discord-agent/internal/rcon/client_test.go::TestClient_Execute_Mock` — `dialer` agora é mockado (TST-004)
 
 ---
 

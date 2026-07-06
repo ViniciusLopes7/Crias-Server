@@ -238,7 +238,16 @@ if command -v python3 >/dev/null 2>&1; then
         fi
 
         pytest_log="$(mktemp /tmp/crias-pytest.XXXXXX.log)"
-        if env "$PY_ENV" "$PY_BIN" -m pytest discord-bot/tests/ -v --tb=short > "$pytest_log" 2>&1; then
+        # TST-011: --cov para reportar cobertura (pytest-cov já está declarado
+        # em discord-bot/pyproject.toml). --cov-report=term-missing mostra
+        # linhas não cobertas no resumo.
+        # 2E-002: --cov-fail-under=50 impede regressão grave de cobertura
+        # (baseline conservadora — projetos com foco em segurança devem ter
+        # um piso mínimo; aumentar gradualmente conforme suite cresce).
+        if env "$PY_ENV" "$PY_BIN" -m pytest discord-bot/tests/ \
+            -v --tb=short \
+            --cov=crias_bot --cov-report=term-missing --cov-fail-under=50 \
+            > "$pytest_log" 2>&1; then
             echo "→ PASS"
             PASS=$((PASS + 1))
             tail -5 "$pytest_log"
@@ -255,6 +264,37 @@ if command -v python3 >/dev/null 2>&1; then
     fi
 else
     echo "→ SKIP (python3 não disponível)"
+    SKIP=$((SKIP + 1))
+fi
+
+# ═══════════════════════════════════════════════════════
+# GO TESTS (discord-agent)
+# ═══════════════════════════════════════════════════════
+# 2E-001: testa todo o agente Go localmente (espelha o job
+# `test-go` da CI). Antes deste bloco, `bash tests/run-all.sh`
+# não executava nenhum teste Go — devs ficavam com falsos verdes.
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "TEST: discord-agent go test (Go)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+if [ -d "discord-agent" ] && command -v go >/dev/null 2>&1; then
+    go_log="$(mktemp /tmp/crias-go-test.XXXXXX.log)"
+    # -race: data race detector (essencial para o servidor gRPC concorrente)
+    # -timeout 120s: evita hang infinito em CI/local
+    # ./...: roda todos os pacotes (config, rcon, events, server, ...)
+    if (cd discord-agent && go test -race -timeout 120s ./...) > "$go_log" 2>&1; then
+        echo "→ PASS"
+        PASS=$((PASS + 1))
+        tail -10 "$go_log"
+    else
+        echo "→ FAIL"
+        tail -30 "$go_log"
+        FAIL=$((FAIL + 1))
+        FAILED_TESTS+=("discord-agent go test")
+    fi
+    rm -f "$go_log"
+else
+    echo "→ SKIP (go não instalado ou discord-agent/ ausente)"
     SKIP=$((SKIP + 1))
 fi
 

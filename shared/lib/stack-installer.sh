@@ -41,6 +41,13 @@
 create_stack_user_and_dirs() {
     print_step "Garantindo usuario e diretorio do ${STACK_NAME^^}..."
 
+    # SH-004: validar STACK_SERVER_DIR antes de qualquer operação destrutiva
+    # (chown -R, mkdir, rm -rf) para evitar comprometer áreas do sistema.
+    if ! validate_server_dir "$STACK_SERVER_DIR"; then
+        print_error "STACK_SERVER_DIR rejeitado pela validação de segurança."
+        return 1
+    fi
+
     if dry_run_enabled; then
         print_step "[DRY_RUN] Pulando criacao do usuario e diretorio do ${STACK_NAME^^}."
         return 0
@@ -89,7 +96,11 @@ rollback_stack_install() {
     else
         # Servidor preexistia: limpa apenas artefatos do installer.
         local scripts_to_clean=()
-        for script in "${STACK_RUNTIME_SCRIPTS[@]:-}"; do
+        # 2D-012: usar ${arr[@]+"${arr[@]}"} (idioma compat com set -u) em vez
+        # de "${arr[@]:-}" que itera uma string vazia quando o array está vazio
+        # (levando a basename "" e adicionar "$STACK_SERVER_DIR/" ao array,
+        # que poderia apagar o diretório inteiro em rm -f).
+        for script in ${STACK_RUNTIME_SCRIPTS[@]+"${STACK_RUNTIME_SCRIPTS[@]}"}; do
             scripts_to_clean+=("$STACK_SERVER_DIR/$(basename "$script")")
         done
         scripts_to_clean+=(
@@ -152,7 +163,14 @@ deploy_stack_scripts() {
     fi
 
     if ! dry_run_enabled; then
-        chown -R "${STACK_USER}:${STACK_USER}" "$STACK_SERVER_DIR"
+        # SH-004: revalidar antes do chown -R (defesa em profundidade — o
+        # path pode ter mudado entre create_stack_user_and_dirs e aqui).
+        if validate_server_dir "$STACK_SERVER_DIR"; then
+            chown -R "${STACK_USER}:${STACK_USER}" "$STACK_SERVER_DIR"
+        else
+            print_error "Recusa de chown -R em STACK_SERVER_DIR inválido: '$STACK_SERVER_DIR'"
+            return 1
+        fi
     fi
 }
 
@@ -193,9 +211,35 @@ install_stack_service() {
         return 0
     fi
 
-    envsubst '${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB} ${SERVICE_NAME}' \
-        < "$STACK_SERVICE_TEMPLATE" \
-        > "/etc/systemd/system/${STACK_NAME}.service"
+    # 2D-026: escrever em tmpfile e mover atomicamente. Antes, envsubst
+    # escrevia diretamente em /etc/systemd/system/${STACK_NAME}.service;
+    # se envsubst fosse interrompido (signal) ou falhasse mid-write, o unit
+    # file parcial seria carregado pelo próximo daemon-reload. Agora
+    # validamos com systemd-analyze verify antes do rename.
+    local unit_target="/etc/systemd/system/${STACK_NAME}.service"
+    local unit_tmp
+    unit_tmp="$(mktemp "${TMPDIR:-/tmp}/crias_unit_${STACK_NAME}.XXXXXX")"
+    # shellcheck disable=SC2064
+    trap 'rm -f -- "$unit_tmp"' RETURN
+
+    if ! envsubst '${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB} ${SERVICE_NAME}' \
+            < "$STACK_SERVICE_TEMPLATE" > "$unit_tmp"; then
+        print_error "envsubst falhou ao gerar unit file para ${STACK_NAME}."
+        rm -f "$unit_tmp"
+        return 1
+    fi
+
+    # 2D-026: opcionalmente valida com systemd-analyze verify antes de mover.
+    if command -v systemd-analyze >/dev/null 2>&1; then
+        if ! systemd-analyze verify "$unit_tmp" >/dev/null 2>&1; then
+            print_warning "systemd-analyze verify reportou problemas em $unit_tmp; verifique antes de prosseguir."
+            # Não aborta — alguns avisos são benignos (ex.: dependências não carregadas).
+        fi
+    fi
+
+    # install faz cópia atômica (open + rename) com modo 0644.
+    install -m 0644 -o root -g root "$unit_tmp" "$unit_target"
+    rm -f "$unit_tmp"
 
     systemctl daemon-reload
     systemctl enable "$STACK_NAME" >/dev/null 2>&1 || true
@@ -237,6 +281,15 @@ apply_stack_system_tuning() {
 run_stack_install() {
     print_step "Iniciando instalacao do stack ${STACK_NAME^^}..."
 
+    # SH-004: fail-fast se STACK_SERVER_DIR for perigoso. Fazemos a validação
+    # ANTES de instalar qualquer trap para que um path inválido não dispare
+    # rollback (que faria rm -rf em path do sistema). O rollback também
+    # valida via safe_remove_dir, mas falhar cedo evita confusão no log.
+    if ! validate_server_dir "$STACK_SERVER_DIR"; then
+        print_error "STACK_SERVER_DIR rejeitado pela validação de segurança: '$STACK_SERVER_DIR'"
+        return 1
+    fi
+
     if [ -d "$STACK_SERVER_DIR" ]; then
         STACK_SERVER_DIR_PREEXISTED=true
     else
@@ -245,8 +298,16 @@ run_stack_install() {
 
     # Salva trap EXIT anterior (se houver) e instala o nosso.
     # No fim de run_stack_install, restauramos o trap anterior.
-    local _prev_trap_exit
-    _prev_trap_exit="$(trap -p EXIT 2>/dev/null || true)"
+    # SH-009: capturamos apenas a flag booleana de existência (não o conteúdo
+    # do trap) para evitar `eval` em strings capturadas de `trap -p`, que é
+    # frágil com aspas aninhadas e re-avalia variáveis no momento do eval
+    # (não no momento da captura). Aqui apenas registramos se havia um trap
+    # anterior; o caller é responsável por re-setar explicitamente o próprio
+    # trap caso precise. Referência: ShellCheck SC2294, CWE-95.
+    local _had_prev_trap_exit=false
+    if [ -n "$(trap -p EXIT 2>/dev/null || true)" ]; then
+        _had_prev_trap_exit=true
+    fi
 
     trap 'if [ "${STACK_INSTALL_SUCCEEDED:-false}" != "true" ]; then rollback_stack_install; fi' EXIT
 
@@ -304,10 +365,12 @@ run_stack_install() {
     STACK_INSTALL_SUCCEEDED=true
     print_success "${STACK_NAME^^} instalado com sucesso em $STACK_SERVER_DIR"
 
-    # Restaura trap EXIT anterior (se houver) — não vaza nosso handler para callers.
-    if [ -n "$_prev_trap_exit" ]; then
-        eval "$_prev_trap_exit"
-    else
-        trap - EXIT
+    # SH-009: limpa nosso trap EXIT explicitamente (sem eval). Se havia um
+    # trap EXIT anterior, o caller deve re-setá-lo explicitamente após
+    # run_stack_install retornar — não tentamos restaurar via eval de string
+    # capturada (padrão frágil segundo CWE-95 e ShellCheck SC2294).
+    trap - EXIT
+    if [ "$_had_prev_trap_exit" = "true" ]; then
+        print_warning "Trap EXIT pré-existente foi removido por run_stack_install; reconfigure explicitamente se necessário."
     fi
 }

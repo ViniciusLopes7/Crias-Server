@@ -46,8 +46,26 @@ backup_init() {
     # Carrega runtime.env se existir (para herdar BACKUP_RETENTION_DAYS, etc.)
     local runtime_env="${BACKUP_SERVER_DIR}/runtime.env"
     if [ -f "$runtime_env" ]; then
-        # shellcheck source=/dev/null
-        source "$runtime_env"
+        # 2D-002: NÃO usar `source "$runtime_env"` — isso executaria bash
+        # arbitrário. O runtime.env é world-readable (umask 022) e qualquer
+        # modificação por operador ou atacante levaria a RCE no contexto
+        # do usuário de backup (CWE-78). Preferir o config-parser seguro
+        # (com denylist de variáveis perigosas) quando disponível.
+        if declare -F load_config_file >/dev/null 2>&1; then
+            load_config_file "$runtime_env"
+        else
+            # Fallback: validar que o arquivo é key=value apenas, sem
+            # construções shell perigosas. Rejeita $var, backticks, ||, &&,
+            # ;, source/. e exit. Ainda usa `source` mas só após validação.
+            if grep -qE '(^|[^\\])\$|`|\|\||&&|;|^[[:space:]]*(source|\.)[[:space:]]|^[[:space:]]*exit[[:space:]]' "$runtime_env" 2>/dev/null; then
+                backup_log "ERRO: Arquivo env contém construções perigosas: $runtime_env"
+                return 1
+            fi
+            # shellcheck source=/dev/null
+            set -a
+            source "$runtime_env"
+            set +a
+        fi
     fi
 
     # Re-aplica defaults caso runtime.env tenha sobrescrito com valor vazio.

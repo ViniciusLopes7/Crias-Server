@@ -17,26 +17,25 @@ license = "MIT"
 packages = [{include = "crias_bot", from = "src"}]
 
 [tool.poetry.dependencies]
-python = "^3.11"
-"discord.py" = "^2.4.0"
-grpcio = "^1.62.0"
-grpcio-tools = "^1.62.0"
-protobuf = "^4.25.0"
-pyyaml = "^6.0.1"
-python-dotenv = "^1.0.1"
+python = "^3.12"
+"discord.py" = "~=2.4.0"
+grpcio = "~=1.62.0"
+grpcio-tools = "~=1.62.0"
+protobuf = "~=4.25.0"
+python-dotenv = "~=1.0.1"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.0.0"
-pytest-asyncio = "^0.23.0"
-pytest-cov = "^4.1.0"
-ruff = "^0.3.0"
-mypy = "^1.9.0"
+pytest = "~=8.0.0"
+pytest-asyncio = "~=0.23.0"
+pytest-cov = "~=4.1.0"
+ruff = "~=0.3.0"
+mypy = "~=1.9.0"
 
 [tool.poetry.scripts]
 crias-bot = "crias_bot.__main__:main"
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 100
 
 # Excluir código protobuf gerado (grpc_gen/) — é auto-gerado e não deve ser lintado.
@@ -63,7 +62,7 @@ ignore = [
 ]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
@@ -71,3 +70,8 @@ warn_unused_configs = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# 2E-008: prefer `pythonpath = ["src"]` (pytest 8+) em vez do hack
+# `sys.path.insert` em conftest.py. Permite rodar `pytest` sem `PYTHONPATH=src`
+# e valida que o empacotamento (packages=[{include="crias_bot", from="src"}])
+# está correto. Para dev, `pip install -e .` também funciona.
+pythonpath = ["src"]

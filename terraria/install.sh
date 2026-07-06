@@ -119,8 +119,14 @@ download_and_extract_terraria() {
     fi
 
     print_step "Baixando servidor Terraria Vanilla..."
-    tmp_zip=$(mktemp /tmp/terraria-server-XXXXXX.zip)
-    tmp_dir=$(mktemp -d)
+    # 2D-022: usar mktemp -t (respeita $TMPDIR) com namespace crias- e
+    # template XXXXXX, em vez de hardcoded /tmp/terraria-server-XXXXXX.zip.
+    # 2D-008: trap RETURN garante cleanup mesmo em set -e / exit prematuro.
+    # --suffix=.zip mantém extensão reconhecível sem quebrar a regra XXXXXX.
+    tmp_zip="$(mktemp --suffix=.zip -t crias-terraria-XXXXXX)"
+    tmp_dir="$(mktemp -d -t crias-terraria-XXXXXX)"
+    # shellcheck disable=SC2064  # queremos expansão imediata dos paths
+    trap 'rm -f -- "$tmp_zip"; rm -rf -- "$tmp_dir"' RETURN
 
     # Item S2: SHA256 obrigatório por default (TERRARIA_SHA256 em config.env).
     if ! download_and_verify "$TERRARIA_DOWNLOAD_URL" "$tmp_zip" TERRARIA_SHA256; then

@@ -180,6 +180,13 @@ cmd_reconfigure_hardware() {
     echo "Max players: $TT_MAX_PLAYERS"
     echo "NPC stream: $TT_NPC_STREAM"
 
+    # SH-004: valida SERVER_DIR antes de chown -R (previne path traversal)
+    if declare -F validate_server_dir >/dev/null 2>&1; then
+        if ! validate_server_dir "$SERVER_DIR"; then
+            err "SERVER_DIR invalido, nao aplicando chown: $SERVER_DIR"
+            return 1
+        fi
+    fi
     chown -R "${SERVER_USER}:${SERVER_USER}" "$SERVER_DIR"
 
     warn "Reconfiguracao aplicada em arquivos. Reinicie o servico para aplicar no runtime: sudo systemctl restart $SERVICE_NAME"

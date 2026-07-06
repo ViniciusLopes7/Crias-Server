@@ -5,13 +5,48 @@ Formato: `MAJOR.MINOR.PATCH` ([SemVer](https://semver.org/lang/pt-BR/)).
 
 ## [Unreleased]
 
+### Corrigido (Auditoria de Segurança — 1ª e 2ª passadas)
+
+- **Segurança (CRÍTICO)**: Injeção de script via nome de tag no CI (CICD-001)
+- **Segurança (CRÍTICO)**: Download do crias-agent sem verificação SHA256 (SH-002)
+- **Segurança (CRÍTICO)**: Symlink attack em `/tmp` no installer (SH-001)
+- **Segurança (CRÍTICO)**: Injeção RCON via bot Discord (BOT-001)
+- **Segurança (CRÍTICO)**: Token gRPC em cleartext sobre canal inseguro (BOT-002)
+- **Supply Chain (CRÍTICO)**: `go.sum` commitado para integridade de dependências (GO-001/DEP-001)
+- **Supply Chain (CRÍTICO)**: RPCs gRPC sem deadline — goroutine leak risk (GO-002)
+- **Supply Chain (CRÍTICO)**: `StreamConsole` sem timeout — goroutine leak (GO-003)
+- **Supply Chain (CRÍTICO)**: `pip` sem hash pining (DEP-002)
+- **Supply Chain (CRÍTICO)**: `pyyaml` dead dependency removida (DEP-003)
+- **Testes (CRÍTICO)**: `iso-label-validate.sh` agora tem assertions reais (TST-001)
+- **Testes (HIGH)**: `tests/run-all.sh` agora executa testes Go do `discord-agent/` (2E-001)
+- **Testes (HIGH)**: `--cov-fail-under=50` no pytest para impedir regressão de cobertura (2E-002)
+- **Docs (CRÍTICO)**: Links quebrados `tailscale.md` → `Tailscale.md` em 7 arquivos `.md` (2E-011)
+- **Docs (HIGH)**: Contagem de testes e jobs de CI atualizada em todos os docs (124 Python + 55 Go + 22 bash; 12 jobs de CI) (2E-012/2E-013)
+- **Docs (HIGH)**: Versões de runtime padronizadas: Go 1.23 + Python 3.12 (2E-014/2E-015)
+- **Docs (HIGH)**: `/mc logs [n]` marcado como planejado (ainda não implementado) (2E-016)
+- **Docs (HIGH)**: Diagrama de arquitetura do README: `mcrcon` → `gorcon (github.com/gorcon/rcon)` no agente Go (2E-017)
+- E 36 findings ALTOS, 73 MÉDIOS corrigidos (ver `worklog.md` para detalhes)
+
+### Adicionado (Auditoria de Segurança)
+
+- `SECURITY.md` — política de segurança e divulgação de vulnerabilidades
+- `CONTRIBUTING.md` — guia de contribuição com setup, padrões e fluxo de PR
+- `CODE_OF_CONDUCT.md` — Contributor Covenant 2.1 (PT-BR)
+- `discord-agent/internal/server/server_test.go` — 18 testes para `server.go` (antes 0% cobertura) — **saí de "Planejado"**
+- Rate limiting no agente Go (5 req/min por IP)
+- TLS/mTLS opcional no agente Go
+- Recovery interceptors no gRPC server (panics não derrubam o agente)
+- Validação de formato de `auth_token` (64 hex chars) — fail-fast em token malformado
+- Paths absolutos em todos os subprocess do agente (`/usr/bin/sudo`, etc.)
+- Checksums SHA256 individuais por artefato na release (não só `sha256sums.txt` global)
+- Testes de validação de config (placeholder auth_token, token curto, token não-hex, token uppercase, TLS exigido para bind não-loopback, placeholder RCON, service_name inválido) — 11 novos testes em `config_test.go`
+
 ### Planejado
 - Métricas Prometheus no agente (memory, gRPC latência, eventos emitidos)
 - Wake-on-LAN endpoint no agente
 - TLS nativo no agente (sem depender de Tailscale Funnel)
 - Bridge chat Discord ↔ Minecraft (mensagens do Discord aparecem no jogo)
-- Testes de integração com mock de systemctl/journalctl/mcrcon
-- `server_test.go` cobrindo handlers gRPC e helpers
+- `/mc logs [n]` — últimas N linhas via `StreamConsole` com tail (ver `ROADMAP.md`)
 - Dependabot/Renovate para auto-update de deps Go e Python
 - Scheduled run semanal do CI para capturar regressões em deps
 
@@ -184,7 +219,7 @@ Formato: `MAJOR.MINOR.PATCH` ([SemVer](https://semver.org/lang/pt-BR/)).
 - `Makefile` — targets `proto`, `tidy`, `build`, `build-all`, `test`, `lint`, `clean`, `docker`
 - `Dockerfile` — multi-stage com `scratch` final (~5-10 MB)
 - `agent.example.yaml` — template sem secrets
-- CI: workflow único `ci.yml` com 9 jobs paralelos (lint-shell, test-shell, test-agent, build-agent, test-bot, build-bot-docker, build-iso, validate-iso, release) — release unificado em tag `v*` com ISO + slim.zip + full.zip + agent binaries + sha256sums
+- CI: workflow único `ci.yml` com 12 jobs paralelos (lint-shell, lint-go, lint-python, test-shell, test-shell-arch, test-go, test-python, build-iso, test-iso-qemu, build-agent, build-bot, release) — release unificado em tag `v*` com ISO + slim.zip + full.zip + agent binaries + sha256sums
 
 #### Bot Discord (`discord-bot/`)
 - `pyproject.toml` — Poetry config com discord.py 2.4, grpcio, pyyaml, python-dotenv
@@ -193,11 +228,11 @@ Formato: `MAJOR.MINOR.PATCH` ([SemVer](https://semver.org/lang/pt-BR/)).
 - `src/crias_bot/bot.py` — `CriasBot` (discord.py 2.x) + `MinecraftCog` com slash commands `/mc start|stop|restart|status|players|say|console|health`, `event_bridge` task posta eventos em `#controle`, `_console_stream_loop` com buffer 2s + chunks 1800 chars
 - `src/crias_bot/__main__.py` — entry point com logging configurado
 - `.env.example`, `Dockerfile` (multi-stage Python 3.12 slim), `railway.json`
-- Testes: `test_config.py` (13 testes), `test_bot_helpers.py` (12 testes), `test_agent_client.py` (6 testes)
+- Testes: `test_config.py` (13 testes), `test_bot_helpers.py` (38 testes), `test_agent_client.py` (40 testes), `test_embeds.py` (33 testes) — total 124 testes Python
 - CI: `test-bot` job no `ci.yml` — ruff check + pytest + Docker build smoke
 
 #### CI/CD + docs
-- Workflow único GitHub Actions: `.github/workflows/ci.yml` com 11 jobs paralelos (lint + test + build) + release consolidada no final
+- Workflow único GitHub Actions: `.github/workflows/ci.yml` com 12 jobs paralelos (lint + test + build + release) + release consolidada no final
 - Release automation: tag `v*.*.*` cria release única com ISO + binário Go (amd64) + Docker image bot + source archives (full/slim) + checksums + assinatura GPG opcional
 - `ROADMAP.md` consolidando status de implementação
 - `docs/CHANGELOG.md` (este arquivo)
@@ -229,7 +264,7 @@ Formato: `MAJOR.MINOR.PATCH` ([SemVer](https://semver.org/lang/pt-BR/)).
 
 #### Go
 - `internal/rcon/client.go` — adicionado `sync.Mutex` para proteger `conn`/`lastUse` (data race safe); `WhitelistedCommands` agora é `var` package-level (evita realocação); removido `rcon.WithDialTimeout` (não existe na v1.3.5)
-- `internal/server/server.go` — `interface{}` → `any` (Go 1.22+); `subtle.ConstantTimeCompare` em `validateToken` (previne timing attack); `bytes.IndexByte` da stdlib substitui helper customizado
+- `internal/server/server.go` — `interface{}` → `any` (Go 1.23+); `subtle.ConstantTimeCompare` em `validateToken` (previne timing attack); `bytes.IndexByte` da stdlib substitui helper customizado
 - `internal/server/autoshutdown.go` — tratado erro de `systemctl stop` (só publica `ServerStopped` se sucesso); `strconv.Itoa` substitui helper `formatInt`
 - `cmd/crias-agent/main.go` — `log.Printf + return` substitui `log.Fatalf` (não pula `defer`); `defer signal.Stop(sigCh)`
 

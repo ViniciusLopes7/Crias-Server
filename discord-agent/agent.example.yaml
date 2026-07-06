@@ -7,9 +7,21 @@
 # IMPORTANTE: nunca commitar agent.yaml com secrets reais. Use este exemplo.
 
 agent:
-  bind_address: "127.0.0.1"  # 0.0.0.0 se exposto direto; recomendado 127.0.0.1 + Tailscale Funnel
+  # bind_address: use 127.0.0.1 + Tailscale Funnel para acesso remoto seguro.
+  # 0.0.0.0/:: REQUER TLS configurado (tls_cert/tls_key) — sem TLS o token
+  # transita em cleartext pela rede (CWE-319). O config.Load() rejeita
+  # bind_address != loopback sem TLS (GO-005).
+  bind_address: "127.0.0.1"
   port: 8473
-  auth_token: "CHANGE_ME_TO_RANDOM_64_HEX_CHARS"  # gerado pelo install.sh via openssl rand -hex 32
+  # auth_token DEVE ter 64 caracteres hex minúsculos (256 bits entropia).
+  # Gere com: openssl rand -hex 32
+  # GO-011: config.Load() rejeita placeholders e tokens fora do formato.
+  auth_token: "CHANGE_ME_TO_RANDOM_64_HEX_CHARS"
+  # TLS opcional (obrigatório se bind_address != 127.0.0.1/::1/localhost).
+  # Caminhos para arquivos PEM. Para mTLS, adicione tls_client_ca no futuro.
+  # Gere com: openssl req -x509 -newkey rsa:4096 -nodes -keyout agent.key -out agent.crt -days 365 -subj "/CN=crias-agent"
+  tls_cert: ""  # ex.: /etc/crias/tls/agent.crt
+  tls_key: ""   # ex.: /etc/crias/tls/agent.key
 
 server:
   stack: "minecraft"  # "minecraft" | "terraria"
@@ -22,7 +34,9 @@ server:
     enabled: true
     host: "127.0.0.1"
     port: 25575
-    password: "CHANGE_ME_FROM_SERVER_PROPERTIES"  # lido de server.properties pelo install.sh
+    # Password real do server.properties. GO-069: config.Load() rejeita
+    # placeholders (CHANGE_ME_*) quando rcon.enabled=true.
+    password: "CHANGE_ME_FROM_SERVER_PROPERTIES"
 
 features:
   auto_shutdown:

@@ -325,7 +325,10 @@ safe_mkdir() {
 safe_remove_dir() {
     local target_dir="${1:-}"
 
-    if [ -z "$target_dir" ] || [ "$target_dir" = "/" ]; then
+    # SH-004: validar path antes de rm -rf para evitar destruição de dirs
+    # do sistema (CWE-22, CWE-269). A validação cobre paths vazios,
+    # relativos, raiz e áreas críticas do sistema.
+    if ! validate_server_dir "$target_dir"; then
         print_warning "safe_remove_dir recebeu caminho invalido: '$target_dir'"
         return 1
     fi
@@ -335,6 +338,59 @@ safe_remove_dir() {
     fi
 
     rm -rf -- "$target_dir"
+}
+
+# ---------------------------------------------------------------------------
+# SH-004: Valida path de diretório de servidor antes de operações destrutivas
+# (chown -R, rm -rf). Rejeita paths vazios, relativos, raiz e áreas críticas
+# do sistema que poderiam permitir privesc ou destruição do host.
+# 2D-001: Resolve symlinks antes da validação para prevenir bypass (CWE-59).
+# Referência: CWE-22 (Path Traversal), CWE-269 (Improper Privilege Management),
+#             CWE-59 (Link Following).
+# Retorna 0 se o path é seguro, 1 caso contrário.
+# ---------------------------------------------------------------------------
+validate_server_dir() {
+    local dir="${1:-}"
+
+    # Rejeitar vazio, raiz, ou path relativo logo no início.
+    if [ -z "$dir" ] || [ "$dir" = "/" ]; then
+        print_error "Diretório de servidor inválido (vazio ou raiz): '$dir'"
+        return 1
+    fi
+
+    # Path deve ser absoluto.
+    if [[ "$dir" != /* ]]; then
+        print_error "Diretório de servidor inválido (caminho relativo): '$dir'"
+        return 1
+    fi
+
+    # 2D-001: Resolver symlinks antes de validar. realpath -m resolve o caminho
+    # mesmo se o alvo não existir ainda (comum em setup inicial). Se realpath
+    # falhar (busybox sem coreutils), mantém o path original.
+    local resolved
+    resolved="$(realpath -m "$dir" 2>/dev/null || echo "$dir")"
+
+    # Rejeitar vazio/raiz no path resolvido (caso symlink aponte para /).
+    if [ -z "$resolved" ] || [ "$resolved" = "/" ]; then
+        print_error "Diretório de servidor inválido após resolução (vazio ou raiz): '$dir' -> '$resolved'"
+        return 1
+    fi
+
+    # Rejeitar áreas críticas do sistema (CWE-732 — Incorrect Permission
+    # Assignment for Critical Resource). Estes prefixos nunca devem ser
+    # alvo de chown -R ou rm -rf vindos do installer.
+    # Validação feita no path RESOLVIDO para impedir bypass via symlink
+    # (ex.: /opt/minecraft-server -> /etc).
+    case "$resolved" in
+        /usr|/usr/*|/etc|/etc/*|/bin|/bin/*|/sbin|/sbin/*|/boot|/boot/*|\
+        /root|/root/*|/lib|/lib*|/proc|/proc/*|/sys|/sys/*|/dev|/dev/*|\
+        /var/lib|/var/lib/*|/var/log|/var/log/*|/opt/crias-agent|/opt/crias-agent/*)
+            print_error "Diretório de servidor perigoso (área do sistema): '$dir' (resolved: '$resolved')"
+            return 1
+            ;;
+    esac
+
+    return 0
 }
 
 sanitize_service_name() {

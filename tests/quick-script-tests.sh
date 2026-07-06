@@ -8,17 +8,11 @@ cd "$ROOT_DIR"
 # shellcheck source=/dev/null
 source "$ROOT_DIR/tests/lib/assert.sh"
 
-echo "[quick-script-tests] Verificando sintaxe bash de todos os scripts..."
-mapfile -t scripts < <(find . -type f -name "*.sh" -not -path "./.git/*" | sort)
-
-if [ "${#scripts[@]}" -eq 0 ]; then
-    echo "[quick-script-tests] Nenhum script .sh encontrado para validar." >&2
-    exit 1
-fi
-
-for script in "${scripts[@]}"; do
-    bash -n "$script"
-done
+# TST-002 / TST-009: a checagem de sintaxe (`bash -n`) de TODOS os .sh do
+# repositório é responsabilidade exclusiva de `tests/run-all.sh` (canonical
+# test runner). Executá-la aqui também era redundante (3x em CI) e ainda varria
+# o diretório `tests/` (recursão — bash -n em scripts de teste não é alvo
+# deste quick test). Para validar sintaxe, rode: `bash tests/run-all.sh`.
 
 echo "[quick-script-tests] Validando placeholders criticos de boot..."
 assert_file archiso-profile/grub/grub.cfg

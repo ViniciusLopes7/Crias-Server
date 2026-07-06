@@ -57,11 +57,17 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Copia venv (completamente isolado de HOME/USER).
-COPY --from=builder /opt/venv /opt/venv
+# Create non-root user before COPY so we can use --chown on the COPY steps
+# (2A-031 regression fix: --chown avoids a separate `RUN chown -R` layer
+# with root-owned files; smaller image, fewer layers).
+RUN groupadd --system --gid 1001 crias \
+    && useradd --system --uid 1001 --gid crias --create-home --home-dir /home/crias crias
 
-# Copia código fonte do bot.
-COPY --from=builder /app/src /app/src
+# Copia venv (completamente isolado de HOME/USER) com --chown direto no COPY.
+COPY --chown=1001:1001 --from=builder /opt/venv /opt/venv
+
+# Copia código fonte do bot com --chown direto no COPY.
+COPY --chown=1001:1001 --from=builder /app/src /app/src
 
 # Ativa venv via PATH. PYTHONPATH aponta para o código do bot.
 ENV PATH=/opt/venv/bin:$PATH
@@ -71,13 +77,8 @@ ENV PYTHONPATH=/app/src
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Cria usuário não-root e ajusta permissões do venv e do código.
-# Usuário 1001 é o padrão do Railway; alinhamos perms para evitar EACCES.
-RUN groupadd --system --gid 1001 crias \
-    && useradd --system --uid 1001 --gid crias --create-home --home-dir /home/crias crias \
-    && chown -R 1001:1001 /app /opt/venv
-
-USER 1001
+# 2A-032: USER crias (named user) for readability; equivalent to 1001:1001.
+USER crias
 
 # Healthcheck simples: tenta importar grpc e discord (valida venv + PYTHONPATH).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

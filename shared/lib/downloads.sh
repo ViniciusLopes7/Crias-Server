@@ -116,6 +116,11 @@ download_and_verify() {
     fi
 
     tmpfile=$(mktemp)
+    # 2D-008: cleanup garantido em qualquer caminho de saída (set -e, return,
+    # erro de rede, checksum inválido). Antes deste trap, múltiplos `rm -f`
+    # espalhados pela função podiam ser pulados em paths de erro.
+    # shellcheck disable=SC2064
+    trap 'rm -f -- "$tmpfile"' RETURN
     mkdir -p "$(dirname "$dest")"
 
     if ! _curl_with_retry "$url" "$tmpfile"; then
@@ -135,7 +140,14 @@ download_and_verify() {
         fi
 
         print_warning "Nenhum checksum SHA256 fornecido para $url; procedendo sem verificacao (NAO RECOMENDADO)"
-        mv "$tmpfile" "$dest"
+        # 2D-018: usar `install` em vez de `mv` para garantir cópia atômica
+        # cross-device. `mv` entre filesystems diferentes faz copy+delete não
+        # atômico; se interrompido, $dest fica parcial. `install` abre o
+        # destino com O_CREAT|O_TRUNC e escreve; se falhar, $dest pode ficar
+        # parcial mas o source ($tmpfile) ainda existe para retry. Após
+        # sucesso, removemos o source explicitamente.
+        install -m 0644 "$tmpfile" "$dest"
+        rm -f "$tmpfile"
         return 0
     fi
 
@@ -157,7 +169,9 @@ download_and_verify() {
         return 2
     fi
 
-    mv "$tmpfile" "$dest"
+    # 2D-018: usar `install` em vez de `mv` (ver comentário acima).
+    install -m 0644 "$tmpfile" "$dest"
+    rm -f "$tmpfile"
     return 0
 }
 

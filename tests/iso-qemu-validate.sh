@@ -104,7 +104,7 @@ fi
 echo "  OK: iso_label='$iso_label' (valid: ${#iso_label} chars)"
 
 # bootmodes: deve conter bios.syslinux e/ou uefi.grub / uefi.systemd-boot
-valid_bootmodes="bios.syslinux uefi.grub uefi-systemd-boot"
+valid_bootmodes="bios.syslinux uefi.grub uefi.systemd-boot"
 for mode in $bootmodes_str; do
     case "$mode" in
         bios.syslinux|uefi.grub|uefi.systemd-boot)

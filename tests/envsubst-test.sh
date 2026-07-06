@@ -70,14 +70,34 @@ if ! echo "$OUTPUT" | grep -q '^MemoryMax=2048M$'; then
     exit 1
 fi
 
-# 3. Validação com systemd-analyze verify (se disponível)
+# 3. Validação com systemd-analyze verify (se disponível).
+# TST-007: stderr não é mais silenciado (2>/dev/null removido). Warnings/errors
+# do systemd-analyze agora fazem o teste falhar (não são mais tratados como
+# "normais em container"). A única exceção é quando o systemd-analyze sequer
+# consegue rodar em container sem /sys/fs/cgroup montado — nesse caso, fazemos
+# SKIP explícito em vez de swallow silencioso.
 if command -v systemd-analyze >/dev/null 2>&1; then
     TMP_UNIT="/tmp/crias-minecraft-test.service"
     echo "$OUTPUT" > "$TMP_UNIT"
-    if ! systemd-analyze verify "$TMP_UNIT" 2>/dev/null; then
-        echo "WARN: systemd-analyze verify reportou warnings em $TMP_UNIT (normal em container)"
+    verify_log="$(mktemp /tmp/crias-systemd-analyze.XXXXXX.log)"
+    if systemd-analyze verify "$TMP_UNIT" > "$verify_log" 2>&1; then
+        # systemd-analyze retorna 0 mesmo com warnings — varremos o log em
+        # busca de palavras-chave de erro/warning para decidir.
+        if grep -Eiq 'error|warning|fail' "$verify_log"; then
+            echo "FAIL: systemd-analyze verify reportou problemas em $TMP_UNIT:" >&2
+            cat "$verify_log" >&2
+            rm -f "$TMP_UNIT" "$verify_log"
+            exit 1
+        fi
+        echo "OK: systemd-analyze verify passou sem warnings"
+    else
+        # Exit code != 0 significa erro real (unit inválida).
+        echo "FAIL: systemd-analyze verify falhou (exit != 0) em $TMP_UNIT:" >&2
+        cat "$verify_log" >&2
+        rm -f "$TMP_UNIT" "$verify_log"
+        exit 1
     fi
-    rm -f "$TMP_UNIT"
+    rm -f "$TMP_UNIT" "$verify_log"
 fi
 
 echo "OK: envsubst-test"

@@ -297,7 +297,7 @@ sudo tailscale status
 sudo tailscale up --force-reauth
 ```
 
-Veja [tailscale.md](tailscale.md) para mais detalhes.
+Veja [Tailscale.md](Tailscale.md) para mais detalhes.
 
 ### Backup falha
 
@@ -362,7 +362,7 @@ Para pontos operacionais que não devem ser esquecidos no dia a dia (firewall, r
 - [minecraft/README.md](minecraft/README.md) — Stack Minecraft (comandos, mods, troubleshooting)
 - [minecraft/mods.md](minecraft/mods.md) — Guias dos mods QoL (Chunky, EssentialCommands, etc.)
 - [terraria/README.md](terraria/README.md) — Stack Terraria
-- [tailscale.md](tailscale.md) — Conexão via Tailscale (VPN + Funnel)
+- [Tailscale.md](Tailscale.md) — Conexão via Tailscale (VPN + Funnel)
 - [restore.md](restore.md) — Restore de backups
 - [security.md](security.md) — Firewall, logs, hardening
 - [../README.md](../README.md) — README principal (visão geral)

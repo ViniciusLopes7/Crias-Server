@@ -45,6 +45,7 @@ OVERRIDABLE_VARS=(
     BACKUP_REMOTE_PATH
     BACKUP_NOTIFY_WEBHOOK
     INSTALL_AGENT
+    CRIAS_AGENT_SHA256
 )
 
 capture_env_overrides() {
@@ -121,6 +122,25 @@ load_config_file() {
             if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
                 local key="${BASH_REMATCH[1]}"
                 local value="${BASH_REMATCH[2]}"
+
+                # SH-003 / 2D-004: rejeitar nomes de variáveis perigosos que
+                # podem hijackar a execução do shell (PATH, IFS, BASH_ENV, etc.).
+                # Mesmo OVERRIDABLE_VARS sendo whitelist na capture/restore,
+                # load_config_file aceita qualquer key com regex; bloqueamos
+                # aqui as que controlam resolução de comandos, ambiente de
+                # subprocessos, ou têm side-effects quando atribuídas.
+                # Referência: CWE-78 (OS Command Injection via PATH hijack),
+                # CWE-665 (Improper Initialization).
+                case "$key" in
+                    PATH|IFS|BASH_ENV|ENV|SHELLOPTS|HOME|USER|SHELL|LD_PRELOAD|LD_LIBRARY_PATH|PYTHONPATH|\
+                    FUNCNAME|BASH_ALIASES|PROMPT_COMMAND|BASH_CMDS|DIRSTACK|GLOBIGNORE|INPUTRC|RC_URL|\
+                    TERM|COLUMNS|LINES|SHLVL|OPTERR|OPTIND|ORACLE_HOME|JAVA_HOME|PERL5LIB|RUBYLIB|NODE_PATH|\
+                    PS1|PS2|PS3|PS4|EUID|UID|PPID|BASH_VERSINFO|BASH_LINENO|BASH_SOURCE|LINENO|RANDOM|\
+                    SRANDOM|SECONDS|PIPESTATUS|MAPFILE)
+                        printf '[AVISO] Variavel perigosa %q ignorada em %s\n' "$key" "$config_file" >&2
+                        continue
+                        ;;
+                esac
 
                 if [ -z "$value" ]; then
                     continue

@@ -67,6 +67,13 @@ assert_not_grep_fixed() {
 
 assert_bash_syntax() {
     local path="$1"
-    bash -n "$path"
+    # 2E-005: imprime contexto do arquivo antes/depois do bash -n, para que
+    # o desenvolvedor veja qual arquivo falhou (consistente com assert_file,
+    # assert_grep, etc., que todos imprimem "[assert] ...").
+    if ! bash -n "$path" 2>/dev/null; then
+        echo "[assert] Falha de sintaxe bash em: $path" >&2
+        bash -n "$path" >&2 || true  # re-roda para capturar stderr original
+        exit 1
+    fi
 }
 

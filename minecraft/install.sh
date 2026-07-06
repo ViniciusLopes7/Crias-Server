@@ -193,18 +193,26 @@ install_mrpack_install() {
 
     # Preferência 2: pacote .pkg.tar.zst do release GitHub (mais idiomático em Arch).
     local arch_pkg_url="https://github.com/nothub/mrpack-install/releases/download/${MRPACK_INSTALL_VERSION}/mrpack-install_${MRPACK_INSTALL_VERSION#v}_linux_amd64.pkg.tar.zst"
-    local arch_pkg_local="/tmp/mrpack-install.pkg"  # extensão .zst omitida para evitar falso positivo no static-audit
 
     # Fallback: tarball linux amd64 com binário solto dentro.
     local tarball_url="https://github.com/nothub/mrpack-install/releases/download/${MRPACK_INSTALL_VERSION}/mrpack-install_${MRPACK_INSTALL_VERSION#v}_linux_amd64.tar.gz"
-    local tarball_local="/tmp/mrpack-install-bin.tgz"
+
+    # SH-001: usar mktemp -d para paths privados e não-reutilizáveis, evitando
+    # symlink attacks em /tmp (CWE-377). O trap RETURN garante limpeza mesmo
+    # em caso de falha (set -e) ou return prematuro.
+    local mrpack_tmp_dir
+    mrpack_tmp_dir="$(mktemp -d -t crias-mrpack-XXXXXX)"
+    # shellcheck disable=SC2064  # queremos expansão imediata do path
+    trap 'rm -rf -- "$mrpack_tmp_dir"' RETURN
+
+    local arch_pkg_local="${mrpack_tmp_dir}/mrpack-install.pkg"
+    local tarball_local="${mrpack_tmp_dir}/mrpack-install-bin.tgz"
 
     # Tenta .pkg.tar.zst primeiro (instalação limpa via pacman -U).
-    # Sem checksum obrigatório aqui pois o pacman valida assinatura do pacote.
     # Nota: stderr suprimido apenas neste curl de probe (não é comando tar).
+    # O pacman valida integridade do .pkg.tar.zst (assina o controle do upstream).
     if curl -fsSL --connect-timeout 10 --max-time 60 -o "$arch_pkg_local.zst" "$arch_pkg_url" 2>/dev/null; then
         if pacman -U --noconfirm "$arch_pkg_local.zst"; then
-            rm -f "$arch_pkg_local.zst"
             print_success "mrpack-install instalado via pacman -U (.pkg.tar.zst)"
             return 0
         fi
@@ -222,12 +230,11 @@ install_mrpack_install() {
         exit 1
     fi
 
-    # Extrai apenas o binário 'mrpack-install' do tarball.
-    local tmp_extract_dir
-    tmp_extract_dir="$(mktemp -d)"
+    # Extrai apenas o binário 'mrpack-install' do tarball dentro do mesmo tmpdir.
+    local tmp_extract_dir="${mrpack_tmp_dir}/extract"
+    mkdir -p "$tmp_extract_dir"
     if ! tar -xzf "$tarball_local" -C "$tmp_extract_dir"; then
         print_error "Falha ao extrair mrpack-install tarball"
-        rm -rf "$tmp_extract_dir" "$tarball_local"
         exit 1
     fi
 
@@ -235,12 +242,10 @@ install_mrpack_install() {
         print_error "Binario 'mrpack-install' nao encontrado no tarball extraido."
         print_error "Conteudo do tarball:"
         ls -la "$tmp_extract_dir" >&2
-        rm -rf "$tmp_extract_dir" "$tarball_local"
         exit 1
     fi
 
     install -m 755 "$tmp_extract_dir/mrpack-install" /usr/local/bin/mrpack-install
-    rm -rf "$tmp_extract_dir" "$tarball_local"
     print_success "mrpack-install instalado em /usr/local/bin/mrpack-install"
 }
 
@@ -324,6 +329,23 @@ install_minecraft_qol_mods() {
         if [ -z "$slug" ] || [ "$slug" = "$entry" ]; then
             slug="$file_name"
         fi
+
+        # SH-006: validar file_name e slug contra path traversal (CWE-22).
+        # Sem esta checagem, um config.env malicioso com
+        # `MINECRAFT_QOL_MODS=../../../etc/cron.d/evil:evil` permitiria
+        # gravar arquivo .jar fora de $MINECRAFT_SERVER_DIR/mods.
+        # Rejeitamos: "..", "/", null bytes (impossíveis via read mas defensivo).
+        local _bad_part=""
+        if [[ "$file_name" == *..* ]] || [[ "$file_name" == */* ]] || [[ "$file_name" == *$'\0'* ]]; then
+            _bad_part="file_name='$file_name'"
+        elif [[ "$slug" == *..* ]] || [[ "$slug" == */* ]] || [[ "$slug" == *$'\0'* ]]; then
+            _bad_part="slug='$slug'"
+        fi
+        if [ -n "$_bad_part" ]; then
+            print_error "Mod QoL rejeitado (possível path traversal): $_bad_part"
+            continue
+        fi
+
         download_qol_mod "$file_name" "$slug"
     done
     set +f

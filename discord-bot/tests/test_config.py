@@ -1,4 +1,19 @@
-"""Tests para config.py."""
+"""Tests para config.py.
+
+TODO (2E-004 / 2E-020 — coordenar com Task 3-A): o `agent_token` no Python
+ainda não tem validação de formato (regex `^[0-9a-f]{64}$`), só de emptiness.
+O lado Go já rejeita placeholders e tokens malformados (`config.go:113-123`).
+Quando a Task 3-A adicionar a validação no `config.py`, adicionar aqui:
+
+- `test_load_config_rejects_placeholder_agent_token` — token = "CHANGE_ME_..."
+- `test_load_config_rejects_short_agent_token` — token com < 64 chars
+- `test_load_config_rejects_uppercase_agent_token` — token com hex maiúsculo
+- `test_load_config_rejects_non_hex_agent_token` — token com 'g' (não-hex)
+- `test_load_config_accepts_valid_agent_token` — token 64-hex passa
+
+Esses testes devem espelhar `discord-agent/internal/config/config_test.go`
+(`TestLoad_PlaceholderAuthToken`, `TestLoad_ShortAuthToken`, etc.).
+"""
 
 from __future__ import annotations
 
@@ -63,7 +78,7 @@ def test_load_config_missing_agent_token(monkeypatch):
 def test_load_config_full(monkeypatch):
     monkeypatch.setenv("DISCORD_TOKEN", "tok")
     monkeypatch.setenv("CRIAS_AGENT_HOST", "https://host.ts.net")
-    monkeypatch.setenv("CRIAS_AGENT_TOKEN", "abc123")
+    monkeypatch.setenv("CRIAS_AGENT_TOKEN", "a" * 64)
     monkeypatch.setenv("DISCORD_GUILD_ID", "123")
     monkeypatch.setenv("DISCORD_ADMIN_ROLE_IDS", "111,222")
     monkeypatch.setenv("DISCORD_MODERATOR_ROLE_IDS", "333")
@@ -74,7 +89,7 @@ def test_load_config_full(monkeypatch):
     cfg = load_config()
     assert cfg.discord_token == "tok"
     assert cfg.agent_host == "https://host.ts.net"
-    assert cfg.agent_token == "abc123"
+    assert cfg.agent_token == "a" * 64
     assert cfg.guild_id == 123
     assert cfg.admin_role_ids == frozenset({111, 222})
     assert cfg.moderator_role_ids == frozenset({333})

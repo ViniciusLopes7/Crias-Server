@@ -14,7 +14,7 @@ Instalador modular para servidor de jogos em Arch Linux, com escolha inicial ent
 - **Supply chain seguro**: SHA256 obrigatório em downloads, `mrpack-install` pinado em versão específica, `packages.lock` com versões mínimas de pacotes pacman.
 - **Backup com RCON save-lock** (Minecraft): `save-off` + `save-all` antes do `tar`, `save-on` depois.
 - **Controle remoto via Discord** (opcional): agente Go (`crias-agent`) + bot Python (`discord-bot`) com slash commands `/mc start|stop|status|players|say|console|health`.
-- **CI/CD**: workflow único `ci.yml` com 11 jobs paralelos (lint + test + build), release consolidada com ISO + binários Go + Docker bot + source archives + checksums + assinatura GPG opcional.
+- **CI/CD**: workflow único `ci.yml` com 12 jobs paralelos (lint + test + build + release), release consolidada com ISO + binários Go + Docker bot + source archives + checksums + assinatura GPG opcional.
 - **Modo não-interativo e DRY_RUN** para testes em CI.
 
 ## Quick Start
@@ -83,8 +83,8 @@ Flags importantes em `config.env`:
 ├── discord-agent/              # Agente Go (gRPC + RCON + eventos)
 ├── discord-bot/                # Bot Python (discord.py 2.x + slash commands)
 ├── archiso-profile/            # Perfil archiso para build de ISO bootável
-├── tests/                      # 22 testes bash + 36 testes Python + helpers
-└── .github/workflows/          # Workflow único: ci.yml (11 jobs paralelos + release)
+├── tests/                      # 22 testes bash + 124 testes Python + 55 testes Go + helpers
+└── .github/workflows/          # Workflow único: ci.yml (12 jobs paralelos + release)
 ```
 
 ## Tuning por hardware
@@ -148,7 +148,7 @@ Quando `INSTALL_AGENT=true`, o `install.sh` instala:
            ▼
    sudo systemctl start/stop/restart minecraft
    sudo -u minecraft mc-manager.sh backup
-   mcrcon say/list/save-*
+   gorcon (github.com/gorcon/rcon) say/list/save-*
 ```
 
 ### Slash Commands disponíveis no Discord
@@ -161,6 +161,7 @@ Quando `INSTALL_AGENT=true`, o `install.sh` instala:
 | `/mc status` | Todos | Online/offline, players, RAM, tier |
 | `/mc players` | Todos | Lista quem está online |
 | `/mc say <msg>` | Mod+ | Mensagem no chat do jogo via RCON |
+| `/mc logs [n]` | Admin | (planejado — ver ROADMAP.md) Últimas N linhas do journalctl |
 | `/mc console` | Admin | Toggle stream de console no canal #console |
 | `/mc health` | Admin | Health check (porta + RCON) |
 
@@ -180,7 +181,7 @@ O bot Discord conecta neste endpoint HTTPS sem precisar estar na VPN.
 
 ## CI/CD
 
-Workflow único: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — 11 jobs em paralelo + release consolidada.
+Workflow único: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — 12 jobs em paralelo + release consolidada.
 
 ### Jobs de lint + test (paralelos, rodam em todo push/PR)
 
@@ -221,7 +222,7 @@ Workflow único: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — 11 j
 ## Testes
 
 ```bash
-# Bateria completa (22 testes bash + 36 testes Python)
+# Bateria completa (22 testes bash + 124 testes Python + 55 testes Go)
 bash tests/run-all.sh
 
 # Apenas bash rápido
@@ -237,7 +238,7 @@ ISO_PATH=/path/to/crias.iso bash tests/run-all.sh
 - [docs/tutorial.md](docs/tutorial.md) — Tutorial passo-a-passo de operação
 - [docs/minecraft/README.md](docs/minecraft/README.md) — Stack Minecraft + mods
 - [docs/terraria/README.md](docs/terraria/README.md) — Stack Terraria
-- [docs/tailscale.md](docs/tailscale.md) — Conexão via Tailscale (VPN + Funnel)
+- [docs/Tailscale.md](docs/Tailscale.md) — Conexão via Tailscale (VPN + Funnel)
 - [docs/restore.md](docs/restore.md) — Restore de backups
 - [docs/security.md](docs/security.md) — Firewall, logs, health checks, MAC
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) — Histórico de mudanças por versão

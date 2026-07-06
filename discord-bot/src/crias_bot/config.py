@@ -6,12 +6,18 @@ Lê do ambiente (Railway injeta via variáveis) ou de .env local.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 
 from dotenv import load_dotenv
 
 # Carrega .env se existir (desenvolvimento local).
 load_dotenv()
+
+# Validação de formato do auth_token (BOT-040).
+# 64 hex chars = 256 bits de entropia (gerado por `openssl rand -hex 32`).
+_TOKEN_RE = re.compile(r"^[0-9a-f]{64}$")
+_TOKEN_PLACEHOLDER = "CHANGE_ME_TO_RANDOM_64_HEX_CHARS"
 
 
 @dataclass(frozen=True)
@@ -40,6 +46,10 @@ class BotConfig:
     status_cache_seconds: int = 15  # cache de GetStatus (não consulta agente a cada msg)
     reconnect_max_delay: int = 60  # backoff exponencial até 60s
 
+    # TLS (BOT-004): pinning de CA opcional para o canal gRPC
+    agent_tls_ca_path: str | None = None
+    agent_use_tls: bool = False
+
 
 def load_config() -> BotConfig:
     """Carrega config do ambiente. Levanta ValueError se obrigatórios faltarem."""
@@ -54,6 +64,17 @@ def load_config() -> BotConfig:
     agent_token = os.environ.get("CRIAS_AGENT_TOKEN", "")
     if not agent_token:
         raise ValueError("CRIAS_AGENT_TOKEN não definido (64 hex chars)")
+    # BOT-040: valida formato e rejeita placeholder
+    if agent_token == _TOKEN_PLACEHOLDER:
+        raise ValueError(
+            "CRIAS_AGENT_TOKEN ainda é o placeholder — "
+            "gere com: openssl rand -hex 32"
+        )
+    if not _TOKEN_RE.match(agent_token):
+        raise ValueError(
+            "CRIAS_AGENT_TOKEN deve ter 64 caracteres hex "
+            "(gerado por openssl rand -hex 32)"
+        )
 
     guild_id_raw = os.environ.get("DISCORD_GUILD_ID", "").strip()
     guild_id = int(guild_id_raw) if guild_id_raw else None
@@ -68,6 +89,10 @@ def load_config() -> BotConfig:
     cache_secs = _parse_int_env("STATUS_CACHE_SECONDS", 15)
     reconnect_max = _parse_int_env("RECONNECT_MAX_DELAY", 60)
 
+    # TLS (BOT-004)
+    tls_ca_path = os.environ.get("CRIAS_AGENT_TLS_CA_PATH", "").strip() or None
+    use_tls = os.environ.get("CRIAS_AGENT_USE_TLS", "false").strip().lower() == "true"
+
     return BotConfig(
         discord_token=token,
         guild_id=guild_id,
@@ -80,6 +105,8 @@ def load_config() -> BotConfig:
         agent_token=agent_token,
         status_cache_seconds=cache_secs,
         reconnect_max_delay=reconnect_max,
+        agent_tls_ca_path=tls_ca_path,
+        agent_use_tls=use_tls,
     )
 
 

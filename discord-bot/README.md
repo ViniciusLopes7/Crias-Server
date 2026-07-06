@@ -39,7 +39,7 @@ Bot Discord em Python (discord.py 2.x) para controle remoto do **Crias-Server**.
 | `/mc status` | Todos | Online/offline, players, RAM, tier |
 | `/mc players` | Todos | Lista quem está online |
 | `/mc say <msg>` | Mod+ | Manda mensagem no chat do jogo via RCON |
-| `/mc logs [n]` | Admin | Últimas N linhas do journalctl |
+| `/mc logs [n]` | Admin | (planejado — ver ROADMAP.md) Últimas N linhas do journalctl |
 | `/mc console` | Admin | Ativa/desativa stream de console no canal #console |
 | `/mc health` | Admin | Health check passivo |
 
@@ -88,7 +88,7 @@ Na primeira execução, o bot sincroniza slash commands automaticamente:
 
 ### Pré-requisitos
 
-- Python 3.11+
+- Python 3.12+
 - [Poetry](https://python-poetry.org/) (recomendado) OU pip + venv
 
 ### Setup

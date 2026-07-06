@@ -155,5 +155,5 @@ source /etc/profile.d/crias-server.sh
 ## Veja também
 
 - [tutorial.md](tutorial.md) — Tutorial de operação
-- [tailscale.md](tailscale.md) — Conexão via Tailscale
+- [Tailscale.md](Tailscale.md) — Conexão via Tailscale
 - [../README.md](../README.md) — README principal (hardening do crias-agent)

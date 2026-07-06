@@ -3,7 +3,9 @@
 Go binary que faz ponte entre o servidor de jogo (Minecraft/Terraria) e o
 bot Discord. Escuta gRPC em `localhost:8473`, exposto externamente via
 **Tailscale Funnel** (HTTPS). Não replica lógica do `mc-manager.sh` —
-apenas delega via `sudo systemctl` e `mcrcon`.
+apenas delega via `sudo systemctl` e usa a biblioteca Go nativa
+[gorcon/rcon](https://github.com/gorcon/rcon) (sem binary externo) para
+comandos RCON.
 
 ## Visão de Alto Nível
 
@@ -23,7 +25,7 @@ apenas delega via `sudo systemctl` e `mcrcon`.
            ▼
    sudo systemctl start/stop/restart minecraft
    sudo -u minecraft mc-manager.sh backup
-   mcrcon say/list/save-*
+   gorcon (github.com/gorcon/rcon) say/list/save-*
 ```
 
 ## Protocolo gRPC
@@ -110,7 +112,13 @@ crias-agent ALL=(root) NOPASSWD: /usr/bin/systemctl start minecraft, \
                                    /usr/bin/systemctl status minecraft, \
                                    /usr/bin/systemctl is-active minecraft
 crias-agent ALL=(minecraft) NOPASSWD: /opt/minecraft-server/backup-cron.sh, \
-                                      /opt/minecraft-server/mc-manager.sh *
+                                      /opt/minecraft-server/mc-manager.sh start, \
+                                      /opt/minecraft-server/mc-manager.sh stop, \
+                                      /opt/minecraft-server/mc-manager.sh restart, \
+                                      /opt/minecraft-server/mc-manager.sh status, \
+                                      /opt/minecraft-server/mc-manager.sh backup, \
+                                      /opt/minecraft-server/mc-manager.sh health, \
+                                      /opt/minecraft-server/mc-manager.sh hardware-report
 ```
 
 Gerado automaticamente pelo `install.sh` quando `INSTALL_AGENT=true`.
@@ -158,7 +166,7 @@ UMask=0027
 
 ## Build
 
-Requer Go 1.22+ e `protoc` (com `protoc-gen-go` + `protoc-gen-go-grpc`).
+Requer Go 1.23+ e `protoc` (com `protoc-gen-go` + `protoc-gen-go-grpc`).
 
 ```bash
 cd discord-agent/
@@ -192,9 +200,10 @@ make lint        # roda go vet
 ```
 
 Cobertura atual:
-- `internal/config/` — Load, defaults, validações
-- `internal/rcon/` — parse de resposta "list", whitelist de comandos
-- `internal/events/` — bus pub/sub com filtros, slow subscriber não bloqueia
+- `internal/config/` — Load, defaults, validações (19 testes — inclui placeholder token, TLS requirement, etc.)
+- `internal/rcon/` — parse de resposta "list", whitelist de comandos (12 testes)
+- `internal/events/` — bus pub/sub com filtros, slow subscriber não bloqueia (6 testes)
+- `internal/server/` — handlers gRPC, helpers, rate limiting (18 testes)
 
 ## Deploy
 
@@ -291,7 +300,8 @@ sudo ./install.sh  # detecta instalação existente e reconfigura
 ### RCON não responde
 
 ```bash
-# Testar mcrcon manualmente:
+# Testar mcrcon manualmente (este comando testa o protocolo RCON no host;
+# o agente Go usa a biblioteca gorcon internamente — não chama mcrcon):
 sudo -u minecraft MCRCON_PASS=<password> mcrcon -H 127.0.0.1 -P 25575 list
 # Verificar server.properties:
 grep -E '^(enable-rcon|rcon\.port|rcon\.password)' /opt/minecraft-server/server.properties
@@ -304,7 +314,7 @@ grep -E '^(enable-rcon|rcon\.port|rcon\.password)' /opt/minecraft-server/server.
 - [x] StreamConsole via journalctl -f
 - [x] HealthMonitor passivo (eventos HealthWarning)
 - [x] PlayerMonitor (eventos PlayerJoined/PlayerLeft)
-- [ ] Auto-shutdown: desligar servidor vazio por N minutos
+- [x] Auto-shutdown: desligar servidor vazio por N minutos
 - [ ] Wake-on-LAN endpoint
 - [ ] Métricas Prometheus (memory, gRPC latência, eventos emitidos)
 - [ ] TLS nativo (sem depender de Tailscale Funnel)
