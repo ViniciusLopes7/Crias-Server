@@ -2,12 +2,12 @@
 
 set -euo pipefail
 
-if [ "$#" -lt 1 ]; then
-    echo "Uso: $0 <caminho-da-iso>" >&2
+ISO_FILE="${1:-${ISO_PATH:-}}"
+
+if [ -z "$ISO_FILE" ]; then
+    echo "Uso: $0 <caminho-da-iso> (ou export ISO_PATH=<caminho>)" >&2
     exit 1
 fi
-
-ISO_FILE="$1"
 
 if [ ! -f "$ISO_FILE" ]; then
     echo "Arquivo ISO nao encontrado: $ISO_FILE" >&2
