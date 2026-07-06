@@ -521,12 +521,10 @@ jobs:
             KVM_ARGS="-cpu max"
           fi
 
-          # ttyS0 first = early kernel messages (incl. 'Linux version') go to serial.
-          # tty0 last = VGA is primary for /dev/console but serial still gets all output.
-          # systemd.mask=systemd-mute-console@.service: desabilita o mute do serial
-          # para que o wizard de firstboot apareça no log (no hardware real, o mute
-          # evita loop de serial-getty; no QEMU temos serial real, sem loop).
-          KERNEL_CMDLINE="archisobasedir=$INSTALL_DIR archisolabel=$ISO_LABEL edd=off console=ttyS0,115200 console=tty0 earlyprintk=serial,ttyS0,115200 loglevel=8 systemd.mask=systemd-mute-console@.service"
+          # tty0 first = comportamento de produção (VGA primário).
+          # ttyS0 last = /dev/console; todos os consoles registrados recebem output,
+          # então o wizard de Initial Setup aparece no serial também.
+          KERNEL_CMDLINE="archisobasedir=$INSTALL_DIR archisolabel=$ISO_LABEL edd=off console=tty0 console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 loglevel=8"
           echo "Kernel cmdline: $KERNEL_CMDLINE"
           echo "QEMU args: $KVM_ARGS -smp 2 -m 4096"
 
