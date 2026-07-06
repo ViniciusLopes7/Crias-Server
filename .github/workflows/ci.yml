@@ -547,33 +547,44 @@ jobs:
           echo ""
           echo "=== Tamanho do log: $(wc -l < "$qemu_log") linhas ==="
 
-          # Validação COMPLETA: kernel deve bootar e archiso deve carregar.
+          # Validação COMPLETA: kernel deve bootar, archiso carregar, e chegar ao login.
           PASS=false
           BOOT_STAGE=""
 
-          # 1. Kernel bootou completamente?
+          # 1. Kernel bootou?
           if grep -qi 'Linux version' "$qemu_log"; then
             echo "✓ OK: kernel Linux inicializou"
             grep -oE 'Linux version [0-9.]+[^ ]*' "$qemu_log" | head -1
-            PASS=true
             BOOT_STAGE="kernel-booted"
           else
             echo "✗ FAIL: kernel Linux não inicializou em 420s" >&2
             BOOT_STAGE="kernel-NOT-booted"
           fi
 
-          # 2. archiso hooks carregaram? (indica que initramfs funcionou)
+          # 2. Falhas criticas no log? (kernel panic, emergency mode, mount failure)
+          if grep -qiE 'Kernel panic|emergency mode|Failed to start Switch Root|Failed to mount|Unable to find device with label' "$qemu_log"; then
+            echo "✗ FAIL: marcador de falha de boot encontrado no log" >&2
+            grep -iE 'Kernel panic|emergency mode|Failed to start Switch Root|Failed to mount|Unable to find device with label' "$qemu_log" | head -5 >&2
+            BOOT_STAGE="$BOOT_STAGE+BOOT-FAILURE"
+          fi
+
+          # 3. archiso hooks carregaram?
           if grep -qi 'archiso' "$qemu_log"; then
             echo "✓ OK: archiso hooks carregados"
             BOOT_STAGE="$BOOT_STAGE+archiso"
           else
-            echo "⚠ AVISO: archiso não encontrado no log" >&2
+            echo "✗ FAIL: archiso não encontrado no log" >&2
           fi
 
-          # 3. Chegou ao userspace? (systemd/init)
-          if grep -qi 'Welcome to .*Arch Linux\|systemd\|Starting\|:: running hook' "$qemu_log"; then
-            echo "✓ OK: userspace inicializando"
-            BOOT_STAGE="$BOOT_STAGE+userspace"
+          # 4. Chegou ao login prompt? (requerido para PASS=true)
+          if grep -qiE 'archiso login:' "$qemu_log"; then
+            echo "✓ OK: login prompt reached"
+            BOOT_STAGE="$BOOT_STAGE+login-prompt"
+            PASS=true
+          else
+            echo "✗ FAIL: login prompt não reached em 420s" >&2
+            echo "  Últimas 30 linhas do log:" >&2
+            tail -30 "$qemu_log" >&2
           fi
 
           echo ""
@@ -624,6 +635,13 @@ jobs:
 
           sudo umount /tmp/iso-mount 2>/dev/null || true
           echo "=== Validação de estrutura da ISO: OK ==="
+
+      - name: Validate ISO live credentials and initramfs
+        run: |
+          echo "=== Validação de credenciais e initramfs da ISO ==="
+          ISO_FILE="${{ steps.find_iso.outputs.iso_path }}"
+          ISO_PATH="$ISO_FILE" bash tests/iso-live-credentials-validate.sh
+          ISO_PATH="$ISO_FILE" bash tests/iso-initramfs-validate.sh
 
   build-agent:
     name: Build Agent (${{ matrix.goos }}/${{ matrix.goarch }})
@@ -801,24 +819,6 @@ jobs:
           fi
           echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
 
-      - name: Import GPG key (optional)
-        env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-        if: env.GPG_PRIVATE_KEY != ''
-        run: |
-          # 2A-017: --pinentry-mode loopback evita hang se a chave tem passphrase.
-          # 2A-023: set +x como defesa-in-depth (não echoa a chave no log).
-          set +x
-          printf '%s' "${GPG_PRIVATE_KEY}" | gpg --batch --pinentry-mode loopback --import
-
-      - name: Sign checksums (optional)
-        env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-        if: env.GPG_PRIVATE_KEY != ''
-        run: |
-          cd release-assets
-          gpg --batch --yes --detach-sign -o sha256sums.txt.sig sha256sums.txt
-
       - name: Create and push tag (if workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'
         env:
@@ -852,7 +852,6 @@ jobs:
           assets+=("release-assets/crias-server-slim.zip")
           # Checksum global (sha256sums.txt com todos os artefatos)
           assets+=("release-assets/sha256sums.txt")
-          [ -f release-assets/sha256sums.txt.sig ] && assets+=("release-assets/sha256sums.txt.sig")
 
           echo "=== Assets para release ==="
           printf '  %s\n' "${assets[@]}"

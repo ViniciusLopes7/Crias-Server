@@ -19,7 +19,7 @@ comandos RCON.
            ▼
 ┌──────────────────────┐
 │  crias-agent (Go)    │  systemd: crias-agent.service
-│  localhost:8473      │  MemoryMax=32M, CPUQuota=10%
+│  localhost:8473      │  MemoryMax=128M, CPUQuota=10%
 └──────────┬───────────┘
            │  Delegação (subprocess)
            ▼
@@ -137,9 +137,8 @@ ExecStart=/opt/crias-agent/crias-agent
 Restart=on-failure
 RestartSec=5
 
-MemoryMax=32M
+MemoryMax=128M
 CPUQuota=10%
-TasksMax=10
 PrivateTmp=yes
 NoNewPrivileges=yes
 ProtectSystem=strict
@@ -267,7 +266,7 @@ O bot Discord conecta neste endpoint sem precisar estar na VPN.
 | Authn | Metadata `x-api-token` em cada RPC (validado por interceptor) |
 | Authz | Comandos RCON whitelistados; sem shell arbitrário |
 | Sudoers | `crias-agent` só pode systemctl start/stop/restart/status e mc-manager.sh |
-| systemd | Hardening completo (MemoryMax=32M, CPUQuota=10%, SystemCallFilter, etc.) |
+| systemd | Hardening completo (MemoryMax=128M, CPUQuota=10%, SystemCallFilter, etc.) |
 | Logs | Não loga token nem senhas; `ReadWritePaths` restrito |
 
 ## Troubleshooting

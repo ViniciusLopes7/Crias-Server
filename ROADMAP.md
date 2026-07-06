@@ -11,15 +11,15 @@
 |------------|--------|----------|
 | **Refactoring shell** | ✅ | 3 novas libs compartilhadas (`stack-installer.sh`, `backup-engine.sh`, `setup-cron.sh`) reduziram ~40% da duplicação MC/TT |
 | **Hardening systemd** | ✅ | `envsubst` em templates `.service` (elimina injection via sed), `CapabilityBoundingSet=`, `SystemCallFilter=@system-service`, `LockPersonality`, `ProtectHostname`, `ProtectClock`, `RemoveIPC` |
-| **Supply chain** | ✅ | SHA256 obrigatório em `download_and_verify`, `mrpack-install` pinado em `v0.21.0-beta` + checksum real, `packages.lock` com versões mínimas |
+| **Supply chain** | ⚠️ | SHA256 dos artefatos de release gerado no CI (`sha256sums.txt`); install.sh não verifica checksums em runtime |
 | **Tuning por hardware** | ✅ | Detecção RAM/CPU/disco → tier LOW/MID/HIGH; thresholds configuráveis em `config.env`; skip automático em container/VPS |
-| **Backup com RCON save-lock** | ✅ | Engine unificado com hooks pre/post; `save-off`+`save-all` antes, `save-on` depois |
+| **Backup com RCON save-lock** | ✅ | Engine unificado com hooks pre/post; `save-off`+`save-all` antes, `save-on` depois; trap EXIT garante reativação |
 | **Agente Go** (`discord-agent/`) | ✅ | gRPC `ServerControl` (7 RPCs) + `EventBus` (1 RPC), PlayerMonitor (30s), HealthMonitor (5min), AutoShutdown, `subtle.ConstantTimeCompare` em token, `sync.Mutex` em RCON |
 | **Bot Discord** (`discord-bot/`) | ✅ | discord.py 2.x, slash commands `/mc start|stop|restart|status|players|say|console|health`, `asyncio.Lock` em `connect()`, backoff exponencial 1s→60s, cache de status 15s |
 | **Eventos push** | ✅ | `ServerStarted`/`Stopped`, `PlayerJoined`/`Left`, `HealthWarning` → bot posta em `#controle` |
 | **Streaming console** | ✅ | `StreamConsole` RPC (journalctl -f) → bot posta em `#console` com buffer 2s + chunks 1800 chars |
 | **CI/CD** | ✅ | Workflow único `ci.yml` com 12 jobs paralelos + release unificado (ISO + slim.zip + full.zip + agent binaries + sha256sums) |
-| **Releases** | ✅ | Release unificado em tag `v*`: ISO + `crias-server-full.zip` + `crias-server-slim.zip` + `crias-agent-linux-amd64` + `sha256sums.txt` (+ GPG sig opcional) |
+| **Releases** | ✅ | Release unificado em tag `v*`: ISO + `crias-server-full.zip` + `crias-server-slim.zip` + `crias-agent-linux-amd64` + `sha256sums.txt` |
 | **Testes** | ✅ | 22 testes bash + 124 testes Python + 55 testes Go (race-safe) |
 
 ### Decisões arquiteturais finais
@@ -31,7 +31,7 @@
 | Agente: protocolo | gRPC + protobuf | Streaming bidi + tipagem forte + codegen Go/Python |
 | Agente: escuta | `127.0.0.1:8473` apenas | Tailscale Funnel faz proxy HTTPS externo |
 | Agente: auth | Token via metadata gRPC | `subtle.ConstantTimeCompare` previne timing attack |
-| Agente: hardening | `MemoryMax=32M`, `CPUQuota=10%`, `MemoryDenyWriteExecute=yes` | Go é AOT: seguro aplicar W^X |
+| Agente: hardening | `MemoryMax=128M`, `CPUQuota=10%`, `MemoryDenyWriteExecute=yes` | Go é AOT: seguro aplicar W^X |
 | Bot: linguagem | Python 3.12 + discord.py 2.x | Ecossistema maduro, Railway nativo |
 | Bot: hospedagem | Railway | Zero config de infra, deploy via Git |
 | Bot: estado | Stateless com cache curto (15s) | Fonte da verdade é sempre o agente |

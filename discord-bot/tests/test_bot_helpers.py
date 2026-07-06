@@ -374,75 +374,62 @@ class TestCheckAdminCog:
 
 
 class TestSayInputValidation:
-    """Valida que o comando /mc say constrói o comando RCON corretamente.
+    """Valida o sanitizer _sanitize_rcon_message do bot.py.
 
-    AVISO (2E-009): estes testes são TAUTOLÓGICOS — verificam que
-    `f"say {message}"` produz `"say {message}"`, sem exercitar o caminho
-    real do `bot.py`. Dão falsa confiança de cobertura. São mantidos como
-    documentação do comportamento esperado até o fix BOT-001 (Task 3-A)
-    landar com validação real (tamanho máximo, caracteres proibidos).
-
-    Quando BOT-001 landar, **substituir** estes testes por testes que
-    invoquem o slash command `/mc say` real (com `Interaction` mockado
-    + `AgentClient` mockado) e verifiquem:
-
-    1. Que `bot.py` chama `agent.send_rcon_command(f"say {sanitized_msg}")`.
-    2. Que mensagens > 2000 chars são rejeitadas antes de chegar no agent.
-    3. Que caracteres de controle (newline, null byte) são sanitizados.
-
-    Ver `discord-agent/internal/rcon/client_test.go::TestWhitelistedCommands`
-    para o padrão de teste table-driven equivalente no lado Go.
+    Testa diretamente a função que sanitiza mensagens antes de enviá-las via RCON.
+    Cobre: newlines, null bytes, controle, tamanho >200, whitespace-only, vazio.
     """
 
-    @pytest.mark.parametrize(
-        "message,expected_command",
-        [
-            ("Hello world", "say Hello world"),
-            ("Oi", "say Oi"),
-            ("12345", "say 12345"),
-            ("with spaces and stuff", "say with spaces and stuff"),
-        ],
-    )
-    def test_say_constructs_correct_rcon_command(self, message, expected_command):
-        """O comando RCON enviado ao agente deve ser 'say <message>'."""
-        # Simula o que o slash command faz: chama agent.send_rcon_command.
-        # Aqui só verificamos a string construída — não chamamos o agent real.
-        constructed = f"say {message}"
-        assert constructed == expected_command
+    def test_valid_message_passes(self):
+        from crias_bot.bot import _sanitize_rcon_message
 
-    def test_say_empty_message(self):
-        """Mensagem vazia resulta em comando 'say ' (espaço trailing).
+        assert _sanitize_rcon_message("Hello world") == "Hello world"
+        assert _sanitize_rcon_message("Oi") == "Oi"
 
-        Esperado: bot.py deve rejeitar empty message ANTES de chamar o agent.
-        Quando BOT-001 landar, este teste deve ser atualizado para esperar
-        uma resposta de erro em vez do comando 'say '.
-        """
-        message = ""
-        constructed = f"say {message}"
-        # Documenta comportamento atual (sem validação).
-        assert constructed == "say "
+    def test_empty_message_rejected(self):
+        from crias_bot.bot import _sanitize_rcon_message
 
-    def test_say_preserves_whitespace(self):
-        """Mensagens com espaços extras devem preservar o conteúdo."""
-        message = "  leading and trailing  "
-        constructed = f"say {message}"
-        assert constructed == "say   leading and trailing  "
+        assert _sanitize_rcon_message("") is None
 
-    @pytest.mark.parametrize(
-        "message",
-        [
-            "a" * 2000,  # Discord max message length
-            "a" * 2001,  # over Discord limit (bot deve rejeitar)
-        ],
-    )
-    def test_say_long_messages(self, message):
-        """Mensagens longas devem ser validadas (BOT-001).
+    def test_whitespace_only_rejected(self):
+        from crias_bot.bot import _sanitize_rcon_message
 
-        Atualmente, o bot não valida tamanho — repassa ao RCON, que pode
-        rejeitar com erro. Este teste documenta o comportamento atual.
-        """
-        constructed = f"say {message}"
-        # Deve ter prefixo 'say '.
-        assert constructed.startswith("say ")
-        # E o conteúdo da mensagem deve estar presente.
-        assert message in constructed
+        assert _sanitize_rcon_message("   ") is None
+        assert _sanitize_rcon_message("\t\t") is None
+
+    def test_newline_rejected(self):
+        from crias_bot.bot import _sanitize_rcon_message
+
+        assert _sanitize_rcon_message("hello\nworld") is None
+        assert _sanitize_rcon_message("hello\rworld") is None
+
+    def test_null_byte_rejected(self):
+        from crias_bot.bot import _sanitize_rcon_message
+
+        assert _sanitize_rcon_message("hello\x00world") is None
+
+    def test_control_chars_stripped(self):
+        from crias_bot.bot import _sanitize_rcon_message
+
+        result = _sanitize_rcon_message("hello\x1b[31mred\x1b[0m")
+        assert result is not None
+        assert "\x1b" not in result
+
+    def test_only_control_chars_rejected(self):
+        from crias_bot.bot import _sanitize_rcon_message
+
+        assert _sanitize_rcon_message("\n") is None
+        assert _sanitize_rcon_message("\r") is None
+        assert _sanitize_rcon_message("\0") is None
+
+    def test_long_message_rejected(self):
+        from crias_bot.bot import _sanitize_rcon_message
+
+        assert _sanitize_rcon_message("a" * 201) is None
+        assert _sanitize_rcon_message("a" * 2000) is None
+
+    def test_max_length_accepted(self):
+        from crias_bot.bot import _sanitize_rcon_message
+
+        msg = "a" * 200
+        assert _sanitize_rcon_message(msg) == msg

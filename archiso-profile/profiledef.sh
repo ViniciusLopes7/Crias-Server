@@ -64,6 +64,5 @@ file_permissions=(
   ["/opt/crias-server"]="0:0:755"
   ["/opt/crias-server/install.sh"]="0:0:755"
   ["/opt/crias-server/config.env"]="0:0:644"
-  ["/opt/crias-server/packages.lock"]="0:0:644"
   ["/opt/crias-server/.sync-manifest"]="0:0:644"
 )

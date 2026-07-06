@@ -44,8 +44,6 @@ backup_init() {
     # Load runtime.env if present (inherits BACKUP_RETENTION_DAYS, etc.).
     local runtime_env="${BACKUP_SERVER_DIR}/runtime.env"
     if [ -f "$runtime_env" ]; then
-        # Do NOT `source "$runtime_env"` — would execute arbitrary bash.
-        # Prefer the safe config-parser (with dangerous-variable denylist).
         if declare -F load_config_file >/dev/null 2>&1; then
             load_config_file "$runtime_env"
         else
@@ -65,8 +63,9 @@ backup_init() {
     BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-7}"
     BACKUP_ZSTD_LEVEL="${BACKUP_ZSTD_LEVEL:--3}"
 
-    # Validate formats.
-    if ! [[ "$BACKUP_RETENTION_DAYS" =~ ^[0-9]+$ ]]; then
+    # Validate formats. Reject 0 (would delete all backups).
+    if ! [[ "$BACKUP_RETENTION_DAYS" =~ ^[0-9]+$ ]] || [ "$BACKUP_RETENTION_DAYS" -lt 1 ]; then
+        backup_log "AVISO: BACKUP_RETENTION_DAYS=$BACKUP_RETENTION_DAYS invalido (deve ser >= 1). Usando default 7."
         BACKUP_RETENTION_DAYS=7
     fi
     if ! [[ "$BACKUP_ZSTD_LEVEL" =~ ^-?[0-9]+$ ]]; then
@@ -153,7 +152,6 @@ create_backup() {
     local backup_dirs=()
     local dir
 
-    # ${arr[@]+"${arr[@]}"} expands to nothing when array is empty (set -u safe).
     for dir in ${BACKUP_DIRS[@]+"${BACKUP_DIRS[@]}"}; do
         if [ -d "$BACKUP_SERVER_DIR/$dir" ]; then
             backup_dirs+=("$dir")
@@ -171,40 +169,32 @@ create_backup() {
 
     cd "$BACKUP_SERVER_DIR" || return 1
 
-    # Pre hook (RCON save-lock for Minecraft; no-op for Terraria).
-    if declare -F backup_pre_hook >/dev/null 2>&1; then
-        backup_pre_hook
-    fi
-
+    # DRY_RUN: skip pre_hook entirely (don't pause saves on live server).
     if [ "$BACKUP_DRY_RUN" = "true" ]; then
         backup_log "[DRY_RUN] Backup simulado para: ${backup_dirs[*]}"
-        if declare -F backup_post_hook >/dev/null 2>&1; then
-            backup_post_hook
-        fi
         return 0
     fi
 
-    # zstd only needed for real execution (not DRY_RUN).
+    # Pre hook (RCON save-lock for Minecraft; no-op for Terraria).
+    # Install EXIT trap to guarantee save-on is restored even if killed.
+    if declare -F backup_pre_hook >/dev/null 2>&1; then
+        backup_pre_hook
+    fi
+    if declare -F backup_post_hook >/dev/null 2>&1; then
+        trap 'backup_post_hook' EXIT INT TERM
+    fi
+
     if ! command -v zstd >/dev/null 2>&1; then
         backup_log "ERRO: zstd nao encontrado no PATH. Instale (pacman -S zstd) ou ajuste o PATH do cron."
-        if declare -F backup_post_hook >/dev/null 2>&1; then
-            backup_post_hook
-        fi
         return 1
     fi
 
     if ionice -c2 -n7 tar -I "zstd ${BACKUP_ZSTD_LEVEL}" -cf "$BACKUP_DIR/$BACKUP_NAME" "${backup_dirs[@]}"; then
         adopt_backup_ownership "$BACKUP_DIR/$BACKUP_NAME"
-        if declare -F backup_post_hook >/dev/null 2>&1; then
-            backup_post_hook
-        fi
         backup_log "Backup criado: $BACKUP_DIR/$BACKUP_NAME"
         return 0
     fi
 
-    if declare -F backup_post_hook >/dev/null 2>&1; then
-        backup_post_hook
-    fi
     backup_log "ERRO: Falha ao criar backup."
     return 1
 }

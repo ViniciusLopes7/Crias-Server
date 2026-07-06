@@ -59,7 +59,7 @@ assert_grep 'generate_token 32' "$ROOT_DIR/install.sh"
 assert_grep '/opt/crias-agent/crias-agent' "$ROOT_DIR/install.sh"
 
 # 9. systemd unit hardcoded no install.sh tem hardening esperado
-assert_grep 'MemoryMax=32M' "$ROOT_DIR/install.sh"
+assert_grep 'MemoryMax=128M' "$ROOT_DIR/install.sh"
 assert_grep 'CPUQuota=10%' "$ROOT_DIR/install.sh"
 assert_grep 'MemoryDenyWriteExecute=yes' "$ROOT_DIR/install.sh"
 assert_grep 'SystemCallFilter=@system-service' "$ROOT_DIR/install.sh"

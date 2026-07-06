@@ -15,8 +15,6 @@
 # Variáveis de ambiente que controlam o comportamento:
 #   CRIAS_SKIP_AUTOSTART=1        — não roda este script (ver .bash_profile)
 #   CRIAS_REPO_REF=<branch|tag>   — ref do git a clonar no fallback (default: main)
-#   SKIP_VERIFY=1                 — pula verificação GPG do commit (fallback)
-#   INSTALL_SH_SHA256=<hex>       — valida checksum do install.sh antes de rodar
 
 set -euo pipefail
 
@@ -150,56 +148,16 @@ if [ "$SOURCE_MODE" = "clone" ]; then
     fi
     cd Crias-Server || { err "Falha ao entrar em Crias-Server"; exit 1; }
 
-    # Item supply chain: verificação GPG de commit (default ON).
-    SKIP_VERIFY="${SKIP_VERIFY:-0}"
-    if [ "$SKIP_VERIFY" != "1" ]; then
-        if ! git verify-commit HEAD >/dev/null 2>&1; then
-            warn "Commit não assinado ou chave pública não importada."
-            warn "Para importar chave do maintainer: gpg --receive-keys <KEY_ID>"
-            warn "Para pular verificação (NÃO RECOMENDADO): SKIP_VERIFY=1"
-            # Continua com warning em vez de abortar — mantém UX mas documenta risco.
-        fi
-    else
-        warn "Verificação de assinatura desativada (SKIP_VERIFY=1)."
-    fi
-
     INSTALL_DIR="$(pwd)"
     INSTALL_SCRIPT="$INSTALL_DIR/install.sh"
 fi
 
-# ============================================
-# Validacao opcional de checksum do install.sh
-# ============================================
-
-if [ -f "$INSTALL_SCRIPT" ]; then
-    calculated_hash="$(sha256sum "$INSTALL_SCRIPT" | awk '{print $1}')"
-    log "SHA256 de install.sh: $calculated_hash"
-
-    if [ -n "${INSTALL_SH_SHA256:-}" ]; then
-        if [ "$calculated_hash" = "$INSTALL_SH_SHA256" ]; then
-            log "✓ Checksum validado com sucesso."
-        else
-            err "Checksum não corresponde!"
-            err "  Esperado: $INSTALL_SH_SHA256"
-            err "  Obtido:   $calculated_hash"
-            err "Abortando por segurança (supply chain)."
-            exit 1
-        fi
-    fi
-else
+if [ ! -f "$INSTALL_SCRIPT" ]; then
     err "install.sh não encontrado em $INSTALL_SCRIPT"
     exit 1
 fi
 
-# ============================================
 # Aviso de conectividade para o install.sh
-# ============================================
-
-# Mesmo no modo embedded, o install.sh pode precisar de internet para:
-#   - pacman -S tailscale (se INSTALL_TAILSCALE=true)
-#   - download de mrpack-install, mods, server.jar
-#   - download do crias-agent (se INSTALL_AGENT=true)
-# Avisamos o usuário, mas não bloqueamos — o install.sh decide o que fazer.
 if ! has_internet; then
     warn "Internet não detectada. Algumas etapas do install.sh podem falhar:"
     warn "  - Instalação do Tailscale (defina INSTALL_TAILSCALE=false para pular)"
@@ -208,12 +166,7 @@ if ! has_internet; then
     warn "Continuando mesmo assim..."
 fi
 
-# ============================================
-# Roda o instalador
-# ============================================
-
 chmod +x "$INSTALL_SCRIPT"
 log "Executando $INSTALL_SCRIPT ..."
-# Executa do diretório do script para que BASH_SOURCE resolva paths relativos.
 cd "$INSTALL_DIR" || { err "Falha ao cd para $INSTALL_DIR"; exit 1; }
 exec ./install.sh

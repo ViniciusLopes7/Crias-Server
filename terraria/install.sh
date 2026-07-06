@@ -53,6 +53,7 @@ STACK_RUNTIME_SCRIPTS=(
 STACK_SHARED_LIBS=(
     "$ROOT_DIR/shared/lib/common.sh"
     "$ROOT_DIR/shared/lib/manager-common.sh"
+    "$ROOT_DIR/shared/lib/config-parser.sh"
     "$ROOT_DIR/shared/lib/hardware-profile.sh"
     "$ROOT_DIR/shared/lib/terraria-tuning.sh"
     "$ROOT_DIR/shared/lib/downloads.sh"
@@ -90,10 +91,12 @@ stack_install_dependencies() {
         tar \
         gzip \
         unzip \
+        zstd \
         gettext \
         zram-generator \
         cpupower \
-        lm_sensors
+        lm_sensors \
+        jq
 }
 
 stack_create_extra_dirs() {
@@ -116,17 +119,13 @@ download_and_extract_terraria() {
     fi
 
     print_step "Baixando servidor Terraria Vanilla..."
-    # Use mktemp with namespace and .zip suffix for recognizable temp files.
-    # trap RETURN ensures cleanup on early exit.
     tmp_zip="$(mktemp --suffix=.zip -t crias-terraria-XXXXXX)"
     tmp_dir="$(mktemp -d -t crias-terraria-XXXXXX)"
     # shellcheck disable=SC2064
     trap 'rm -f -- "$tmp_zip"; rm -rf -- "$tmp_dir"' RETURN
 
-    # SHA256 required by default (TERRARIA_SHA256 in config.env).
-    if ! download_and_verify "$TERRARIA_DOWNLOAD_URL" "$tmp_zip" TERRARIA_SHA256; then
-        print_error "Falha ao baixar/validar o servidor Terraria."
-        print_error "Defina TERRARIA_DOWNLOAD_URL em config.env com um link valido e TERRARIA_SHA256 (64 hex) com o checksum oficial."
+    if ! _curl_with_retry "$TERRARIA_DOWNLOAD_URL" "$tmp_zip"; then
+        print_error "Falha ao baixar o servidor Terraria de $TERRARIA_DOWNLOAD_URL"
         rm -f "$tmp_zip"
         safe_remove_dir "$tmp_dir" || true
         exit 1

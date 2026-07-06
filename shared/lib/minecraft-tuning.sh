@@ -181,6 +181,7 @@ write_minecraft_server_properties() {
         printf '%s\n' 'spawn-npcs=true'
         printf '%s\n' 'spawn-protection=0'
     } > "$file_path"
+    chmod 0640 "$file_path"
 }
 
 write_minecraft_tuning_state() {

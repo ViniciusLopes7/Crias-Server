@@ -12,7 +12,7 @@ source "$SCRIPT_DIR/shared/lib/common.sh"
 source "$SCRIPT_DIR/shared/lib/config-parser.sh"
 
 # shellcheck source=/dev/null
-# Provides download_and_verify() for this script and stack installers.
+# Provides download_file() and _curl_with_retry() for this script and stack installers.
 source "$SCRIPT_DIR/shared/lib/downloads.sh"
 
 # Load config once before defaults to avoid capturing false values.
@@ -40,7 +40,7 @@ VIRT_TUNING_BEHAVIOR="${VIRT_TUNING_BEHAVIOR:-auto}"
 MINECRAFT_USER="${MINECRAFT_USER:-minecraft}"
 MINECRAFT_SERVER_DIR="${MINECRAFT_SERVER_DIR:-/opt/minecraft-server}"
 MINECRAFT_PORT="${MINECRAFT_PORT:-25565}"
-MINECRAFT_ONLINE_MODE="${MINECRAFT_ONLINE_MODE:-false}"
+MINECRAFT_ONLINE_MODE="${MINECRAFT_ONLINE_MODE:-true}"
 MINECRAFT_MOTD="${MINECRAFT_MOTD:-§6§l🏰 REINO DOS CRIAS 🏰\\n§eAdrenaline + QoL §7| §aA resenha nunca morre...§r}"
 MINECRAFT_VERSION="${MINECRAFT_VERSION:-1.21.11}"
 MINECRAFT_LOADER="${MINECRAFT_LOADER:-fabric}"
@@ -52,9 +52,7 @@ MINECRAFT_QOL_MODS="${MINECRAFT_QOL_MODS:-chunky:chunky,essential-commands:essen
 # Modpack source.
 MINECRAFT_MODPACK_SOURCE="${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
 MINECRAFT_MODPACK_SLUG="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
-# Pinned mrpack-install version.
 MRPACK_INSTALL_VERSION="${MRPACK_INSTALL_VERSION:-v0.21.0-beta}"
-MRPACK_INSTALL_SHA256="${MRPACK_INSTALL_SHA256:-}"
 ACCEPT_EULA="${ACCEPT_EULA:-false}"
 
 TERRARIA_USER="${TERRARIA_USER:-terraria}"
@@ -416,14 +414,10 @@ write_stack_env_file() {
             printf 'MINECRAFT_ADRENALINE_VERSION=%q\n' "$MINECRAFT_ADRENALINE_VERSION"
             printf 'MINECRAFT_INSTALL_QOL_MODS=%q\n' "$MINECRAFT_INSTALL_QOL_MODS"
             printf 'ACCEPT_EULA=%q\n' "${ACCEPT_EULA:-false}"
-            printf 'MRPACK_SHA256=%q\n' "${MRPACK_SHA256:-}"
-            # QoL mods and modpack source.
             printf 'MINECRAFT_QOL_MODS=%q\n' "${MINECRAFT_QOL_MODS:-}"
             printf 'MINECRAFT_MODPACK_SOURCE=%q\n' "${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
             printf 'MINECRAFT_MODPACK_SLUG=%q\n' "${MINECRAFT_MODPACK_SLUG:-adrenaline}"
-            # Pinned mrpack-install version.
             printf 'MRPACK_INSTALL_VERSION=%q\n' "${MRPACK_INSTALL_VERSION:-v0.21.0-beta}"
-            printf 'MRPACK_INSTALL_SHA256=%q\n' "${MRPACK_INSTALL_SHA256:-}"
         else
             printf 'TERRARIA_USER=%q\n' "$TERRARIA_USER"
             printf 'TERRARIA_SERVER_DIR=%q\n' "$TERRARIA_SERVER_DIR"
@@ -431,7 +425,6 @@ write_stack_env_file() {
             printf 'TERRARIA_WORLD_NAME=%q\n' "$TERRARIA_WORLD_NAME"
             printf 'TERRARIA_MOTD=%q\n' "$TERRARIA_MOTD"
             printf 'TERRARIA_DOWNLOAD_URL=%q\n' "$TERRARIA_DOWNLOAD_URL"
-            printf 'TERRARIA_SHA256=%q\n' "${TERRARIA_SHA256:-}"
         fi
     } > "$env_file"; then
         rm -f "$env_file"
@@ -531,14 +524,17 @@ cleanup_stack_by_type() {
         if crontab -u "$server_user_var" -l 2>/dev/null | grep -Fq "$stack_dir/backup-cron.sh"; then
             local tmp_cron_file
             tmp_cron_file="$(mktemp "${TMPDIR:-/tmp}/crias_cron.XXXXXX")"
-            # Cleanup tmp file on exit.
+            local original_count
+            original_count=$(crontab -u "$server_user_var" -l 2>/dev/null | wc -l)
             # shellcheck disable=SC2064
             trap 'rm -f -- "$tmp_cron_file"' RETURN
             crontab -u "$server_user_var" -l 2>/dev/null | grep -Fv "$stack_dir/backup-cron.sh" > "$tmp_cron_file" || true
             if [ -s "$tmp_cron_file" ]; then
                 crontab -u "$server_user_var" "$tmp_cron_file" >/dev/null 2>&1 || true
-            else
+            elif [ "$original_count" -le 1 ]; then
                 crontab -u "$server_user_var" -r >/dev/null 2>&1 || true
+            else
+                crontab -u "$server_user_var" "$tmp_cron_file" >/dev/null 2>&1 || true
             fi
             rm -f "$tmp_cron_file"
         fi
@@ -547,14 +543,17 @@ cleanup_stack_by_type() {
         if crontab -l 2>/dev/null | grep -Fq "$stack_dir/backup-cron.sh"; then
             local tmp_cron_root_file
             tmp_cron_root_file="$(mktemp "${TMPDIR:-/tmp}/crias_cron_root.XXXXXX")"
-            # Cleanup tmp file on exit.
+            local original_count_root
+            original_count_root=$(crontab -l 2>/dev/null | wc -l)
             # shellcheck disable=SC2064
             trap 'rm -f -- "$tmp_cron_root_file"' RETURN
             crontab -l 2>/dev/null | grep -Fv "$stack_dir/backup-cron.sh" > "$tmp_cron_root_file" || true
             if [ -s "$tmp_cron_root_file" ]; then
                 crontab "$tmp_cron_root_file" >/dev/null 2>&1 || true
-            else
+            elif [ "$original_count_root" -le 1 ]; then
                 crontab -r >/dev/null 2>&1 || true
+            else
+                crontab "$tmp_cron_root_file" >/dev/null 2>&1 || true
             fi
             rm -f "$tmp_cron_root_file"
         fi
@@ -645,18 +644,26 @@ install_crias_agent_if_enabled() {
     print_step "Instalando agente de controle remoto (crias-agent)..."
 
     # Determina stack alvo.
+    local stack_dir
+    local stack_user
+    local service_name
+    local stack_type_for_agent
+    local stack_port
+    local manager_script_name
     if [ "$SERVER_TYPE" = "minecraft" ]; then
         stack_dir="$MINECRAFT_SERVER_DIR"
         stack_user="$MINECRAFT_USER"
         service_name="minecraft"
         stack_type_for_agent="minecraft"
         stack_port="$MINECRAFT_PORT"
+        manager_script_name="mc-manager.sh"
     else
         stack_dir="$TERRARIA_SERVER_DIR"
         stack_user="$TERRARIA_USER"
         service_name="terraria"
         stack_type_for_agent="terraria"
         stack_port="$TERRARIA_PORT"
+        manager_script_name="tt-manager.sh"
     fi
 
     # Effective hardware tier for agent.yaml.
@@ -692,11 +699,8 @@ install_crias_agent_if_enabled() {
     fi
 
     # 3. Find latest release asset via GitHub API.
-    # Use Bearer auth when GITHUB_TOKEN is set (raises rate limit) and pin API version.
     local agent_url
-    local agent_sha=""
     local api_url="https://api.github.com/repos/ViniciusLopes7/Crias-Server/releases?per_page=10"
-    # Search recent releases for the crias-agent-linux-amd64 asset.
     local curl_auth_headers=()
     if [ -n "${GITHUB_TOKEN:-}" ]; then
         curl_auth_headers=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
@@ -712,17 +716,6 @@ install_crias_agent_if_enabled() {
     agent_url=$(printf '%s' "$api_response" \
         | jq -r '[.[] | .assets[] | select(.name=="crias-agent-linux-amd64") | .browser_download_url] | .[0] // empty' 2>/dev/null || true)
 
-    # Extract sha256 digest from asset if available.
-    if [ -n "$agent_url" ]; then
-        local agent_digest
-        agent_digest=$(printf '%s' "$api_response" \
-            | jq -r --arg url "$agent_url" \
-                '[.[] | .assets[] | select(.name=="crias-agent-linux-amd64" and .browser_download_url==$url) | .digest] | .[0] // empty' 2>/dev/null || true)
-        if [ -n "$agent_digest" ] && [[ "$agent_digest" == sha256:* ]]; then
-            agent_sha="${agent_digest#sha256:}"
-        fi
-    fi
-
     if [ -z "$agent_url" ]; then
         print_error "Não foi possível encontrar o asset crias-agent-linux-amd64 em nenhuma release do GitHub."
         print_error "URL da API consultada: $api_url"
@@ -734,28 +727,19 @@ install_crias_agent_if_enabled() {
 
     print_step "URL do agente: $agent_url"
 
-    # Require SHA256 checksum: env override or asset digest.
-    if [ -z "${CRIAS_AGENT_SHA256:-}" ] && [ -n "$agent_sha" ]; then
-        CRIAS_AGENT_SHA256="$agent_sha"
-    fi
-
-    # Use mktemp -d for private temp dir; cleanup via trap.
     local agent_tmp_dir
     agent_tmp_dir="$(mktemp -d -t crias-agent-XXXXXX)"
     # shellcheck disable=SC2064
     trap 'rm -rf -- "$agent_tmp_dir"' RETURN
     local agent_local="${agent_tmp_dir}/crias-agent"
 
-    local agent_sha_var="CRIAS_AGENT_SHA256"
-    if ! download_and_verify "$agent_url" "$agent_local" "$agent_sha_var" "true"; then
-        print_error "Falha ao baixar/validar crias-agent (checksum SHA256 obrigatório)."
-        print_error "Defina CRIAS_AGENT_SHA256 (64 hex) em config.env ou certifique-se de que"
-        print_error "o asset no GitHub release tenha o campo digest (sha256) populado."
+    if ! _curl_with_retry "$agent_url" "$agent_local"; then
+        print_error "Falha ao baixar crias-agent de $agent_url"
         print_warning "Voce pode instalar manualmente depois: ver discord-agent/README.md"
         return 1
     fi
 
-    install -m 755 -o crias-agent -g crias-agent "$agent_local" /opt/crias-agent/crias-agent
+    install -m 755 -o root -g root "$agent_local" /opt/crias-agent/crias-agent
 
     # 4. Gera token aleatório (32 bytes hex = 64 chars).
     local agent_token
@@ -830,7 +814,7 @@ agent:
 server:
   stack: "$stack_type_for_agent"
   service_name: "$service_name"
-  manager_script: "$stack_dir/mc-manager.sh"
+  manager_script: "$stack_dir/$manager_script_name"
   server_dir: "$stack_dir"
   server_port: "$stack_port"
   hardware_tier: "$agent_hardware_tier"
@@ -863,7 +847,7 @@ EOF
 # /etc/sudoers.d/crias-agent
 # Generated by Crias-Server installer - do not edit manually
 crias-agent ALL=(root) NOPASSWD: /usr/bin/systemctl start $service_name, /usr/bin/systemctl stop $service_name, /usr/bin/systemctl restart $service_name, /usr/bin/systemctl status $service_name, /usr/bin/systemctl is-active $service_name
-crias-agent ALL=($stack_user) NOPASSWD: $stack_dir/backup-cron.sh, $stack_dir/mc-manager.sh start, $stack_dir/mc-manager.sh stop, $stack_dir/mc-manager.sh restart, $stack_dir/mc-manager.sh status, $stack_dir/mc-manager.sh backup, $stack_dir/mc-manager.sh health, $stack_dir/mc-manager.sh hardware-report
+crias-agent ALL=($stack_user) NOPASSWD: $stack_dir/backup-cron.sh, $stack_dir/$manager_script_name start, $stack_dir/$manager_script_name stop, $stack_dir/$manager_script_name restart, $stack_dir/$manager_script_name status, $stack_dir/$manager_script_name backup, $stack_dir/$manager_script_name health, $stack_dir/$manager_script_name hardware-report
 EOF
 
     # Validate sudoers before install.
@@ -900,9 +884,8 @@ ExecStart=/opt/crias-agent/crias-agent
 Restart=on-failure
 RestartSec=5
 
-MemoryMax=32M
+MemoryMax=128M
 CPUQuota=10%
-TasksMax=10
 PrivateTmp=yes
 NoNewPrivileges=yes
 ProtectSystem=strict

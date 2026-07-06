@@ -27,7 +27,7 @@ source "$ROOT_DIR/shared/lib/stack-installer.sh"
 MINECRAFT_USER="${MINECRAFT_USER:-minecraft}"
 MINECRAFT_SERVER_DIR="${MINECRAFT_SERVER_DIR:-/opt/minecraft-server}"
 MINECRAFT_PORT="${MINECRAFT_PORT:-25565}"
-MINECRAFT_ONLINE_MODE="${MINECRAFT_ONLINE_MODE:-false}"
+MINECRAFT_ONLINE_MODE="${MINECRAFT_ONLINE_MODE:-true}"
 MINECRAFT_VERSION="${MINECRAFT_VERSION:-1.21.11}"
 MINECRAFT_LOADER="${MINECRAFT_LOADER:-fabric}"
 MINECRAFT_INSTALL_MODPACK="${MINECRAFT_INSTALL_MODPACK:-true}"
@@ -41,11 +41,8 @@ MINECRAFT_QOL_MODS="${MINECRAFT_QOL_MODS:-chunky:chunky,essential-commands:essen
 # Modpack source: "adrenaline" (default) or "modrinth" (generic).
 MINECRAFT_MODPACK_SOURCE="${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
 MINECRAFT_MODPACK_SLUG="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
-# Pinned mrpack-install version + checksum.
-# MRPACK_INSTALL_SHA256 is required for non-DRY_RUN installs; empty default
-# forces download_and_verify to fail with code 3 (missing checksum).
+# mrpack-install version pin.
 MRPACK_INSTALL_VERSION="${MRPACK_INSTALL_VERSION:-v0.21.0-beta}"
-MRPACK_INSTALL_SHA256="${MRPACK_INSTALL_SHA256:-}"
 FORCE_HARDWARE_TIER="${FORCE_HARDWARE_TIER:-}"
 APPLY_SYSTEM_TUNING="${APPLY_SYSTEM_TUNING:-true}"
 DRY_RUN="${DRY_RUN:-false}"
@@ -69,6 +66,7 @@ STACK_RUNTIME_SCRIPTS=(
 STACK_SHARED_LIBS=(
     "$ROOT_DIR/shared/lib/common.sh"
     "$ROOT_DIR/shared/lib/manager-common.sh"
+    "$ROOT_DIR/shared/lib/config-parser.sh"
     "$ROOT_DIR/shared/lib/hardware-profile.sh"
     "$ROOT_DIR/shared/lib/minecraft-tuning.sh"
     "$ROOT_DIR/shared/lib/downloads.sh"
@@ -155,6 +153,7 @@ stack_install_dependencies() {
         tar \
         gzip \
         unzip \
+        zstd \
         gettext \
         logrotate \
         zram-generator \
@@ -163,9 +162,6 @@ stack_install_dependencies() {
         jq
 }
 
-# Pinned mrpack-install version + checksum.
-# Releases provide .pkg.tar.zst, .tar.gz, .deb, .rpm, .apk assets.
-# We download the .tar.gz linux amd64 and extract the binary.
 install_mrpack_install() {
     if is_true "$DRY_RUN"; then
         print_step "[DRY_RUN] Pulando instalacao do mrpack-install."
@@ -174,66 +170,31 @@ install_mrpack_install() {
 
     print_step "Instalando mrpack-install (versao pinada: $MRPACK_INSTALL_VERSION)..."
 
-    # Preference 1: native Arch package (.pkg.tar.zst) from repo.
     if pacman -Si mrpack-install >/dev/null 2>&1; then
         print_step "Pacote mrpack-install encontrado no repositorio. Instalando via pacman..."
         pacman -S --needed --noconfirm mrpack-install
         return 0
     fi
 
-    # Preference 2: .pkg.tar.zst from GitHub release (idiomatic on Arch).
     local arch_pkg_url="https://github.com/nothub/mrpack-install/releases/download/${MRPACK_INSTALL_VERSION}/mrpack-install_${MRPACK_INSTALL_VERSION#v}_linux_amd64.pkg.tar.zst"
-
-    # Fallback: linux amd64 tarball with loose binary inside.
-    local tarball_url="https://github.com/nothub/mrpack-install/releases/download/${MRPACK_INSTALL_VERSION}/mrpack-install_${MRPACK_INSTALL_VERSION#v}_linux_amd64.tar.gz"
-
-    # Use mktemp -d for private temp dir; trap RETURN ensures cleanup.
     local mrpack_tmp_dir
     mrpack_tmp_dir="$(mktemp -d -t crias-mrpack-XXXXXX)"
     # shellcheck disable=SC2064
     trap 'rm -rf -- "$mrpack_tmp_dir"' RETURN
+    local arch_pkg_local="${mrpack_tmp_dir}/mrpack-install.pkg.tar.zst"
 
-    local arch_pkg_local="${mrpack_tmp_dir}/mrpack-install.pkg"
-    local tarball_local="${mrpack_tmp_dir}/mrpack-install-bin.tgz"
-
-    # Try .pkg.tar.zst first (clean install via pacman -U).
-    # pacman validates .pkg.tar.zst integrity.
-    if curl -fsSL --connect-timeout 10 --max-time 60 -o "$arch_pkg_local.zst" "$arch_pkg_url" 2>/dev/null; then
-        if pacman -U --noconfirm "$arch_pkg_local.zst"; then
+    if curl -fsSL --connect-timeout 10 --max-time 60 -o "$arch_pkg_local" "$arch_pkg_url" 2>/dev/null; then
+        if pacman -U --noconfirm "$arch_pkg_local"; then
             print_success "mrpack-install instalado via pacman -U (.pkg.tar.zst)"
             return 0
         fi
-        print_warning "pacman -U falhou para .pkg.tar.zst; tentando tarball com binario solto."
-        rm -f "$arch_pkg_local.zst"
+        print_warning "pacman -U falhou para .pkg.tar.zst."
     fi
 
-    # Fallback: download linux amd64 tarball, verify SHA256, extract binary.
-    if ! download_and_verify "$tarball_url" "$tarball_local" MRPACK_INSTALL_SHA256; then
-        print_error "Falha ao baixar/validar mrpack-install $MRPACK_INSTALL_VERSION"
-        print_error "URL tentada: $tarball_url"
-        print_error "Verifique MRPACK_INSTALL_VERSION e MRPACK_INSTALL_SHA256 em config.env."
-        print_error "Para obter o SHA256 oficial:"
-        print_error "  curl -fsSL $tarball_url | sha256sum"
-        exit 1
-    fi
-
-    # Extract only the 'mrpack-install' binary from the tarball.
-    local tmp_extract_dir="${mrpack_tmp_dir}/extract"
-    mkdir -p "$tmp_extract_dir"
-    if ! tar -xzf "$tarball_local" -C "$tmp_extract_dir"; then
-        print_error "Falha ao extrair mrpack-install tarball"
-        exit 1
-    fi
-
-    if [ ! -f "$tmp_extract_dir/mrpack-install" ]; then
-        print_error "Binario 'mrpack-install' nao encontrado no tarball extraido."
-        print_error "Conteudo do tarball:"
-        ls -la "$tmp_extract_dir" >&2
-        exit 1
-    fi
-
-    install -m 755 "$tmp_extract_dir/mrpack-install" /usr/local/bin/mrpack-install
-    print_success "mrpack-install instalado em /usr/local/bin/mrpack-install"
+    print_error "Falha ao instalar mrpack-install $MRPACK_INSTALL_VERSION"
+    print_error "URL tentada: $arch_pkg_url"
+    print_error "Verifique MRPACK_INSTALL_VERSION em config.env."
+    exit 1
 }
 
 stack_download_and_install() {

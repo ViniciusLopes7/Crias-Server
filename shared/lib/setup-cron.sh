@@ -195,21 +195,30 @@ remove_legacy_cron_entries() {
     trap 'rm -f "$tmp_cron_file"' RETURN
 
     if crontab -l 2>/dev/null | grep -Fq "$SETUP_CRON_BACKUP_SCRIPT"; then
+        local original_count
+        original_count=$(crontab -l 2>/dev/null | wc -l)
         crontab -l 2>/dev/null | grep -Fv "$SETUP_CRON_BACKUP_SCRIPT" > "$tmp_cron_file" || true
+        # Only remove crontab entirely if ALL lines were Crias entries.
         if [ -s "$tmp_cron_file" ]; then
             crontab "$tmp_cron_file" >/dev/null 2>&1 || true
-        else
+        elif [ "$original_count" -le 1 ]; then
             crontab -r >/dev/null 2>&1 || true
+        else
+            crontab "$tmp_cron_file" >/dev/null 2>&1 || true
         fi
     fi
 
     if [ "$SETUP_CRON_SERVER_USER" != "root" ] && crontab -u "$SETUP_CRON_SERVER_USER" -l 2>/dev/null >/dev/null; then
         if crontab -u "$SETUP_CRON_SERVER_USER" -l 2>/dev/null | grep -Fq "$SETUP_CRON_BACKUP_SCRIPT"; then
+            local original_count_user
+            original_count_user=$(crontab -u "$SETUP_CRON_SERVER_USER" -l 2>/dev/null | wc -l)
             crontab -u "$SETUP_CRON_SERVER_USER" -l 2>/dev/null | grep -Fv "$SETUP_CRON_BACKUP_SCRIPT" > "$tmp_cron_file" || true
             if [ -s "$tmp_cron_file" ]; then
                 crontab -u "$SETUP_CRON_SERVER_USER" "$tmp_cron_file" >/dev/null 2>&1 || true
-            else
+            elif [ "$original_count_user" -le 1 ]; then
                 crontab -u "$SETUP_CRON_SERVER_USER" -r >/dev/null 2>&1 || true
+            else
+                crontab -u "$SETUP_CRON_SERVER_USER" "$tmp_cron_file" >/dev/null 2>&1 || true
             fi
         fi
     fi

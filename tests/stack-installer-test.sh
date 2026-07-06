@@ -63,8 +63,8 @@ assert_grep '^warn\(\)' "$ROOT_DIR/shared/lib/common.sh"
 assert_grep '^err\(\)' "$ROOT_DIR/shared/lib/common.sh"
 assert_grep '^log_ts\(\)' "$ROOT_DIR/shared/lib/common.sh"
 
-# 7. downloads.sh tem helpers novos
-assert_grep '^download_and_verify\(\)' "$ROOT_DIR/shared/lib/downloads.sh"
+# 7. downloads.sh tem helpers
+assert_grep '^download_file\(\)' "$ROOT_DIR/shared/lib/downloads.sh"
 assert_grep '^download_modrinth_mod\(\)' "$ROOT_DIR/shared/lib/downloads.sh"
 assert_grep '^_curl_with_retry\(\)' "$ROOT_DIR/shared/lib/downloads.sh"
 assert_grep '^should_skip_network\(\)' "$ROOT_DIR/shared/lib/downloads.sh"
@@ -106,13 +106,14 @@ if ! grep -q "Backup concluido com sucesso" "$TMP_TEST_DIR/backup-output.log"; t
     exit 1
 fi
 
-if [ "$PRE_HOOK_CALLED" != "true" ]; then
-    echo "FAIL: backup_pre_hook não foi chamada"
+# DRY_RUN must NOT call hooks (don't touch live server).
+if [ "$PRE_HOOK_CALLED" = "true" ]; then
+    echo "FAIL: backup_pre_hook foi chamada em DRY_RUN (nao deve pausar saves em servidor live)"
     exit 1
 fi
 
-if [ "$POST_HOOK_CALLED" != "true" ]; then
-    echo "FAIL: backup_post_hook não foi chamada"
+if [ "$POST_HOOK_CALLED" = "true" ]; then
+    echo "FAIL: backup_post_hook foi chamada em DRY_RUN"
     exit 1
 fi
 
@@ -159,11 +160,8 @@ done
 assert_grep '^install_crias_agent_if_enabled\(\)' "$ROOT_DIR/install.sh"
 assert_grep 'install_crias_agent_if_enabled' "$ROOT_DIR/install.sh"
 
-# 14. packages.lock existe e tem pacotes críticos
-assert_file "$ROOT_DIR/packages.lock"
-assert_grep '^jdk21-openjdk' "$ROOT_DIR/packages.lock"
-assert_grep '^curl' "$ROOT_DIR/packages.lock"
-assert_grep '^tailscale' "$ROOT_DIR/packages.lock"
+# 14. config.env tem variáveis essenciais
+assert_grep '^MINECRAFT_ONLINE_MODE="true"' "$ROOT_DIR/config.env"
 
 # 15. config.env tem novas variáveis
 assert_grep '^MINECRAFT_QOL_MODS=' "$ROOT_DIR/config.env"

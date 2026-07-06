@@ -41,7 +41,7 @@ sudo systemctl enable --now nftables
 |-------|----------------|---------|
 | Minecraft | `$MINECRAFT_SERVER_DIR/logs/*.log` | `/etc/logrotate.d/crias-minecraft` (diário, 14 dias, compressão) |
 | Terraria | `journalctl -u terraria` (sem arquivo) | Configurar `SystemMaxUse=500M` em `/etc/systemd/journald.conf` |
-| crias-agent | `/var/log/crias-agent/` + journalctl | Limitado por `MemoryMax=32M` no systemd |
+| crias-agent | `/var/log/crias-agent/` + journalctl | Limitado por `MemoryMax=128M` no systemd |
 
 Se mudar o diretório do servidor, reinstale ou reaplique a configuração para atualizar o caminho do `logrotate`.
 

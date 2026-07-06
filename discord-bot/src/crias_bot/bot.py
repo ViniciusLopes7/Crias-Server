@@ -103,6 +103,10 @@ class CriasBot(commands.Bot):
         """Sync slash commands to guild if FORCE_SYNC_COMMANDS is set."""
         await self.add_cog(MinecraftCog(self))
 
+        # Register global slash command error handler (M-10) so unhandled
+        # exceptions don't leave interactions stuck in "Bot is thinking...".
+        self.tree.error(self._handle_app_command_error)
+
         # Sync only on demand to avoid Discord rate limits at every startup.
         force_sync = os.environ.get("FORCE_SYNC_COMMANDS", "false").strip().lower() == "true"
         if force_sync:
@@ -195,6 +199,37 @@ class CriasBot(commands.Bot):
                 "Falha ao postar evento %s no canal %d", ev.get("event_type"), channel.id
             )
 
+    async def _handle_app_command_error(
+        self,
+        interaction: discord.Interaction,
+        app_error: app_commands.AppCommandError,
+    ) -> None:
+        """Global catch-all for unhandled slash command exceptions.
+
+        Logs the traceback and replies with a generic error embed so the user
+        isn't stuck in "Bot is thinking..." for 15 minutes. Uses followup.send
+        when the interaction has already been responded to; otherwise falls
+        back to response.send_message (the only valid call on a fresh
+        interaction). Parameter named `app_error` to avoid shadowing the
+        imported `error` embed builder.
+        """
+        logger.exception("Erro não tratado em slash command: %s", app_error)
+        generic = error(
+            "Erro inesperado",
+            "Ocorreu um erro ao processar o comando. Os logs foram registrados.",
+        )
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(embed=generic, ephemeral=True)
+            else:
+                await interaction.response.send_message(embed=generic, ephemeral=True)
+        except discord.HTTPException as e:
+            logger.warning(
+                "Não foi possível enviar mensagem de erro para a interaction %s: %s",
+                interaction.id,
+                e,
+            )
+
 
 class MinecraftCog(commands.Cog):
     """Cog exposing the `/mc` slash commands."""
@@ -225,8 +260,17 @@ class MinecraftCog(commands.Cog):
         return False
 
     async def _send_agent_error(self, interaction: discord.Interaction, e: Exception) -> None:
-        """Send agent error embed as followup."""
-        await interaction.followup.send(embed=agent_error(str(e)))
+        """Send agent error embed as followup; fall back to plain text on HTTP failure."""
+        try:
+            await interaction.followup.send(embed=agent_error(str(e)))
+        except discord.HTTPException:
+            logger.warning("Falha ao enviar embed de erro de agente: %s", e)
+            try:
+                await interaction.followup.send(
+                    f"❌ Falha de comunicação com o agente: `{str(e)[:1900]}`",
+                )
+            except discord.HTTPException:
+                logger.error("Falha também no fallback de texto simples para erro de agente")
 
     # ------------------------------------------------------------------
     # Slash commands.
@@ -339,10 +383,20 @@ class MinecraftCog(commands.Cog):
                 await interaction.followup.send(embed=say_confirmation(sanitized), ephemeral=True)
             else:
                 err_msg = result.get("error", "erro desconhecido")
-                await interaction.followup.send(
-                    embed=error("Falha no RCON", f"```\n{err_msg}\n```"),
-                    ephemeral=True,
-                )
+                try:
+                    await interaction.followup.send(
+                        embed=error("Falha no RCON", f"```\n{err_msg}\n```"),
+                        ephemeral=True,
+                    )
+                except discord.HTTPException:
+                    logger.warning("Falha ao enviar embed de erro RCON: %s", err_msg[:200])
+                    try:
+                        await interaction.followup.send(
+                            f"❌ Falha no RCON: `{err_msg[:1900]}`",
+                            ephemeral=True,
+                        )
+                    except discord.HTTPException:
+                        logger.error("Falha também no fallback de texto simples para erro RCON")
         except AgentClientError as e:
             await self._send_agent_error(interaction, e)
 
@@ -401,10 +455,17 @@ class MinecraftCog(commands.Cog):
             await interaction.response.send_message(embed=console_stream_started(channel.mention))
 
     async def _console_stream_loop(self, channel: discord.TextChannel) -> None:
-        """Consume StreamConsole and post to #console; 2s buffer, ~1800-char chunks (Discord limit)."""
+        """Consume StreamConsole and post to #console; 2s buffer, ~1800-char chunks.
+
+        On send failure the buffer is preserved and retried on the next flush
+        so no console lines are silently dropped. After MAX_CONSECUTIVE_FAILURES
+        the stream auto-stops and notifies the control channel.
+        """
         buffer: list[str] = []
         last_flush = time.monotonic()
         MAX_CHARS = 1800  # margin for ``` + newlines
+        MAX_CONSECUTIVE_FAILURES = 5
+        consecutive_failures = 0
 
         try:
             async for line in self.bot.agent.stream_console(tail_lines=50):
@@ -414,16 +475,51 @@ class MinecraftCog(commands.Cog):
                 now = time.monotonic()
                 total_chars = sum(len(s) for s in buffer)
                 if total_chars >= MAX_CHARS or (now - last_flush) >= 2.0:
-                    if buffer:
-                        # Split into chunks that fit within MAX_CHARS.
-                        chunks = _partition_lines(buffer, MAX_CHARS)
-                        for chunk in chunks:
-                            try:
-                                await channel.send(f"```\n{chunk}\n```")
-                            except discord.HTTPException:
-                                pass  # rate limited or message too long
-                        buffer = []
+                    if not buffer:
                         last_flush = now
+                        continue
+                    # Split into chunks that fit within MAX_CHARS.
+                    chunks = _partition_lines(buffer, MAX_CHARS)
+                    send_failed = False
+                    for chunk in chunks:
+                        try:
+                            await channel.send(f"```\n{chunk}\n```")
+                        except discord.NotFound:
+                            # Channel deleted — stop the stream (finally clears
+                            # _console_stream_active).
+                            logger.warning(
+                                "Console stream: canal %d não existe mais; parando stream",
+                                channel.id,
+                            )
+                            return
+                        except discord.HTTPException as send_err:
+                            logger.warning(
+                                "Console stream: falha ao enviar chunk no canal %d: %s",
+                                channel.id,
+                                send_err,
+                            )
+                            send_failed = True
+                            break
+                    if send_failed:
+                        consecutive_failures += 1
+                        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                            logger.warning(
+                                "Console stream: %d falhas consecutivas de envio; parando stream",
+                                consecutive_failures,
+                            )
+                            await self._notify_console_stream_auto_stopped(
+                                channel,
+                                "Stream de console parado após falhas consecutivas de envio.",
+                            )
+                            return
+                        # Keep buffer for retry on next flush; advance
+                        # last_flush so we don't busy-spin on the same chunk.
+                        last_flush = now
+                        continue
+                    # All chunks sent — clear buffer and reset failure counter.
+                    buffer = []
+                    last_flush = now
+                    consecutive_failures = 0
         except AgentClientError as e:
             logger.warning("Console stream falhou: %s", e)
             try:
@@ -435,6 +531,28 @@ class MinecraftCog(commands.Cog):
             raise
         finally:
             self.bot._console_stream_active = False
+
+    async def _notify_console_stream_auto_stopped(
+        self, failed_channel: discord.TextChannel, reason: str
+    ) -> None:
+        """Notify the control channel that the console stream auto-stopped.
+
+        Skips notification when the control channel is unset or is the same as
+        the failed channel (the message would also fail).
+        """
+        controle_id = self.bot.config.controle_channel_id
+        if controle_id is None or controle_id == failed_channel.id:
+            return
+        controle = self.bot.get_channel(controle_id)
+        if controle is None or not isinstance(controle, discord.TextChannel):
+            return
+        try:
+            await controle.send(embed=warning("Console stream parado", reason))
+        except discord.HTTPException:
+            logger.warning(
+                "Falha ao notificar canal de controle %d sobre parada do console stream",
+                controle_id,
+            )
 
 
 def _partition_lines(lines: list[str], max_chars: int) -> list[str]:

@@ -86,14 +86,12 @@ ferramentas de sistema) já vêm pré-instaladas para acelerar o setup.
 |----------|---------|-----------|
 | `CRIAS_SKIP_AUTOSTART` | (vazio) | Se `1`, não roda o `.automated_script.sh` no login. |
 | `CRIAS_REPO_REF` | `main` | Branch/tag do git para clonar no fallback (se ISO não tiver scripts embutidos). |
-| `SKIP_VERIFY` | `0` | Se `1`, pula verificação GPG do commit no fallback. |
-| `INSTALL_SH_SHA256` | (vazio) | Se setado, valida checksum do `install.sh` antes de rodar. |
 
 ## O que está (e não está) embutido na ISO
 
 ### Embutido (não precisa de internet no boot)
 
-- **Instalador completo**: `install.sh`, `config.env`, `packages.lock`
+- **Instalador completo**: `install.sh`, `config.env`
 - **Bibliotecas bash**: `shared/lib/*.sh` (common, downloads, hardware-profile, etc.)
 - **Stack installers**: `minecraft/install.sh`, `terraria/install.sh`
 - **Manager scripts**: `mc-manager.sh`, `tt-manager.sh`, `backup-cron.sh`, etc.

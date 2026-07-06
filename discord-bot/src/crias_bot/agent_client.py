@@ -202,6 +202,31 @@ class AgentClient:
         if self._stub is None or self._event_stub is None:
             await self.connect()
 
+    async def _handle_rpc_error(self, e: grpc.RpcError) -> None:
+        """Reset stub/channel on persistent RPC failures so the next call reconnects.
+
+        Only resets when the error suggests the channel itself is broken
+        (UNAVAILABLE / UNKNOWN); transient per-RPC errors (DEADLINE_EXCEEDED,
+        PERMISSION_DENIED, ...) leave the channel intact.
+        """
+        code_fn = getattr(e, "code", None)
+        code = code_fn() if callable(code_fn) else None
+        if code not in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.UNKNOWN):
+            return
+        logger.warning(
+            "RPC falhou com %s — resetando canal gRPC para forçar reconexão", code
+        )
+        self._stub = None
+        self._event_stub = None
+        # Drop cached status so we don't serve stale data after reconnect.
+        self._status_cache = None
+        if self._channel is not None:
+            try:
+                await self._channel.close()
+            except Exception as close_err:
+                logger.debug("erro ao fechar canal gRPC após falha: %s", close_err)
+            self._channel = None
+
     # --- ServerControl RPCs ---
 
     async def start_server(self) -> dict[str, Any]:
@@ -216,6 +241,7 @@ class AgentClient:
             )
             return {"ok": resp.ok, "message": resp.message, "service": resp.service_name}
         except grpc.RpcError as e:
+            await self._handle_rpc_error(e)
             raise AgentClientError(f"StartServer falhou: {e}") from e
 
     async def stop_server(self) -> dict[str, Any]:
@@ -230,6 +256,7 @@ class AgentClient:
             )
             return {"ok": resp.ok, "message": resp.message, "service": resp.service_name}
         except grpc.RpcError as e:
+            await self._handle_rpc_error(e)
             raise AgentClientError(f"StopServer falhou: {e}") from e
 
     async def restart_server(self) -> dict[str, Any]:
@@ -244,6 +271,7 @@ class AgentClient:
             )
             return {"ok": resp.ok, "message": resp.message, "service": resp.service_name}
         except grpc.RpcError as e:
+            await self._handle_rpc_error(e)
             raise AgentClientError(f"RestartServer falhou: {e}") from e
 
     async def get_status(
@@ -268,6 +296,7 @@ class AgentClient:
             self._status_cache = (resp, time.monotonic())
             return _status_to_dict(resp)
         except grpc.RpcError as e:
+            await self._handle_rpc_error(e)
             raise AgentClientError(f"GetStatus falhou: {e}") from e
 
     async def get_health(self) -> dict[str, Any]:
@@ -289,6 +318,7 @@ class AgentClient:
                 "message": resp.message,
             }
         except grpc.RpcError as e:
+            await self._handle_rpc_error(e)
             raise AgentClientError(f"GetHealth falhou: {e}") from e
 
     async def send_rcon_command(self, command: str) -> dict[str, Any]:
@@ -303,6 +333,7 @@ class AgentClient:
             )
             return {"ok": resp.ok, "output": resp.output, "error": resp.error}
         except grpc.RpcError as e:
+            await self._handle_rpc_error(e)
             raise AgentClientError(f"SendRconCommand falhou: {e}") from e
 
     async def stream_console(self, tail_lines: int = 50) -> AsyncIterator[str]:
@@ -318,6 +349,7 @@ class AgentClient:
             async for line in stream:
                 yield line.line
         except grpc.RpcError as e:
+            await self._handle_rpc_error(e)
             raise AgentClientError(f"StreamConsole falhou: {e}") from e
 
     # --- EventBus RPCs ---
@@ -343,6 +375,7 @@ class AgentClient:
                     "metadata": dict(ev.metadata),
                 }
         except grpc.RpcError as e:
+            await self._handle_rpc_error(e)
             raise AgentClientError(f"SubscribeEvents falhou: {e}") from e
 
 

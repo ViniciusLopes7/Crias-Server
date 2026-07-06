@@ -9,7 +9,7 @@
 # Este script deve ser rodado ANTES do `mkarchiso` (no CI ou localmente).
 #
 # Items incluídos no airootfs:
-#   - install.sh, config.env, packages.lock
+#   - install.sh, config.env
 #   - shared/lib/* (bibliotecas bash)
 #   - minecraft/* (stack installer + manager + service template)
 #   - terraria/* (espelho do minecraft)
@@ -44,7 +44,6 @@ mkdir -p "$TARGET"
 COPY_PATHS=(
     "install.sh"
     "config.env"
-    "packages.lock"
     "shared"
     "minecraft"
     "terraria"
@@ -69,7 +68,6 @@ find "$TARGET" -name '*.sh' -type f -exec chmod 0755 {} +
 
 # Marca arquivos de config como 0644 (não-executáveis).
 chmod 0644 "$TARGET/config.env" 2>/dev/null || true
-chmod 0644 "$TARGET/packages.lock" 2>/dev/null || true
 
 # Escreve um manifesto para auditoria (qual commit gerou esta ISO).
 {

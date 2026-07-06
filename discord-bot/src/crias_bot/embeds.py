@@ -109,7 +109,7 @@ def agent_error(detail: str) -> discord.Embed:
     """Standard embed for gRPC agent communication errors."""
     return error(
         "Falha de comunicação com o agente",
-        f"Não foi possível falar com o `crias-agent`.\n```\n{detail}\n```",
+        f"Não foi possível falar com o `crias-agent`.\n```\n{truncate_for_codeblock(detail)}\n```",
     )
 
 
@@ -275,7 +275,7 @@ def console_stream_error(detail: str) -> discord.Embed:
     """Embed when console stream fails."""
     return error(
         "Stream de console parou",
-        f"Erro durante o stream:\n```\n{detail}\n```",
+        f"Erro durante o stream:\n```\n{truncate_for_codeblock(detail)}\n```",
     )
 
 
@@ -360,3 +360,16 @@ def _format_uptime(seconds: int) -> str:
     if seconds < 86400:
         return f"{seconds // 3600}h {(seconds % 3600) // 60}m"
     return f"{seconds // 86400}d {(seconds % 86400) // 3600}h"
+
+
+def truncate_for_codeblock(text: str, max_len: int = 1800) -> str:
+    """Truncate text so it fits inside a fenced code block.
+
+    Discord caps message length at 2000 chars. Code block fences and
+    surrounding framing consume the remaining ~200 chars. Append a
+    truncation marker when content is shortened.
+    """
+    if len(text) <= max_len:
+        return text
+    marker = "…(truncado)"
+    return text[: max_len - len(marker)] + marker

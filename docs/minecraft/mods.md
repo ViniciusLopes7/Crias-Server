@@ -173,15 +173,3 @@ sudo systemctl restart minecraft
 ```
 
 > **Atenção:** o installer pula a instalação de QoL mods se `/opt/minecraft-server/mods/` já contiver `.jar`s. Isso previne conflitos. Se quiser reinstalar QoL, limpe o diretório primeiro.
-
-### Verificar SHA256 de mods extras (recomendado)
-
-```bash
-# Defina o SHA256 do mod em config.env:
-echo 'MOD_MEU_MOD_SHA256="abc123..."' >> config.env
-
-# Ou exporte antes de rodar o installer:
-export MOD_MEU_MOD_SHA256="abc123..."
-```
-
-O `download_and_verify` valida o checksum antes de aceitar o download.

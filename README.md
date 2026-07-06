@@ -11,10 +11,9 @@ Instalador modular para servidor de jogos em Arch Linux, com escolha inicial ent
 - **Stack único por host**: Minecraft ou Terraria (systemd `Conflicts=` impede ambos rodando simultaneamente).
 - **Tuning automático por hardware**: detecta RAM/CPU/disco e aplica tier LOW/MID/HIGH (override manual via `FORCE_HARDWARE_TIER`).
 - **Hardening systemd**: `ProtectSystem=strict`, `NoNewPrivileges`, `CapabilityBoundingSet=`, `SystemCallFilter=@system-service` em todos os templates `.service`.
-- **Supply chain seguro**: SHA256 obrigatório em downloads, `mrpack-install` pinado em versão específica, `packages.lock` com versões mínimas de pacotes pacman.
-- **Backup com RCON save-lock** (Minecraft): `save-off` + `save-all` antes do `tar`, `save-on` depois.
+- **Backup com RCON save-lock** (Minecraft): `save-off` + `save-all` antes do `tar`, `save-on` depois (com trap EXIT para garantir reativação mesmo se o backup for morto).
 - **Controle remoto via Discord** (opcional): agente Go (`crias-agent`) + bot Python (`discord-bot`) com slash commands `/mc start|stop|status|players|say|console|health`.
-- **CI/CD**: workflow único `ci.yml` com 12 jobs paralelos (lint + test + build + release), release consolidada com ISO + binários Go + Docker bot + source archives + checksums + assinatura GPG opcional.
+- **CI/CD**: workflow único `ci.yml` com 12 jobs paralelos (lint + test + build + release), release consolidada com ISO + binários Go + Docker bot + source archives + checksums SHA256.
 - **Modo não-interativo e DRY_RUN** para testes em CI.
 
 ## Quick Start
@@ -60,11 +59,10 @@ Flags importantes em `config.env`:
 .
 ├── install.sh                  # Bootstrap principal
 ├── config.env                  # Configuração global (PT-BR comentado)
-├── packages.lock               # Versões mínimas de pacotes pacman críticos
 ├── shared/lib/                 # Bibliotecas bash compartilhadas
 │   ├── common.sh               #   log/warn/err, dry-run, is_virtualized, generate_token
 │   ├── config-parser.sh        #   Parser de .env com escape de $()` e aspas
-│   ├── downloads.sh            #   download_and_verify (SHA256 obrigatório, retry backoff)
+│   ├── downloads.sh            #   download_file (retry backoff)
 │   ├── hardware-profile.sh     #   Detecção de RAM/CPU/disco + tier
 │   ├── system-tuning.sh        #   zram, sysctl, scheduler, cpupower
 │   ├── stack-installer.sh      #   Framework de hooks para installers (DRY)
@@ -132,7 +130,7 @@ Restore: veja [docs/restore.md](docs/restore.md).
 ## Controle Remoto via Discord (opcional)
 
 Quando `INSTALL_AGENT=true`, o `install.sh` instala:
-1. **`crias-agent`** — binário Go que escuta em `localhost:8473` (hardening: `MemoryMax=32M`, `CPUQuota=10%`, `MemoryDenyWriteExecute=yes`)
+1. **`crias-agent`** — binário Go que escuta em `localhost:8473` (hardening: `MemoryMax=128M`, `CPUQuota=10%`, `MemoryDenyWriteExecute=yes`)
 2. **`crias-bot`** — bot Python (discord.py 2.x) para deploy no Railway
 
 ```
@@ -217,7 +215,6 @@ Workflow único: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — 12 j
 - `crias-agent-linux-amd64` + `.sha256` — binário do agente Go (x86_64 only; a ISO é x86_64)
 - `crias-bot-image.tar` — Docker image do bot
 - `sha256sums.txt` — checksums de todos os artefatos
-- `sha256sums.txt.sig` — assinatura GPG (se `GPG_PRIVATE_KEY` secret configurado)
 
 ## Testes
 
@@ -241,7 +238,6 @@ ISO_PATH=/path/to/crias.iso bash tests/run-all.sh
 - [docs/Tailscale.md](docs/Tailscale.md) — Conexão via Tailscale (VPN + Funnel)
 - [docs/restore.md](docs/restore.md) — Restore de backups
 - [docs/security.md](docs/security.md) — Firewall, logs, health checks, MAC
-- [docs/CHANGELOG.md](docs/CHANGELOG.md) — Histórico de mudanças por versão
 - [ROADMAP.md](ROADMAP.md) — Status de implementação e próximos passos
 
 ## Atenção: desativação do stack oposto

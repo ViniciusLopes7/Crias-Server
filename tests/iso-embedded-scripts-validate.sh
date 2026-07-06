@@ -34,7 +34,6 @@ echo "  OK: $file_count arquivos embutidos"
 required_files=(
     "install.sh"
     "config.env"
-    "packages.lock"
     "shared/lib/common.sh"
     "shared/lib/downloads.sh"
     "shared/lib/stack-installer.sh"

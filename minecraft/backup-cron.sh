@@ -104,10 +104,11 @@ backup_pre_hook() {
         MCRCON_PORT="$rcon_port"
     fi
 
-    if MCRCON_PASS="$rcon_pass" mcrcon -H "$MCRCON_HOST" -P "$MCRCON_PORT" "save-off" "save-all" >/dev/null 2>&1; then
+    if MCRCON_PASS="$rcon_pass" mcrcon -H "$MCRCON_HOST" -P "$MCRCON_PORT" "save-off" >/dev/null 2>&1; then
         RCON_SAVE_LOCK_ACTIVE=true
         RCON_PASSWORD="$rcon_pass"
         backup_log "Saves pausados via RCON. Aguardando flush..."
+        MCRCON_PASS="$rcon_pass" mcrcon -H "$MCRCON_HOST" -P "$MCRCON_PORT" "save-all" >/dev/null 2>&1 || true
         sleep 3
     fi
 
@@ -122,10 +123,23 @@ backup_post_hook() {
         return 0
     fi
 
-    # shellcheck disable=SC2310
-    MCRCON_PASS="$RCON_PASSWORD" mcrcon -H "$MCRCON_HOST" -P "$MCRCON_PORT" "save-on" >/dev/null 2>&1 || true
-    backup_log "Saves reativados via RCON."
+    local attempt=1
+    local max_attempts=3
+    while [ "$attempt" -le "$max_attempts" ]; do
+        if MCRCON_PASS="$RCON_PASSWORD" mcrcon -H "$MCRCON_HOST" -P "$MCRCON_PORT" "save-on" >/dev/null 2>&1; then
+            backup_log "Saves reativados via RCON."
+            RCON_SAVE_LOCK_ACTIVE=false
+            return 0
+        fi
+        backup_log "AVISO: Falha ao reativar saves (tentativa $attempt/$max_attempts)."
+        attempt=$((attempt + 1))
+        [ "$attempt" -le "$max_attempts" ] && sleep 5
+    done
+
+    backup_log "ERRO CRITICO: Nao foi possivel reativar saves via RCON apos $max_attempts tentativas."
+    backup_log "ERRO CRITICO: O servidor pode estar com save-off ativo. Verifique manualmente com 'mcrcon save-on'."
     RCON_SAVE_LOCK_ACTIVE=false
+    return 1
 }
 
 # Compat: função is_service_active_or_skip e backup_log() herdadas da backup-engine.

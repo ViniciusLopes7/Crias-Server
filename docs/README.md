@@ -70,7 +70,7 @@ Workflow único: [../.github/workflows/ci.yml](../.github/workflows/ci.yml) — 
 
 | Job | Função |
 |-----|--------|
-| `release` | Em tag `v*.*.*` ou `workflow_dispatch` com `create_release=true`: cria UMA release com ISO + binários Go + Docker bot + source archives + checksums + assinatura GPG opcional |
+| `release` | Em tag `v*.*.*` ou `workflow_dispatch` com `create_release=true`: cria UMA release com ISO + binários Go + Docker bot + source archives + checksums SHA256 |
 
 ## Testes
 
