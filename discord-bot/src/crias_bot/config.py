@@ -65,14 +65,10 @@ def load_config() -> BotConfig:
         raise ValueError("CRIAS_AGENT_TOKEN não definido (64 hex chars)")
     # validate format and reject placeholder
     if agent_token == _TOKEN_PLACEHOLDER:
-        raise ValueError(
-            "CRIAS_AGENT_TOKEN ainda é o placeholder — "
-            "gere com: openssl rand -hex 32"
-        )
+        raise ValueError("CRIAS_AGENT_TOKEN ainda é o placeholder — gere com: openssl rand -hex 32")
     if not _TOKEN_RE.match(agent_token):
         raise ValueError(
-            "CRIAS_AGENT_TOKEN deve ter 64 caracteres hex "
-            "(gerado por openssl rand -hex 32)"
+            "CRIAS_AGENT_TOKEN deve ter 64 caracteres hex (gerado por openssl rand -hex 32)"
         )
 
     guild_id_raw = os.environ.get("DISCORD_GUILD_ID", "").strip()

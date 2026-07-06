@@ -1,19 +1,4 @@
-"""Tests para config.py.
-
-TODO (2E-004 / 2E-020 — coordenar com Task 3-A): o `agent_token` no Python
-ainda não tem validação de formato (regex `^[0-9a-f]{64}$`), só de emptiness.
-O lado Go já rejeita placeholders e tokens malformados (`config.go:113-123`).
-Quando a Task 3-A adicionar a validação no `config.py`, adicionar aqui:
-
-- `test_load_config_rejects_placeholder_agent_token` — token = "CHANGE_ME_..."
-- `test_load_config_rejects_short_agent_token` — token com < 64 chars
-- `test_load_config_rejects_uppercase_agent_token` — token com hex maiúsculo
-- `test_load_config_rejects_non_hex_agent_token` — token com 'g' (não-hex)
-- `test_load_config_accepts_valid_agent_token` — token 64-hex passa
-
-Esses testes devem espelhar `discord-agent/internal/config/config_test.go`
-(`TestLoad_PlaceholderAuthToken`, `TestLoad_ShortAuthToken`, etc.).
-"""
+"""Tests para config.py — validação de config, parsing de IDs e token format."""
 
 from __future__ import annotations
 

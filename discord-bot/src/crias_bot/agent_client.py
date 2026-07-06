@@ -44,7 +44,7 @@ def _is_localhost(host: str) -> bool:
     clean = host
     for scheme in ("https://", "http://"):
         if clean.startswith(scheme):
-            clean = clean[len(scheme):]
+            clean = clean[len(scheme) :]
             break
     # strip port
     clean = clean.split(":", 1)[0].rstrip("/")
@@ -127,7 +127,9 @@ class AgentClient:
                         self._channel = None
                     # Wait interruptible by _closing event.
                     try:
-                        await asyncio.wait_for(self._closing.wait(), timeout=min(delay, self.max_reconnect_delay))
+                        await asyncio.wait_for(
+                            self._closing.wait(), timeout=min(delay, self.max_reconnect_delay)
+                        )
                         return  # closing setou, aborta
                     except TimeoutError:
                         pass
@@ -138,10 +140,10 @@ class AgentClient:
         target = self.host
         # Determine scheme and clean target.
         if target.startswith("https://"):
-            target = target[len("https://"):]
+            target = target[len("https://") :]
             use_tls = True
         elif target.startswith("http://"):
-            target = target[len("http://"):]
+            target = target[len("http://") :]
             use_tls = False
         else:
             use_tls = self._force_tls

@@ -207,7 +207,9 @@ class TestStartServer:
         """Agente retorna ok=False — cliente deve propagar como dict (não exceção)."""
         c = _make_client()
         c._stub.StartServer = AsyncMock(
-            return_value=crias_pb2.StartResponse(ok=False, message="falha: systemctl", service_name="mc")
+            return_value=crias_pb2.StartResponse(
+                ok=False, message="falha: systemctl", service_name="mc"
+            )
         )
 
         async def run():
@@ -238,7 +240,9 @@ class TestStopServer:
     def test_success(self):
         c = _make_client()
         c._stub.StopServer = AsyncMock(
-            return_value=crias_pb2.StopResponse(ok=True, message="servidor parado", service_name="minecraft")
+            return_value=crias_pb2.StopResponse(
+                ok=True, message="servidor parado", service_name="minecraft"
+            )
         )
 
         async def run():
@@ -268,7 +272,9 @@ class TestRestartServer:
     def test_success(self):
         c = _make_client()
         c._stub.RestartServer = AsyncMock(
-            return_value=crias_pb2.RestartResponse(ok=True, message="servidor reiniciado", service_name="minecraft")
+            return_value=crias_pb2.RestartResponse(
+                ok=True, message="servidor reiniciado", service_name="minecraft"
+            )
         )
 
         async def run():

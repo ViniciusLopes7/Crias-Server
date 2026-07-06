@@ -115,9 +115,7 @@ class CriasBot(commands.Bot):
                 synced = await self.tree.sync()
                 logger.info("Sincronizados %d slash commands globalmente", len(synced))
         else:
-            logger.info(
-                "Sync de comandos pulado (set FORCE_SYNC_COMMANDS=true para forçar)"
-            )
+            logger.info("Sync de comandos pulado (set FORCE_SYNC_COMMANDS=true para forçar)")
 
         # Start event bridge background task.
         self.event_bridge.start()
@@ -316,7 +314,9 @@ class MinecraftCog(commands.Cog):
         # per-user rate limit
         if not self.bot._rate_limiter.is_allowed(interaction.user.id):
             await interaction.response.send_message(
-                embed=warning("Muitas requisições", "Aguarde alguns segundos antes de tentar novamente."),
+                embed=warning(
+                    "Muitas requisições", "Aguarde alguns segundos antes de tentar novamente."
+                ),
                 ephemeral=True,
             )
             return
