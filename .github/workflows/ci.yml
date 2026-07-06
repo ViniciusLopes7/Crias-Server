@@ -521,10 +521,9 @@ jobs:
             KVM_ARGS="-cpu max"
           fi
 
-          # console order: ttyS0 LAST = primary console (kernel logs go to serial).
-          # tty0 first keeps VGA working but serial is primary for output capture.
-          # systemd.show_status=1 forces systemd to keep logging to console.
-          KERNEL_CMDLINE="archisobasedir=$INSTALL_DIR archisolabel=$ISO_LABEL edd=off console=tty0 console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 loglevel=8 systemd.show_status=1 systemd.log_target=console"
+          # ttyS0 first = early kernel messages (incl. 'Linux version') go to serial.
+          # tty0 last = VGA is primary for /dev/console but serial still gets all output.
+          KERNEL_CMDLINE="archisobasedir=$INSTALL_DIR archisolabel=$ISO_LABEL edd=off console=ttyS0,115200 console=tty0 earlyprintk=serial,ttyS0,115200 loglevel=8"
           echo "Kernel cmdline: $KERNEL_CMDLINE"
           echo "QEMU args: $KVM_ARGS -smp 2 -m 4096"
 
@@ -579,15 +578,12 @@ jobs:
             echo "✗ FAIL: archiso não encontrado no log" >&2
           fi
 
-          # 4. Chegou ao login prompt ou ao multi-user target?
-          # archiso's systemd-mute-console silences serial after boot,
-          # so 'login:' may not appear. Accept these as boot-complete markers:
-          #   - archiso login: (ideal — login prompt reached)
-          #   - Reached target .*Multi-User (systemd reached multi-user.target)
-          #   - Started Getty on tty1 (getty spawned = boot near complete)
-          if grep -qiE 'archiso login:|Reached target .*Multi-User|Started Getty on tty1|Started Login Service' "$qemu_log"; then
+          # 4. Boot complete? archiso runs systemd-firstboot (Initial Setup) after boot.
+          # Markers: 'Welcome to Arch Linux', 'Initial Setup', 'Please configure',
+          # 'archiso login:', or 'Reached target .*Multi-User'.
+          if grep -qiE 'Welcome to Arch Linux|Initial Setup|Please configure the system|archiso login:|Reached target .*Multi-User' "$qemu_log"; then
             echo "✓ OK: boot complete marker reached"
-            grep -iE 'archiso login:|Reached target .*Multi-User|Started Getty on tty1|Started Login Service' "$qemu_log" | head -3
+            grep -iE 'Welcome to Arch Linux|Initial Setup|Please configure the system|archiso login:|Reached target .*Multi-User' "$qemu_log" | head -3
             BOOT_STAGE="$BOOT_STAGE+boot-complete"
             PASS=true
           else
