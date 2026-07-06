@@ -129,7 +129,7 @@ class AgentClient:
                     try:
                         await asyncio.wait_for(self._closing.wait(), timeout=min(delay, self.max_reconnect_delay))
                         return  # closing setou, aborta
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         pass
                     delay *= 2
 
@@ -185,7 +185,7 @@ class AgentClient:
             if self._channel is not None:
                 try:
                     await asyncio.wait_for(self._channel.close(), timeout=5.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.warning("timeout ao fechar canal gRPC (5s)")
                 except Exception as e:
                     logger.warning("erro ao fechar canal gRPC: %s", e)

@@ -547,7 +547,7 @@ class TestConnectBackoff:
             # Backoff delay: registra e simula timeout do _closing.wait()
             if timeout and 0 < timeout < 5.0:
                 delays.append(timeout)
-                raise asyncio.TimeoutError()
+                raise TimeoutError()
             raise TimeoutError("never ready")
 
         monkeypatch.setattr("crias_bot.agent_client.asyncio.wait_for", fake_wait_for)
