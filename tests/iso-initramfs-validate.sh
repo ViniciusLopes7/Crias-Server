@@ -19,11 +19,6 @@ if ! command -v bsdtar >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! command -v lsinitcpio >/dev/null 2>&1; then
-    echo "lsinitcpio nao encontrado no ambiente." >&2
-    exit 1
-fi
-
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(mktemp -d)"
 # Helper safe_cleanup_dir sourced from tests/lib/cleanup.sh (DRY).
@@ -59,7 +54,9 @@ fi
 echo "[iso-initramfs-validate] Validando hooks do initramfs..."
 required_hooks=(archiso archiso_loop_mnt base udev block filesystems keyboard)
 hook_listing="$WORK_DIR/initramfs-hooks.txt"
-lsinitcpio -a "$initramfs_file" > "$hook_listing"
+# bsdtar lists cpio contents (initramfs is a compressed cpio archive).
+# This replaces the Arch-specific lsinitcpio, making the test portable.
+bsdtar -tf "$initramfs_file" > "$hook_listing" 2>/dev/null
 
 for hook in "${required_hooks[@]}"; do
     if ! grep -Eq "(^|/)hooks/${hook}$" "$hook_listing"; then
