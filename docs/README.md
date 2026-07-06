@@ -83,16 +83,3 @@ bash tests/quick-script-tests.sh
 # Testes que requerem ISO construída
 ISO_PATH=/path/to/crias.iso bash tests/run-all.sh
 ```
-
-## Historico de documentação removida
-
-Os seguintes documentos foram removidos na v1.0.0 por serem obsoletos ou redundantes:
-
-- `docs/plano-arquitetura.md` — plano original executado; histórico preservado em `CHANGELOG.md`
-- `docs/InstalacaoManual.md` — tutorial antigo para hardware específico (i3-6006U, 4GB RAM); tudo automatizado pelo `install.sh`
-- `docs/Chunky.md`, `docs/EssentialCommands.md`, `docs/StyledChat.md` — consolidados em `minecraft/mods.md`
-- `docs/shared/Compatibilidade.md` — dizia apenas "transição terminou"; informação óbvia
-- `docs/shared/Cleanup.md` — consolidado em `security.md`
-- `docs/shared/SecurityAndOps.md` — consolidado em `security.md`
-- `docs/shared/HardwareTuning.md` — movido para `hardware-tuning.md`
-- `docs/shared/Restore.md` — movido para `restore.md`
