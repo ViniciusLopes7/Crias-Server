@@ -139,7 +139,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Python
-        uses: actions/setup-python@8d9ed9ac5c53483de855887957e417a4d6f0c7ee # v5.5.0
+        uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5.5.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -251,7 +251,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Python
-        uses: actions/setup-python@8d9ed9ac5c53483de855887957e417a4d6f0c7ee # v5.5.0
+        uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5.5.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -873,7 +873,7 @@ jobs:
         # 2A-005: gera atestação SLSA build provenance para os artefatos de release.
         # Requer permissions: { attestations: write, id-token: write } (definidas no job).
         # Usuário final verifica com: gh attestation verify <asset> --repo <repo>
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.2.0
+        uses: actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4 # v2.2.0
         with:
           subject-path: |
             release-assets/*.iso
