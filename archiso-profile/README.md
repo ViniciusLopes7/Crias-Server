@@ -3,12 +3,13 @@
 A ISO gerada pelo Crias-Server é **pronta pra uso**: ao dar boot, o instalador
 já está embutido em `/opt/crias-server/` e roda automaticamente no primeiro
 login do root. Dependências base (Java 21, NetworkManager, Tailscale,
-ferramentas de sistema) já vêm pré-instaladas para acelerar o setup.
+**OpenSSH** (v1.2.0), **`gum`** (v1.2.0), ferramentas de sistema) já vêm
+pré-instaladas para acelerar o setup.
 
-> **v1.1.0**: ISO agora é "pronta pra uso" — instalador embutido em
-> `/opt/crias-server/`. Tailscale voltou a ser pré-instalado na ISO
-> (mantido em `packages.x86_64`) para garantir disponibilidade mesmo sem
-> internet no primeiro boot.
+> **v1.2.0**: ISO agora inclui `openssh` e `gum`. O `install.sh` pergunta se
+> habilita SSH no host instalado (usuário `crias` + sudo). O `sshd` **não**
+> sobe sozinho no live ISO (mantém o auto-login seguro no tty1); para iniciar
+> manualmente no live: `systemctl start sshd`.
 
 ## Como a ISO funciona
 
@@ -92,13 +93,14 @@ ferramentas de sistema) já vêm pré-instaladas para acelerar o setup.
 ### Embutido (não precisa de internet no boot)
 
 - **Instalador completo**: `install.sh`, `config.env`
-- **Bibliotecas bash**: `shared/lib/*.sh` (common, downloads, hardware-profile, etc.)
+- **Bibliotecas bash**: `shared/lib/*.sh` (common, downloads, hardware-profile, **tui.sh**, **mc-manifests.sh**, etc.)
 - **Stack installers**: `minecraft/install.sh`, `terraria/install.sh`
 - **Manager scripts**: `mc-manager.sh`, `tt-manager.sh`, `backup-cron.sh`, etc.
 - **Systemd templates**: `minecraft.service`, `terraria.service`
 - **Branding**: escudo e banner do Crias (usados em `print_header`)
-- **Pacotes pacman**: Java 21, NetworkManager, Tailscale, curl, wget, htop,
-  vim, git, etc. (lista completa em `archiso-profile/packages.x86_64`)
+- **Pacotes pacman**: Java 21, NetworkManager, Tailscale, **OpenSSH** (v1.2.0),
+  **`gum`** (v1.2.0, TUI), curl, wget, htop, vim, git, etc. (lista completa em
+  `archiso-profile/packages.x86_64`)
 
 ### Baixado sob demanda pelo `install.sh`
 

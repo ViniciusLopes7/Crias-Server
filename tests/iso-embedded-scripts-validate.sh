@@ -38,6 +38,8 @@ required_files=(
     "shared/lib/downloads.sh"
     "shared/lib/stack-installer.sh"
     "shared/lib/hardware-profile.sh"
+    "shared/lib/tui.sh"
+    "shared/lib/mc-manifests.sh"
     "minecraft/install.sh"
     "minecraft/mc-manager.sh"
     "minecraft/minecraft.service"
@@ -110,14 +112,15 @@ for path in "/opt/crias-server/install.sh" "/opt/crias-server/config.env"; do
 done
 echo "  OK: profiledef.sh declara file_permissions para arquivos embutidos"
 
-# --- 7. packages.x86_64 contém os pacotes essenciais (incluindo tailscale) ---
+# --- 7. packages.x86_64 contém os pacotes essenciais (incluindo tailscale,
+# openssh desde v1.2.0, gum desde v1.2.0) ---
 pkgs="$ROOT_DIR/archiso-profile/packages.x86_64"
-for pkg in archiso base linux mkinitcpio mkinitcpio-archiso grub networkmanager tailscale jdk21-openjdk sudo jq gettext; do
+for pkg in archiso base linux mkinitcpio mkinitcpio-archiso grub networkmanager tailscale openssh gum jdk21-openjdk sudo jq gettext; do
     if ! grep -Eq "^${pkg}\$" "$pkgs"; then
         echo "FAIL: pacote essencial ausente em packages.x86_64: $pkg" >&2
         exit 1
     fi
 done
-echo "  OK: packages.x86_64 contém todos os pacotes essenciais (incl. tailscale)"
+echo "  OK: packages.x86_64 contém todos os pacotes essenciais (incl. tailscale, openssh, gum)"
 
 echo "[iso-embedded-scripts-validate] OK — todos os checks passaram"

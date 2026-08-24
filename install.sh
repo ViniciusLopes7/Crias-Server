@@ -15,6 +15,14 @@ source "$SCRIPT_DIR/shared/lib/config-parser.sh"
 # Provides download_file() and _curl_with_retry() for this script and stack installers.
 source "$SCRIPT_DIR/shared/lib/downloads.sh"
 
+# shellcheck source=/dev/null
+# TUI library (gum wrapper with read-based fallback).
+source "$SCRIPT_DIR/shared/lib/tui.sh"
+
+# shellcheck source=/dev/null
+# Minecraft manifests + Modrinth API helpers (dynamic version/modpack selection).
+source "$SCRIPT_DIR/shared/lib/mc-manifests.sh"
+
 # Load config once before defaults to avoid capturing false values.
 apply_config_with_env_precedence "$CONFIG_FILE"
 
@@ -65,6 +73,14 @@ TERRARIA_DOWNLOAD_URL="${TERRARIA_DOWNLOAD_URL:-https://terraria.org/api/downloa
 # Optional remote control agent install.
 INSTALL_AGENT="${INSTALL_AGENT:-}"
 
+# SSH: vazio = pergunta interativamente (default N). true/false = força.
+# Se true, instala openssh no host, habilita sshd, cria usuario 'crias' com sudo.
+INSTALL_SSH="${INSTALL_SSH:-}"
+
+# tModLoader para Terraria (WIP — v1.2.0). Nao implementado completamente.
+# Reservado para futura instalacao de mods no Terraria.
+TERRARIA_USE_TMODLOADER="${TERRARIA_USE_TMODLOADER:-false}"
+
 select_server_type() {
     if [ "$SERVER_TYPE" = "minecraft" ] || [ "$SERVER_TYPE" = "terraria" ]; then
         return 0
@@ -75,28 +91,7 @@ select_server_type() {
         exit 1
     fi
 
-    echo "Selecione qual servidor deseja instalar:"
-    echo ""
-    echo "1) Minecraft"
-    echo "2) Terraria"
-    echo ""
-
-    while true; do
-        read -r -p "Opcao (1-2): " selected
-        case "$selected" in
-            1)
-                SERVER_TYPE="minecraft"
-                return 0
-                ;;
-            2)
-                SERVER_TYPE="terraria"
-                return 0
-                ;;
-            *)
-                print_warning "Opcao invalida. Escolha 1 ou 2."
-                ;;
-        esac
-    done
+    tui_choose SERVER_TYPE "Qual servidor deseja instalar?" "$SERVER_TYPE" "minecraft" "terraria"
 }
 
 prompt_global_options() {
@@ -105,25 +100,32 @@ prompt_global_options() {
     fi
 
     echo ""
-    if ask_confirm "Deseja revisar opcoes globais?" "N"; then
-        ask_value "Forcar tier de hardware (LOW/MID/HIGH ou vazio para auto)" "$FORCE_HARDWARE_TIER" FORCE_HARDWARE_TIER
+    if tui_confirm "Deseja revisar opcoes globais?" "N"; then
+        tui_input FORCE_HARDWARE_TIER "Forcar tier de hardware (LOW/MID/HIGH ou vazio para auto)" "$FORCE_HARDWARE_TIER"
 
-        if ask_confirm "Instalar/configurar Tailscale?" "Y"; then
+        if tui_confirm "Instalar/configurar Tailscale?" "Y"; then
             INSTALL_TAILSCALE="true"
         else
             INSTALL_TAILSCALE="false"
         fi
 
-        if ask_confirm "Aplicar tuning de sistema (zram/scheduler/cpupower)?" "Y"; then
+        if tui_confirm "Aplicar tuning de sistema (zram/scheduler/cpupower)?" "Y"; then
             APPLY_SYSTEM_TUNING="true"
         else
             APPLY_SYSTEM_TUNING="false"
         fi
 
-        if ask_confirm "Limpar stack nao selecionado apos instalar?" "Y"; then
+        if tui_confirm "Limpar stack nao selecionado apos instalar?" "Y"; then
             CLEANUP_OTHER_STACK="true"
         else
             CLEANUP_OTHER_STACK="false"
+        fi
+
+        # Nova opcao desde v1.2.0: habilitar SSH no host instalado.
+        if tui_confirm "Habilitar acesso SSH no servidor instalado? (cria usuario 'crias' com sudo)" "N"; then
+            INSTALL_SSH="true"
+        else
+            INSTALL_SSH="false"
         fi
     fi
 }
@@ -134,31 +136,238 @@ prompt_minecraft_options() {
     fi
 
     echo ""
-    if ask_confirm "Deseja revisar configuracoes do Minecraft?" "Y"; then
-        ask_value "Usuario do Minecraft" "$MINECRAFT_USER" MINECRAFT_USER
-        ask_value "Diretorio do Minecraft" "$MINECRAFT_SERVER_DIR" MINECRAFT_SERVER_DIR
-        ask_value "Porta do Minecraft" "$MINECRAFT_PORT" MINECRAFT_PORT
-        ask_value "MOTD (Message of the Day)" "$MINECRAFT_MOTD" MINECRAFT_MOTD
-        ask_value "Versao do Minecraft" "$MINECRAFT_VERSION" MINECRAFT_VERSION
-        ask_value "Loader (fabric/quilt/paper/vanilla/forge/neoforge)" "$MINECRAFT_LOADER" MINECRAFT_LOADER
+    if tui_confirm "Deseja revisar configuracoes do Minecraft?" "Y"; then
+        tui_input MINECRAFT_USER "Usuario do Minecraft" "$MINECRAFT_USER"
+        tui_input MINECRAFT_SERVER_DIR "Diretorio do Minecraft" "$MINECRAFT_SERVER_DIR"
+        tui_input MINECRAFT_PORT "Porta do Minecraft" "$MINECRAFT_PORT"
+        tui_input MINECRAFT_MOTD "MOTD (Message of the Day)" "$MINECRAFT_MOTD"
 
-        if ask_confirm "Ativar online-mode=true (premium)?" "N"; then
+        # Loader selection via TUI (paper removido em v1.2.0).
+        tui_choose MINECRAFT_LOADER "Loader (fabric/quilt/vanilla/forge/neoforge)" "$MINECRAFT_LOADER" \
+            "fabric" "quilt" "vanilla" "forge" "neoforge"
+
+        # Dynamic MC version selection via Modrinth/Mojang manifest.
+        prompt_minecraft_version_dynamic
+
+        if tui_confirm "Ativar online-mode=true (premium)?" "N"; then
             MINECRAFT_ONLINE_MODE="true"
         else
             MINECRAFT_ONLINE_MODE="false"
         fi
 
-        if ask_confirm "Instalar Modpack Adrenaline?" "Y"; then
-            MINECRAFT_INSTALL_MODPACK="true"
-        else
-            MINECRAFT_INSTALL_MODPACK="false"
-        fi
+        # Modpack source: dynamic top-10 Modrinth / search / vanilla / manual slug.
+        prompt_minecraft_modpack_dynamic
 
-        if ask_confirm "Instalar mods QoL adicionais?" "Y"; then
+        if tui_confirm "Instalar mods QoL adicionais?" "Y"; then
             MINECRAFT_INSTALL_QOL_MODS="true"
         else
             MINECRAFT_INSTALL_QOL_MODS="false"
         fi
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Dynamic Minecraft version selection.
+# Busca versoes do manifest do loader selecionado e oferece selecao via TUI
+# (gum filter). Se sem internet, aborta com mensagem clara (server.jar exige
+# download). Mostra snapshots marcados visualmente se usuario optar.
+# ---------------------------------------------------------------------------
+prompt_minecraft_version_dynamic() {
+    print_step "Buscando versoes de Minecraft para loader: $MINECRAFT_LOADER ..."
+
+    if ! mc_has_internet; then
+        print_error "Sem conexao com internet. A selecao dinamica de versao e o"
+        print_error "download do server.jar exigem internet. Conecte-se e tente novamente."
+        if is_true "$NON_INTERACTIVE"; then
+            return 0
+        fi
+        exit 1
+    fi
+
+    # Pergunta se quer ver snapshots.
+    local include_snapshots=0
+    if tui_confirm "Mostrar snapshots/pre-releases na lista de versoes? (marcados visualmente)" "N"; then
+        include_snapshots=1
+    fi
+
+    local versions
+    if ! versions=$(mc_get_versions_for_loader "$MINECRAFT_LOADER" "$include_snapshots") || [ -z "$versions" ]; then
+        print_warning "Falha ao buscar versoes dinamicas para loader '$MINECRAFT_LOADER'."
+        print_warning "Usando versao default do config.env: $MINECRAFT_VERSION"
+        tui_input MINECRAFT_VERSION "Versao do Minecraft (manual)" "$MINECRAFT_VERSION"
+        return 0
+    fi
+
+    local selected
+    if selected=$(printf '%s\n' "$versions" | tui_filter "Selecione a versao do Minecraft (busca fuzzy)") && [ -n "$selected" ]; then
+        # Limpa marker "(snapshot)" se presente.
+        MINECRAFT_VERSION="${selected%% *}"
+        print_success "Versao selecionada: $MINECRAFT_VERSION"
+    else
+        print_warning "Selecao cancelada; usando default: $MINECRAFT_VERSION"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Dynamic modpack selection.
+# Fonte: top-10 Modrinth (downloads) / busca por nome / vanilla (so loader) /
+# slug Modrinth manual. Busca versoes do modpack compatíveis com o loader+MC
+# selecionado (filtro server-side); se nenhuma compativel, sugere MC mais
+# proxima.
+# ---------------------------------------------------------------------------
+prompt_minecraft_modpack_dynamic() {
+    local source
+    tui_choose source "Fonte do modpack?" "adrenaline" \
+        "Top 10 modpacks (Modrinth)" \
+        "Buscar modpack por nome" \
+        "Vanilla (so loader, sem modpack)" \
+        "Slug Modrinth manual"
+
+    case "$source" in
+        "Top 10 modpacks (Modrinth)")
+            _prompt_modpack_top10 ;;
+        "Buscar modpack por nome")
+            _prompt_modpack_search ;;
+        "Vanilla (so loader, sem modpack)")
+            MINECRAFT_MODPACK_SOURCE="vanilla"
+            MINECRAFT_INSTALL_MODPACK="false"
+            return 0
+            ;;
+        "Slug Modrinth manual")
+            MINECRAFT_MODPACK_SOURCE="modrinth"
+            tui_input MINECRAFT_MODPACK_SLUG "Slug do modpack no Modrinth" "${MINECRAFT_MODPACK_SLUG:-adrenaline}"
+            _prompt_modpack_select_version "$MINECRAFT_MODPACK_SLUG"
+            ;;
+        *)
+            print_warning "Opcao invalida; mantendo default (adrenaline)."
+            MINECRAFT_MODPACK_SOURCE="adrenaline"
+            MINECRAFT_MODPACK_SLUG="adrenaline"
+            ;;
+    esac
+
+    if [ "$MINECRAFT_MODPACK_SOURCE" != "vanilla" ]; then
+        MINECRAFT_INSTALL_MODPACK="true"
+    fi
+}
+
+_prompt_modpack_top10() {
+    print_step "Buscando top 10 modpacks no Modrinth (por downloads) ..."
+    if ! mc_has_internet; then
+        print_error "Sem internet para buscar modpacks. Conecte-se e tente novamente."
+        exit 1
+    fi
+    local json results selected
+    json=$(mc_fetch_modrinth_search_modpacks "" 10) || true
+    results=$(mc_parse_modrinth_search "$json")
+    if [ -z "$results" ]; then
+        print_error "Nenhum modpack encontrado na busca do Modrinth."
+        return 1
+    fi
+    if selected=$(printf '%s\n' "$results" | tui_filter "Selecione o modpack (top 10 Modrinth)") && [ -n "$selected" ]; then
+        MINECRAFT_MODPACK_SOURCE="modrinth"
+        MINECRAFT_MODPACK_SLUG=$(mc_extract_slug "$selected")
+        print_success "Modpack: $MINECRAFT_MODPACK_SLUG"
+        _prompt_modpack_select_version "$MINECRAFT_MODPACK_SLUG"
+    else
+        print_warning "Selecao cancelada; usando default adrenaline."
+        MINECRAFT_MODPACK_SOURCE="adrenaline"
+        MINECRAFT_MODPACK_SLUG="adrenaline"
+    fi
+}
+
+_prompt_modpack_search() {
+    local query
+    tui_input query "Buscar modpack por nome (ex.: Fabulously Optimized)" ""
+    if [ -z "$query" ]; then
+        print_warning "Busca vazia; usando default adrenaline."
+        MINECRAFT_MODPACK_SOURCE="adrenaline"
+        MINECRAFT_MODPACK_SLUG="adrenaline"
+        return 0
+    fi
+    print_step "Buscando modpacks no Modrinth por: $query ..."
+    if ! mc_has_internet; then
+        print_error "Sem internet para buscar modpacks."
+        exit 1
+    fi
+    local json results selected
+    json=$(mc_fetch_modrinth_search_modpacks "$query" 10) || true
+    results=$(mc_parse_modrinth_search "$json")
+    if [ -z "$results" ]; then
+        print_error "Nenhum modpack encontrado para '$query'."
+        return 1
+    fi
+    if selected=$(printf '%s\n' "$results" | tui_filter "Resultados para '$query'") && [ -n "$selected" ]; then
+        MINECRAFT_MODPACK_SOURCE="modrinth"
+        MINECRAFT_MODPACK_SLUG=$(mc_extract_slug "$selected")
+        print_success "Modpack: $MINECRAFT_MODPACK_SLUG"
+        _prompt_modpack_select_version "$MINECRAFT_MODPACK_SLUG"
+    else
+        print_warning "Selecao cancelada; usando default adrenaline."
+        MINECRAFT_MODPACK_SOURCE="adrenaline"
+        MINECRAFT_MODPACK_SLUG="adrenaline"
+    fi
+}
+
+# Seleciona versao do modpack compativel com o loader+MC selecionados.
+# Se nenhuma versao compativel, sugere MC mais proxima e pergunta se troca.
+_prompt_modpack_select_version() {
+    local slug="$1"
+    print_step "Buscando versoes de '$slug' compativeis com $MINECRAFT_LOADER + MC $MINECRAFT_VERSION ..."
+    local json versions selected
+    json=$(mc_fetch_modrinth_project_versions "$slug" "$MINECRAFT_LOADER" "$MINECRAFT_VERSION") || true
+    versions=$(mc_parse_modrinth_project_versions "$json")
+
+    if [ -n "$versions" ]; then
+        if selected=$(printf '%s\n' "$versions" | tui_filter "Versoes compativeis (selecione)") && [ -n "$selected" ]; then
+            MINECRAFT_ADRENALINE_VERSION=$(mc_extract_version_number "$selected")
+            print_success "Versao do modpack: $MINECRAFT_ADRENALINE_VERSION"
+        else
+            print_warning "Sem selecao; mrpack-install usara a mais recente."
+            MINECRAFT_ADRENALINE_VERSION=""
+        fi
+        return 0
+    fi
+
+    # Nenhuma versao compativel. Sugerir MC mais proxima.
+    print_warning "Nenhuma versao de '$slug' compativel com MC $MINECRAFT_VERSION + $MINECRAFT_LOADER."
+    print_step "Buscando todas as versoes do modpack para sugerir MC mais proxima..."
+    local all_json all_versions
+    all_json=$(mc_fetch_modrinth_project_versions "$slug" "" "") || true
+    # Extrai game_versions suportadas (unica, ordenadas pela posicao = mais recente primeiro).
+    all_versions=$(printf '%s' "$all_json" | jq -r '
+        .[]?.game_versions[]?
+    ' 2>/dev/null | awk '!seen[$0]++' || true)
+
+    if [ -z "$all_versions" ]; then
+        print_error "Nao foi possivel obter versoes suportadas por '$slug'."
+        print_warning "Continuando com MC $MINECRAFT_VERSION; o modpack pode falhar ao instalar."
+        MINECRAFT_ADRENALINE_VERSION=""
+        return 0
+    fi
+
+    local suggested
+    suggested=$(mc_suggest_closest_version "$MINECRAFT_VERSION" "$all_versions")
+    if [ -n "$suggested" ] && [ "$suggested" != "$MINECRAFT_VERSION" ]; then
+        print_step "Versao de Minecraft mais proxima suportada por '$slug': $suggested"
+        if tui_confirm "Trocar a versao do MC de $MINECRAFT_VERSION para $suggested?" "Y"; then
+            MINECRAFT_VERSION="$suggested"
+            print_success "Versao do MC ajustada para: $MINECRAFT_VERSION"
+            # Re-busca versoes do modpack com a nova MC.
+            json=$(mc_fetch_modrinth_project_versions "$slug" "$MINECRAFT_LOADER" "$MINECRAFT_VERSION") || true
+            versions=$(mc_parse_modrinth_project_versions "$json")
+            if [ -n "$versions" ] && selected=$(printf '%s\n' "$versions" | tui_filter "Versoes compativeis (MC $MINECRAFT_VERSION)") && [ -n "$selected" ]; then
+                MINECRAFT_ADRENALINE_VERSION=$(mc_extract_version_number "$selected")
+                print_success "Versao do modpack: $MINECRAFT_ADRENALINE_VERSION"
+            else
+                MINECRAFT_ADRENALINE_VERSION=""
+            fi
+        else
+            print_warning "Mantendo MC $MINECRAFT_VERSION; o modpack pode falhar."
+            MINECRAFT_ADRENALINE_VERSION=""
+        fi
+    else
+        print_warning "Nao foi possivel sugerir versao proxima; continuando."
+        MINECRAFT_ADRENALINE_VERSION=""
     fi
 }
 
@@ -168,13 +377,19 @@ prompt_terraria_options() {
     fi
 
     echo ""
-    if ask_confirm "Deseja revisar configuracoes do Terraria?" "Y"; then
-        ask_value "Usuario do Terraria" "$TERRARIA_USER" TERRARIA_USER
-        ask_value "Diretorio do Terraria" "$TERRARIA_SERVER_DIR" TERRARIA_SERVER_DIR
-        ask_value "Porta do Terraria" "$TERRARIA_PORT" TERRARIA_PORT
-        ask_value "Nome do mundo" "$TERRARIA_WORLD_NAME" TERRARIA_WORLD_NAME
-        ask_value "MOTD" "$TERRARIA_MOTD" TERRARIA_MOTD
-        ask_value "URL de download do pacote Terraria" "$TERRARIA_DOWNLOAD_URL" TERRARIA_DOWNLOAD_URL
+    if tui_confirm "Deseja revisar configuracoes do Terraria?" "Y"; then
+        tui_input TERRARIA_USER "Usuario do Terraria" "$TERRARIA_USER"
+        tui_input TERRARIA_SERVER_DIR "Diretorio do Terraria" "$TERRARIA_SERVER_DIR"
+        tui_input TERRARIA_PORT "Porta do Terraria" "$TERRARIA_PORT"
+        tui_input TERRARIA_WORLD_NAME "Nome do mundo" "$TERRARIA_WORLD_NAME"
+        tui_input TERRARIA_MOTD "MOTD" "$TERRARIA_MOTD"
+        tui_input TERRARIA_DOWNLOAD_URL "URL de download do pacote Terraria" "$TERRARIA_DOWNLOAD_URL"
+
+        # tModLoader (WIP — v1.2.0): placeholder, nao implementado.
+        if is_true "$TERRARIA_USE_TMODLOADER"; then
+            print_warning "tModLoader support is WIP (v1.2.0) — ainda nao implementado."
+            print_warning "Continuando com servidor vanilla do Terraria."
+        fi
     fi
 }
 
@@ -425,6 +640,7 @@ write_stack_env_file() {
             printf 'TERRARIA_WORLD_NAME=%q\n' "$TERRARIA_WORLD_NAME"
             printf 'TERRARIA_MOTD=%q\n' "$TERRARIA_MOTD"
             printf 'TERRARIA_DOWNLOAD_URL=%q\n' "$TERRARIA_DOWNLOAD_URL"
+            printf 'TERRARIA_USE_TMODLOADER=%q\n' "$TERRARIA_USE_TMODLOADER"
         fi
     } > "$env_file"; then
         rm -f "$env_file"
@@ -607,6 +823,153 @@ cleanup_other_stack_if_needed() {
 
         cleanup_stack_by_type "$other_stack"
     fi
+}
+
+# ---------------------------------------------------------------------------
+# SSH setup (v1.2.0). Pergunta interativamente se INSTALL_SSH estiver vazio.
+# Se sim: instala openssh no host, habilita sshd, cria usuario 'crias' com
+# sudo (senha pedida), configura PermitRootLogin no. No live ISO o sshd NAO
+# sobe sozinho — este passo configura apenas o host instalado.
+# ---------------------------------------------------------------------------
+install_ssh_if_enabled() {
+    local ssh_user="crias"
+
+    # Resolve config interativa se INSTALL_SSH estiver vazio.
+    if [ -z "$INSTALL_SSH" ]; then
+        if is_true "$NON_INTERACTIVE"; then
+            INSTALL_SSH="false"
+        else
+            if tui_confirm "Habilitar acesso SSH no servidor instalado? (cria usuario 'crias' com sudo)" "N"; then
+                INSTALL_SSH="true"
+            else
+                INSTALL_SSH="false"
+            fi
+        fi
+    fi
+
+    if ! is_true "$INSTALL_SSH"; then
+        return 0
+    fi
+
+    if is_true "$DRY_RUN"; then
+        print_step "[DRY_RUN] Pulando configuracao de SSH."
+        return 0
+    fi
+
+    print_step "Configurando acesso SSH..."
+
+    # 1. Instala openssh (se nao presente).
+    if ! command -v sshd >/dev/null 2>&1; then
+        print_step "Instalando openssh via pacman..."
+        if ! pacman -S --needed --noconfirm openssh >/dev/null 2>&1; then
+            print_error "Falha ao instalar openssh via pacman."
+            print_error "Configure SSH manualmente apos a instalacao."
+            return 1
+        fi
+    else
+        print_step "openssh ja instalado."
+    fi
+
+    # 2. Cria usuario 'crias' com sudo (se nao existir).
+    if ! id "$ssh_user" >/dev/null 2>&1; then
+        print_step "Criando usuario '$ssh_user' com sudo..."
+
+        # Pede a senha de forma interativa (nao-echo). Em NON_INTERACTIVE
+        # isso nao roda (INSTALL_SSH ja foi forçado false acima), mas defendemos.
+        if ! is_true "$NON_INTERACTIVE"; then
+            local ssh_pass ssh_pass_confirm
+            while true; do
+                # Le senha sem echo. read -s nao imprime caracteres.
+                print_prompt "Defina a senha do usuario '$ssh_user' (para SSH + sudo)"
+                read -r -s -p "$(printf '%b' "${CYAN}  ➜ senha: ${NC}")" ssh_pass
+                echo ""
+                read -r -s -p "$(printf '%b' "${CYAN}  ➜ confirme a senha: ${NC}")" ssh_pass_confirm
+                echo ""
+                if [ -z "$ssh_pass" ]; then
+                    print_error "Senha nao pode ser vazia."
+                    continue
+                fi
+                if [ "$ssh_pass" != "$ssh_pass_confirm" ]; then
+                    print_error "As senhas nao coincidem. Tente novamente."
+                    continue
+                fi
+                break
+            done
+
+            # Cria o usuario com home e shell bash.
+            useradd -m -s /bin/bash "$ssh_user"
+
+            # Define a senha.
+            if ! printf '%s:%s\n' "$ssh_user" "$ssh_pass" | chpasswd 2>/dev/null; then
+                print_error "Falha ao definir senha do usuario '$ssh_user'."
+                return 1
+            fi
+            # Limpa a senha da memoria.
+            ssh_pass=""
+            ssh_pass_confirm=""
+        else
+            # Fallback defensivo: cria usuario com senha bloqueada (login por chave apenas).
+            useradd -m -s /bin/bash "$ssh_user"
+            passwd -l "$ssh_user" >/dev/null 2>&1 || true
+            print_warning "Usuario '$ssh_user' criado com senha bloqueada (NON_INTERACTIVE)."
+            print_warning "Configure uma chave publica em /home/$ssh_user/.ssh/authorized_keys."
+        fi
+
+        # Adiciona ao grupo wheel (sudo no Arch).
+        usermod -aG wheel "$ssh_user" 2>/dev/null || true
+    else
+        print_step "Usuario '$ssh_user' ja existe."
+    fi
+
+    # 3. Garante que sudoers permite wheel (sem senha NAO — exige senha).
+    local sudoers_file="/etc/sudoers.d/crias-wheel"
+    if [ ! -f "$sudoers_file" ]; then
+        printf '%%wheel ALL=(ALL) ALL\n' > "$sudoers_file"
+        chmod 0440 "$sudoers_file"
+        if command -v visudo >/dev/null 2>&1; then
+            if ! visudo -cf "$sudoers_file" >/dev/null 2>&1; then
+                print_warning "sudoers invalido; removendo $sudoers_file"
+                rm -f "$sudoers_file"
+            else
+                print_step "sudoers para grupo wheel criado em $sudoers_file"
+            fi
+        fi
+    fi
+
+    # 4. Configura sshd: drop-in para PermitRootLogin no + PasswordAuthentication yes.
+    local sshd_dropin_dir="/etc/ssh/sshd_config.d"
+    local sshd_dropin="$sshd_dropin_dir/10-crias.conf"
+    mkdir -p "$sshd_dropin_dir"
+    cat > "$sshd_dropin" << 'EOF'
+# /etc/ssh/sshd_config.d/10-crias.conf
+# Generated by Crias-Server installer - do not edit manually
+# Hardening: root login proibido; apenas autenticacao por senha (usuario crias).
+PermitRootLogin no
+PasswordAuthentication yes
+PubkeyAuthentication yes
+EOF
+    chmod 0644 "$sshd_dropin"
+    print_step "Drop-in sshd_config criado em $sshd_dropin (PermitRootLogin no)"
+
+    # 5. Habilita e (re)inicia sshd.
+    if ! systemctl enable sshd >/dev/null 2>&1; then
+        print_error "Falha ao habilitar sshd.service."
+        return 1
+    fi
+    if ! systemctl restart sshd >/dev/null 2>&1; then
+        print_error "Falha ao (re)iniciar sshd.service."
+        print_error "Verifique: journalctl -u sshd"
+        return 1
+    fi
+
+    print_success "SSH habilitado: usuario '$ssh_user' (grupo wheel), PermitRootLogin no."
+    print_step "Conecte via: ssh $ssh_user@<ip-do-servidor>"
+    if [ -f /etc/hostname ]; then
+        local host
+        host=$(cat /etc/hostname 2>/dev/null || echo "servidor")
+        print_step "Hostname: $host"
+    fi
+    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -981,6 +1344,9 @@ main() {
     fi
     configure_alias_autoload_for_selected_stack
     cleanup_other_stack_if_needed
+
+    # v1.2.0: configura SSH no host instalado (pergunta interativamente).
+    install_ssh_if_enabled
 
     # Fase 1+: instala agente de controle remoto (opcional, pergunta interativo).
     install_crias_agent_if_enabled

@@ -1,0 +1,58 @@
+[
+  {
+    "id": "v1.0.0",
+    "project_id": "abc1",
+    "author_id": "u1",
+    "name": "Adrenaline 1.0.0",
+    "version_number": "1.0.0",
+    "changelog": "",
+    "changelog_url": null,
+    "date_published": "2024-12-01T00:00:00+00:00",
+    "downloads": 100000,
+    "version_type": "release",
+    "featured": true,
+    "status": "listed",
+    "game_versions": ["1.21.4", "1.21.3"],
+    "loaders": ["fabric"],
+    "environment": "server_and_client",
+    "dependencies": [],
+    "files": [
+      {
+        "hashes": { "sha1": "abc", "sha512": "def" },
+        "url": "https://cdn.modrinth.com/data/abc1/versions/v1.0.0/adrenaline-1.0.0.mrpack",
+        "filename": "adrenaline-1.0.0.mrpack",
+        "primary": true,
+        "size": 5000000,
+        "file_type": null
+      }
+    ]
+  },
+  {
+    "id": "v0.9.0",
+    "project_id": "abc1",
+    "author_id": "u1",
+    "name": "Adrenaline 0.9.0",
+    "version_number": "0.9.0",
+    "changelog": "",
+    "changelog_url": null,
+    "date_published": "2024-08-01T00:00:00+00:00",
+    "downloads": 80000,
+    "version_type": "beta",
+    "featured": false,
+    "status": "listed",
+    "game_versions": ["1.21.1"],
+    "loaders": ["fabric"],
+    "environment": "server_and_client",
+    "dependencies": [],
+    "files": [
+      {
+        "hashes": { "sha1": "ghi", "sha512": "jkl" },
+        "url": "https://cdn.modrinth.com/data/abc1/versions/v0.9.0/adrenaline-0.9.0.mrpack",
+        "filename": "adrenaline-0.9.0.mrpack",
+        "primary": true,
+        "size": 4500000,
+        "file_type": null
+      }
+    ]
+  }
+]

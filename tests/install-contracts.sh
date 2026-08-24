@@ -281,6 +281,47 @@ EOF
     fi
 }
 
+# v1.2.0: paper loader foi removido. Valida que o instalador rejeita paper.
+run_paper_loader_rejected_contract() {
+    local cfg_file="$TMP_TEST_DIR/paper-loader.env"
+    local log_file="$TMP_TEST_DIR/paper-loader.log"
+
+    cat > "$cfg_file" << 'EOF'
+SERVER_TYPE="minecraft"
+NON_INTERACTIVE="true"
+DRY_RUN="true"
+INSTALL_TAILSCALE="false"
+APPLY_SYSTEM_TUNING="false"
+CLEANUP_OTHER_STACK="false"
+MINECRAFT_USER="minecraft-ci"
+MINECRAFT_SERVER_DIR="/tmp/minecraft-paper-ci"
+MINECRAFT_PORT=45165
+MINECRAFT_ONLINE_MODE="false"
+MINECRAFT_VERSION="1.21.11"
+MINECRAFT_LOADER="paper"
+MINECRAFT_INSTALL_MODPACK="true"
+MINECRAFT_INSTALL_QOL_MODS="false"
+ACCEPT_EULA="true"
+EOF
+
+    set +e
+    env -u ACCEPT_EULA CONFIG_FILE="$cfg_file" bash ./install.sh > "$log_file" 2>&1
+    local status=$?
+    set -e
+
+    if [ "$status" -eq 0 ]; then
+        echo "[install-contracts] Falha esperada nao ocorreu: paper loader deveria ser rejeitado (v1.2.0)" >&2
+        cat "$log_file" >&2
+        exit 1
+    fi
+
+    if ! grep -q "paper' nao suportado" "$log_file"; then
+        echo "[install-contracts] Mensagem de rejeicao do paper nao encontrada" >&2
+        cat "$log_file" >&2
+        exit 1
+    fi
+}
+
 echo "[install-contracts] Validando falha rapida para configuracoes invalidas..."
 run_missing_server_type_contract
 run_invalid_server_type_contract
@@ -297,5 +338,8 @@ run_eula_contract
 echo "[install-contracts] Validando portas invalidas..."
 run_invalid_minecraft_port_contract
 run_invalid_terraria_port_contract
+
+echo "[install-contracts] Validando rejeicao do loader paper (v1.2.0)..."
+run_paper_loader_rejected_contract
 
 echo "[install-contracts] OK"

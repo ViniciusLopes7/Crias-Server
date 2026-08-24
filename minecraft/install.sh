@@ -86,18 +86,23 @@ stack_validate_inputs() {
 
 validate_minecraft_inputs() {
     case "$MINECRAFT_LOADER" in
-        fabric|quilt|paper|vanilla|forge|neoforge)
+        fabric|quilt|vanilla|forge|neoforge)
+            ;;
+        paper)
+            print_error "MINECRAFT_LOADER='paper' nao suportado desde v1.2.0."
+            print_error "Use: fabric, quilt, vanilla, forge ou neoforge."
+            exit 1
             ;;
         *)
             print_error "MINECRAFT_LOADER invalido: $MINECRAFT_LOADER"
-            print_error "Use: fabric, quilt, paper, vanilla, forge ou neoforge."
+            print_error "Use: fabric, quilt, vanilla, forge ou neoforge."
             exit 1
             ;;
     esac
 
-    if ! [[ "$MINECRAFT_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+    if ! [[ "$MINECRAFT_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+[a-z0-9]*)?$|^[0-9]+w[0-9]+[a-z]$ ]]; then
         print_error "MINECRAFT_VERSION invalido: $MINECRAFT_VERSION"
-        print_error "Use formato semantico (ex.: 1.21.11)."
+        print_error "Use formato semantico (ex.: 1.21.11) ou snapshot (ex.: 22w14a)."
         exit 1
     fi
 

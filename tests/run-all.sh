@@ -190,6 +190,8 @@ run_test "minecraft-tuning-test"    "tests/minecraft-tuning-test.sh"
 run_test "terraria-tuning-test"     "tests/terraria-tuning-test.sh"
 run_test "setup-cron-manager-test"  "tests/setup-cron-manager-test.sh"
 run_test "qemu-log-parser-test"     "tests/qemu-log-parser-test.sh"
+run_test "tui-fallback-test"        "tests/tui-fallback-test.sh"
+run_test "mc-manifests-test"        "tests/mc-manifests-test.sh"
 
 # Testes que requerem ISO construída (SKIP se ISO_PATH não definido).
 run_test "iso-initramfs-validate"        "tests/iso-initramfs-validate.sh"        "true"

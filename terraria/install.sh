@@ -30,6 +30,9 @@ TERRARIA_PORT="${TERRARIA_PORT:-7777}"
 TERRARIA_WORLD_NAME="${TERRARIA_WORLD_NAME:-world}"
 TERRARIA_MOTD="${TERRARIA_MOTD:-Servidor Terraria gerenciado por Crias-Server}"
 TERRARIA_DOWNLOAD_URL="${TERRARIA_DOWNLOAD_URL:-https://terraria.org/api/download/pc-dedicated-server/terraria-server-1456.zip}"
+# tModLoader (WIP — v1.2.0). Nao implementado completamente; mantido como
+# flag reservado para futura instalacao de mods no Terraria.
+TERRARIA_USE_TMODLOADER="${TERRARIA_USE_TMODLOADER:-false}"
 FORCE_HARDWARE_TIER="${FORCE_HARDWARE_TIER:-}"
 APPLY_SYSTEM_TUNING="${APPLY_SYSTEM_TUNING:-true}"
 DRY_RUN="${DRY_RUN:-false}"
@@ -104,6 +107,13 @@ stack_create_extra_dirs() {
 }
 
 stack_download_and_install() {
+    # tModLoader (WIP — v1.2.0): placeholder. Se habilitado, avisa e continua
+    # com o servidor vanilla. Implementacao completa sera em versao futura.
+    if is_true "$TERRARIA_USE_TMODLOADER"; then
+        print_warning "tModLoader support is WIP (v1.2.0) — ainda nao implementado."
+        print_warning "Continuando com servidor vanilla do Terraria."
+        print_warning "Acompanhe em: https://github.com/ViniciusLopes7/Crias-Server (ROADMAP.md)"
+    fi
     download_and_extract_terraria
 }
 

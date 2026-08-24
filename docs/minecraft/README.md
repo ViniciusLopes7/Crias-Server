@@ -122,7 +122,25 @@ Veja [mods.md](mods.md) para guias detalhados de:
 - **TabTPS** — monitor de TPS/MSPT
 - **Styled Chat + Placeholder API** — customização de chat + títulos
 
-Para listar a lista de mods instalados (CSV configurável em `config.env`):
+Para o **seletor de modpacks dinâmico** (top-10 Modrinth, busca por nome,
+compatibilidade loader+MC, sugestão de versão mais próxima), veja
+[modpacks.md](modpacks.md).
+
+### Loaders suportados (v1.2.0)
+
+| Loader | Descrição |
+|--------|-----------|
+| `fabric` | Padrão (default). Compatível com modpacks `.mrpack` do Modrinth. |
+| `quilt` | Compatível com a maioria dos mods Fabric. |
+| `vanilla` | Servidor vanilla sem mods (apenas server.jar oficial). |
+| `forge` | Para mods Forge (instalador do Forge é executado pelo `mrpack-install`). |
+| `neoforge` | Fork moderno do Forge. |
+
+> **`paper` foi removido em v1.2.0** — o fluxo de modpacks usa `.mrpack`
+> (formato Modrinth para Fabric/Quilt), e paper não tem fluxo equivalente.
+> Se você precisa de paper, instale manualmente após o setup.
+
+Para listar a lista de mods QoL instalados (CSV configurável em `config.env`):
 
 ```bash
 grep MINECRAFT_QOL_MODS config.env

@@ -21,10 +21,21 @@ usbutils
 # maintainer: garante que Tailscale está disponível mesmo sem internet no
 # primeiro boot). O install.sh ainda verifica se está instalado e ativa o
 # daemon, mas não precisa mais baixar o pacote.
+# OpenSSH embutido desde v1.2.0: disponível na ISO para administração
+# remota. O install.sh pergunta (no início) se o usuário quer habilitar SSH
+# no host instalado; no live ISO o sshd NÃO sobe sozinho (mantém o
+# comportamento seguro de auto-login no tty1). Para iniciar manualmente no
+# live: `systemctl start sshd`.
 networkmanager
 tailscale
+openssh
 curl
 wget
+
+# TUI (Terminal User Interface) — desde v1.2.0.
+# gum (Charm) é usado pelo install.sh para menus, busca fuzzy (modpacks/
+# versões) e prompts yes/no. Fallback automático para `read` se ausente.
+gum
 
 # Minecraft Dependencies (Java 21 é grande; vale deixar embutido para evitar
 # download de ~200MB em cada boot da ISO)

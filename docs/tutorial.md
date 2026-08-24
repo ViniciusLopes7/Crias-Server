@@ -25,18 +25,29 @@ chmod +x install.sh
 sudo ./install.sh
 ```
 
-### O que o instalador pergunta
+### O que o instalador pergunta (v1.2.0 — TUI gum)
 
-1. **Qual stack?** Minecraft ou Terraria
+O instalador interativo usa **`gum`** para menus, busca fuzzy e prompts (com
+fallback `read` se `gum` ausente). A ordem dos prompts:
+
+1. **Qual stack?** Minecraft ou Terraria — menu TUI
 2. **Opções globais** (opcional revisar):
    - Forçar tier de hardware (LOW/MID/HIGH ou vazio para auto)
    - Instalar Tailscale? (recomendado)
    - Aplicar tuning de sistema? (zram/scheduler/cpupower)
    - Limpar stack oposto após instalar?
-3. **Parâmetros específicos do jogo**:
-   - Minecraft: usuário, diretório, porta, MOTD, versão, loader, modpack, QoL mods
-   - Terraria: usuário, diretório, porta, nome do mundo, MOTD, URL de download
-4. **Instalar agente de controle remoto?** (crias-agent — opcional, para controle via Discord)
+   - **Habilitar SSH no host?** (v1.2.0 — cria usuário `crias` com sudo)
+3. **Parâmetros específicos do jogo** (Minecraft):
+   - Usuário, diretório, porta, MOTD
+   - **Loader** (fabric/quilt/vanilla/forge/neoforge) — menu TUI *(paper removido em v1.2.0)*
+   - **Versão do Minecraft** — busca fuzzy no manifest dinâmico do loader
+   - online-mode, **modpack** (top-10 Modrinth / busca / vanilla / slug manual)
+   - Versão do modpack (filtrada por compatibilidade loader+MC)
+   - Mods QoL
+4. **Instalar agente de controle remoto?** (crias-agent — opcional, Discord)
+
+> Sem internet, o instalador aborta com mensagem clara (server.jar e modpacks
+> exigem download). Veja [tui.md](tui.md) e [minecraft/modpacks.md](minecraft/modpacks.md).
 
 ### Instalação não-interativa (CI/automação)
 

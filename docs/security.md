@@ -9,6 +9,7 @@ O projeto **não** abre portas automaticamente. Se o servidor estiver em rede p�
 - **Minecraft**: porta configurada em `server.properties` (default: `25565`)
 - **Terraria**: porta configurada em `config/serverconfig.txt` (default: `7777`)
 - **crias-agent**: `127.0.0.1:8473` apenas (não expor direto — usar Tailscale Funnel)
+- **SSH** (v1.2.0): porta `22` (default OpenSSH) — libere apenas se `INSTALL_SSH=true`
 
 ### Exemplo: restringir acesso à interface Tailscale (nftables)
 
@@ -25,8 +26,8 @@ table inet filter {
         iifname "tailscale0" tcp dport 25565 accept comment "Minecraft"
         iifname "tailscale0" tcp dport 7777 accept comment "Terraria"
 
-        # SSH (ajuste porta se necessário)
-        tcp dport 22 accept comment "SSH"
+        # SSH (ajuste porta se necessário — libere só interfaces confiáveis)
+        iifname "tailscale0" tcp dport 22 accept comment "SSH via Tailscale"
     }
 }
 ```
@@ -34,6 +35,72 @@ table inet filter {
 ```bash
 sudo systemctl enable --now nftables
 ```
+
+## SSH (v1.2.0)
+
+### Live ISO
+
+A ISO inclui `openssh` (em `packages.x86_64`), mas o `sshd` **não** sobe
+sozinho no boot do live USB — o comportamento seguro de auto-login no tty1
+é mantido. Para iniciar `sshd` manualmente no live (ex.: para instalar
+remotamente via SSH):
+
+```bash
+# No console do live ISO:
+systemctl start sshd
+# Root tem senha vazia por padrão no live; defina uma antes de expor:
+passwd
+```
+
+> **Atenção**: o live ISO faz auto-login como root no tty1. Se você iniciar
+> o `sshd` no live **sem** definir uma senha de root, qualquer um que alcançar
+> a porta 22 terá shell de root. **Sempre** defina `passwd` antes de iniciar
+> o `sshd` no live ISO, ou restrinja via firewall.
+
+### Host instalado (`INSTALL_SSH=true`)
+
+Se você responder "sim" à pergunta *"Habilitar SSH no servidor instalado?"*
+(ou setar `INSTALL_SSH=true`), o `install.sh` configura:
+
+1. Instala `openssh` (se não presente) via `pacman`.
+2. Cria o usuário **`crias`** (grupo `wheel` = sudo), com senha pedida
+   interativamente (`read -s`, sem echo). Em `NON_INTERACTIVE`, o usuário é
+   criado com senha bloqueada (login por chave pública apenas).
+3. Cria `/etc/sudoers.d/crias-wheel` (`%wheel ALL=(ALL) ALL`) — sudo exige senha.
+4. Cria drop-in `/etc/ssh/sshd_config.d/10-crias.conf`:
+   ```
+   PermitRootLogin no
+   PasswordAuthentication yes
+   PubkeyAuthentication yes
+   ```
+5. Habilita e (re)inicia `sshd.service`.
+
+Conexão: `ssh crias@<ip-do-servidor>` (use a senha definida, ou configure
+chaves em `~crias/.ssh/authorized_keys`).
+
+### Hardening recomendado (pós-install)
+
+Para produção, considere endurecer ainda mais:
+
+```bash
+# Desabilitar login por senha (apenas chave pública):
+sudo sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' \
+    /etc/ssh/sshd_config.d/10-crias.conf
+sudo systemctl restart sshd
+
+# Adicionar sua chave pública ao usuário crias:
+sudo -u crias mkdir -p /home/crias/.ssh
+sudo -u crias tee /home/crias/.ssh/authorized_keys < ~/.ssh/id_ed25519.pub
+sudo -u crias chmod 700 /home/crias/.ssh
+sudo -u crias chmod 600 /home/crias/.ssh/authorized_keys
+```
+
+### Host keys
+
+As host keys SSH (`/etc/ssh/ssh_host_*`) **não** são pré-bakeadas na ISO —
+são geradas ephemeramente por `sshdgenkeys.service` no primeiro boot. Cada
+instância da ISO tem chaves únicas. Clientes verão "host key changed" se
+reinstalarem/recriarem a ISO — isso é esperado e seguro.
 
 ## Logs e rotação
 

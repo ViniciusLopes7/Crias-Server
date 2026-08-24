@@ -7,6 +7,7 @@
 | Documento | Descrição |
 |-----------|-----------|
 | [../README.md](../README.md) | Visão geral + quick start + controle remoto Discord |
+| [../CHANGELOG.md](../CHANGELOG.md) | Histórico de versões (v1.2.0+) |
 | [../ROADMAP.md](../ROADMAP.md) | Status de implementação e próximos passos |
 
 ## Tutorial
@@ -14,16 +15,18 @@
 | Documento | Descrição |
 |-----------|-----------|
 | [tutorial.md](tutorial.md) | Fluxo único: instalar → operar → troubleshoot |
+| [tui.md](tui.md) | TUI (gum) — como funciona, fallback, atalhos (v1.2.0) |
 | [Tailscale.md](Tailscale.md) | Conexão via Tailscale (VPN + Funnel para crias-agent) |
 | [hardware-tuning.md](hardware-tuning.md) | Tuning por hardware (tiers LOW/MID/HIGH, thresholds, recalibração) |
 | [restore.md](restore.md) | Restore de backups (passo-a-passo Minecraft + Terraria) |
-| [security.md](security.md) | Firewall, logs, health checks, hardening systemd, cleanup do stack oposto |
+| [security.md](security.md) | Firewall, SSH, logs, health checks, hardening systemd, cleanup do stack oposto |
 
 ## Stack Minecraft
 
 | Documento | Descrição |
 |-----------|-----------|
 | [minecraft/README.md](minecraft/README.md) | Componentes, comandos, aliases, RCON, troubleshooting |
+| [minecraft/modpacks.md](minecraft/modpacks.md) | Seletor de modpacks dinâmico (top-10 Modrinth, busca, compatibilidade) (v1.2.0) |
 | [minecraft/mods.md](minecraft/mods.md) | Guias dos mods QoL (Chunky, EssentialCommands, Universal Graves, TabTPS, StyledChat) |
 
 ## Stack Terraria

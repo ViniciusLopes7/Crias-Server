@@ -64,6 +64,29 @@ source /etc/profile.d/crias-server.sh
 - **Backup**: sem `save-off`/`save-on` (sem RCON). Apenas `tar` + `zstd` dos diretórios `worlds/` e `config/`.
 - **Health check**: só verifica se a porta está em escuta (não há RCON para validar).
 
+## tModLoader (WIP — v1.2.0)
+
+O Crias-Server tem uma flag reservada `TERRARIA_USE_TMODLOADER` (default `false`)
+em `config.env` para futura instalação de mods no Terraria via
+[tModLoader](https://github.com/tModLoader/tModLoader).
+
+> **Status**: **WIP** (Work In Progress) — em v1.2.0, habilitar essa flag
+> apenas exibe um aviso de que a feature ainda não está implementada e
+> continua com o servidor vanilla do Terraria. A implementação completa
+> (download do tModLoader, instalação de mods, configuração) está planejada
+> para uma versão futura — acompanhe em [../ROADMAP.md](../ROADMAP.md).
+
+Se você quer usar tModLoader **hoje**, instale manualmente após o setup do
+Crias-Server:
+
+```bash
+# Exemplo (não validado pelo instalador):
+# 1. Baixe o tModLoader para Linux em https://github.com/tModLoader/tModLoader/releases
+# 2. Extraia em /opt/terraria-server/ (ou diretório dedicado)
+# 3. Ajuste o terraria.service para apontar para o novo binário
+# 4. Reinicie: sudo systemctl restart terraria
+```
+
 ## Arquivos de runtime relevantes
 
 | Arquivo | O que contém |
