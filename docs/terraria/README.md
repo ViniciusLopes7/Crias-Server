@@ -64,28 +64,39 @@ source /etc/profile.d/crias-server.sh
 - **Backup**: sem `save-off`/`save-on` (sem RCON). Apenas `tar` + `zstd` dos diretórios `worlds/` e `config/`.
 - **Health check**: só verifica se a porta está em escuta (não há RCON para validar).
 
-## tModLoader (WIP — v1.2.0)
+## tModLoader (Terraria com mods) — v1.2.1
 
-O Crias-Server tem uma flag reservada `TERRARIA_USE_TMODLOADER` (default `false`)
-em `config.env` para futura instalação de mods no Terraria via
-[tModLoader](https://github.com/tModLoader/tModLoader).
+O Crias-Server agora suporta **tModLoader** como substituto do servidor vanilla
+do Terraria. Quando `TERRARIA_USE_TMODLOADER=true`, o instalador baixa o
+tModLoader do GitHub Releases, extrai em `server/`, e o `start-terraria.sh`
+detecta automaticamente qual binário rodar (vanilla vs tModLoader).
 
-> **Status**: **WIP** (Work In Progress) — em v1.2.0, habilitar essa flag
-> apenas exibe um aviso de que a feature ainda não está implementada e
-> continua com o servidor vanilla do Terraria. A implementação completa
-> (download do tModLoader, instalação de mods, configuração) está planejada
-> para uma versão futura — acompanhe em [../ROADMAP.md](../ROADMAP.md).
+> **Status**: Implementado (v1.2.1). Veja [../tmodloader.md](../tmodloader.md)
+> para o guia completo (instalação, catálogo de mods, SteamCMD, troubleshooting).
 
-Se você quer usar tModLoader **hoje**, instale manualmente após o setup do
-Crias-Server:
+### Resumo do fluxo
 
 ```bash
-# Exemplo (não validado pelo instalador):
-# 1. Baixe o tModLoader para Linux em https://github.com/tModLoader/tModLoader/releases
-# 2. Extraia em /opt/terraria-server/ (ou diretório dedicado)
-# 3. Ajuste o terraria.service para apontar para o novo binário
-# 4. Reinicie: sudo systemctl restart terraria
+sudo ./install.sh
+# 1. Stack: Terraria
+# 2. "Usar tModLoader (Terraria com mods)?" → Y
+# 3. Versão tModLoader (busca fuzzy no GitHub Releases)
+# 4. Mods: catálogo curado / sem mods / Workshop IDs manuais
 ```
+
+### Mods suportados (catálogo curado)
+
+| Mod | Workshop ID | Descrição |
+|-----|-------------|-----------|
+| Calamity Mod | `2824688072` | Conteúdo massivo |
+| Calamity Mod Music | `2824688266` | Trilha sonora |
+| Thorium Mod | `2909886416` | Conteúdo equilibrado |
+| Magic Storage | `2563309347` | Armazenamento mágico |
+| Recipe Browser | `2619954303` | Navegador de receitas |
+
+Para detalhes de instalação manual, backup (inclui `Mods/` e `Worlds/`
+automaticamente), e gotchas do .NET JIT sob systemd, veja
+[../tmodloader.md](../tmodloader.md).
 
 ## Arquivos de runtime relevantes
 

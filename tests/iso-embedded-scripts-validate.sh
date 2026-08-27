@@ -40,6 +40,7 @@ required_files=(
     "shared/lib/hardware-profile.sh"
     "shared/lib/tui.sh"
     "shared/lib/mc-manifests.sh"
+    "shared/lib/tmodloader.sh"
     "minecraft/install.sh"
     "minecraft/mc-manager.sh"
     "minecraft/minecraft.service"

@@ -34,12 +34,11 @@ MC_API_CONNECT_TIMEOUT="${MC_API_CONNECT_TIMEOUT:-10}"
 MC_API_MAX_TIME="${MC_API_MAX_TIME:-30}"
 
 # ---------------------------------------------------------------------------
-# Verifica conectividade mínima com a internet.
-# Retorna 0 se alcançou o host-alvo (https), 1 caso contrário.
+# Verifica conectividade. Alias para has_internet (common.sh).
+# Mantido por compat retroativa (callers podem usar mc_has_internet).
 # ---------------------------------------------------------------------------
 mc_has_internet() {
-    command -v curl >/dev/null 2>&1 || return 1
-    curl -fsSL --connect-timeout 5 --max-time 10 https://github.com >/dev/null 2>&1
+    has_internet
 }
 
 # ---------------------------------------------------------------------------
@@ -91,14 +90,17 @@ mc_fetch_forge_metadata() {
 mc_fetch_modrinth_search_modpacks() {
     local query="$1"
     local limit="${2:-10}"
-    local facets='[["project_type:modpack"]]'
-    local encoded_facets encoded_query
-    encoded_facets=$(printf '%s' "$facets" | jq -sR .)
-    local url
-    url="https://api.modrinth.com/v2/search?facets=${encoded_facets}&limit=${limit}"
+    local facets_json loaders_json
+    facets_json=$(jq -c -n '[["project_type:modpack"]]')
+    # URL-encode o facets para a query string.
+    local facets_enc
+    facets_enc=$(printf '%s' "$facets_json" | jq -sR @uri | tr -d '"')
+    local url="https://api.modrinth.com/v2/search?facets=${facets_enc}&limit=${limit}"
     if [ -n "$query" ]; then
-        encoded_query=$(printf '%s' "$query" | jq -sR . | sed 's/^"//;s/"$//')
-        url="${url}&query=${encoded_query}"
+        # URL-encode o query livre.
+        local query_enc
+        query_enc=$(printf '%s' "$query" | jq -sR @uri | tr -d '"')
+        url="${url}&query=${query_enc}"
     else
         url="${url}&index=downloads"
     fi
@@ -113,17 +115,25 @@ mc_fetch_modrinth_project_versions() {
     local loader="$2"
     local game_version="$3"
     local url="https://api.modrinth.com/v2/project/${slug}/version"
-    local params=()
+    local params=""
     if [ -n "$loader" ]; then
-        params+=("loaders=$(printf '["%s"]' "$loader" | jq -sR . | sed 's/^"//;s/"$//')")
+        local loaders_json loaders_enc
+        loaders_json=$(jq -c -n --arg l "$loader" '[$l]')
+        loaders_enc=$(printf '%s' "$loaders_json" | jq -sR @uri | tr -d '"')
+        params="loaders=${loaders_enc}"
     fi
     if [ -n "$game_version" ]; then
-        params+=("game_versions=$(printf '["%s"]' "$game_version" | jq -sR . | sed 's/^"//;s/"$//')")
+        local gv_json gv_enc
+        gv_json=$(jq -c -n --arg v "$game_version" '[$v]')
+        gv_enc=$(printf '%s' "$gv_json" | jq -sR @uri | tr -d '"')
+        if [ -n "$params" ]; then
+            params="${params}&game_versions=${gv_enc}"
+        else
+            params="game_versions=${gv_enc}"
+        fi
     fi
-    if [ "${#params[@]}" -gt 0 ]; then
-        local joined
-        joined=$(printf '%s&' "${params[@]}")
-        url="${url}?${joined%&}"
+    if [ -n "$params" ]; then
+        url="${url}?${params}"
     fi
     mc_curl_get "$url"
 }
@@ -346,12 +356,8 @@ mc_suggest_closest_version() {
         return 0
     fi
 
-    # Decompõe wanted em major.minor.patch.
-    local w_major w_minor w_patch
-    IFS=. read -r w_major w_minor w_patch <<<"$want_clean"
-    w_patch="${w_patch:-0}"
-
-    # Constrói arrays de versões limpas (sem marker) preservando ordem.
+    # Constrói array de versões limpas (sem marker) preservando ordem.
+    # Feito ANTES da decomposição para que o fallback não-numérico possa usar.
     local -a versions=()
     local v
     while IFS= read -r v; do
@@ -359,6 +365,19 @@ mc_suggest_closest_version() {
     done <<<"$supported"
 
     if [ "${#versions[@]}" -eq 0 ]; then
+        return 0
+    fi
+
+    # Decompõe wanted em major.minor.patch.
+    local w_major w_minor w_patch
+    IFS=. read -r w_major w_minor w_patch <<<"$want_clean"
+    w_patch="${w_patch:-0}"
+
+    # Valida que w_major/w_minor são numéricos antes de usar em grep -E
+    # (senão pattern como "^abc\." casa errado). Se não-numérico (ex.: snapshot
+    # "25w03a"), fallback para mais recente.
+    if ! [[ "$w_major" =~ ^[0-9]+$ ]] || ! [[ "$w_minor" =~ ^[0-9]+$ ]]; then
+        printf '%s\n' "${versions[0]}"
         return 0
     fi
 

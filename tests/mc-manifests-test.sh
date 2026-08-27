@@ -226,6 +226,14 @@ else
     fail "suggest empty" "" "$r"
 fi
 
+# Input não-numérico (snapshot "25w03a") -> fallback latest.
+r=$(mc_suggest_closest_version "25w03a" "$supported")
+if [ "$r" = "1.21.4" ]; then
+    pass "suggest snapshot input (25w03a) -> fallback latest"
+else
+    fail "suggest snapshot input" "1.21.4" "$r"
+fi
+
 # --- 9b. NeoForge XML parse ---
 echo "- NeoForge maven-metadata.xml:"
 json=$(cat "$FIXTURES/neoforge-maven-metadata.xml")

@@ -5,6 +5,96 @@ Todos os mudanças notáveis do projeto Crias-Server serão documentadas neste a
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.2.1] — 2026-08-26
+
+### Adicionado
+
+- **tModLoader (Terraria com mods) — implementação completa**: o `TERRARIA_USE_TMODLOADER`
+  agora funciona de verdade (antes era WIP). Substitui o binário vanilla do Terraria
+  pelo tModLoader quando habilitado. Mesma porta (7777), mesmo diretório, mesma
+  service unit (`terraria.service`).
+  - Nova biblioteca `shared/lib/tmodloader.sh`: fetch dinâmico de versões via
+    GitHub Releases API, catálogo curado de mods (Calamity, Thorium, Magic Storage,
+    Recipe Browser), download via SteamCMD (App ID 1281930), geração de
+    `Mods/enabled.json` e `Mods/install.txt`.
+  - `install.sh` com prompts TUI: seleção de versão (busca fuzzy), e 3 fontes
+    de mods (catálogo curado com multi-seleção / sem mods / Workshop IDs manuais).
+  - `terraria/install.sh`: `download_and_install_tmodloader()` baixa
+    `tModLoader.zip` do GitHub, extrai em `server/`, instala deps do .NET 8.
+  - `terraria/start-terraria.sh`: detecta tModLoader (se
+    `server/LaunchUtils/ScriptCaller.sh` existe) e usa `ScriptCaller.sh` com
+    flags `-server -config -steamworkshopfolder -tmlsavedirectory`.
+  - `terraria/backup-cron.sh`: inclui `Mods/` e `Worlds/` automaticamente
+    quando tModLoader está instalado.
+  - Novo `stack_install_mods` hook no `shared/lib/stack-installer.sh`.
+  - Novas variáveis em `config.env`: `TERRARIA_TMODLOADER_VERSION`,
+    `TERRARIA_TMODLOADER_MODS` (CSV de Workshop IDs).
+  - Novo teste `tests/tmodloader-test.sh` (23 checks) + fixture
+    `tests/fixtures/tmodloader-releases.json`.
+  - Nova documentação `docs/tmodloader.md`.
+
+### Corrigido (bugs pré-existentes encontrados em revisão milimétrica)
+
+**Shell (4 bugs)**:
+- **S1** (médio) `minecraft/start-server.sh:74-78`: recálculo de heap sobrescrevia
+  config de produção (`-Xms==-Xmx`) quando `min >= max`. Agora só corrige se
+  `min > max` (config genuinamente inválida).
+- **S2** (baixo) `shared/lib/backup-engine.sh:184`: trap EXIT nunca limpo após
+  sucesso, causando `save-on` duplicado em callers que sourceiam a lib.
+- **S3** (baixo) `shared/lib/backup-engine.sh:51`: validação de `runtime.env`
+  não cobria `$(...)` (command substitution). Adicionado `\$\(` ao regex.
+- **S4** (baixo) `terraria/start-terraria.sh:39`: `ldd` retornava não-zero para
+  binários estáticos também, abortando erroneamente. Mudado para aviso.
+
+**Go (9 bugs em `discord-agent/`)** — corrigidos via subagente, 55 testes passam:
+- **G1** (alto) `server.go`: `SendRconCommand` check de RCON-disabled era
+  unreachable (NewClient nunca retorna nil). Adicionado `!s.cfg.Server.RCON.Enabled`.
+- **G2** (médio) `server.go`: headers `x-api-token` duplicados aceitos. Agora
+  rejeita `len(tokens) > 1`.
+- **G3** (médio) `server.go`: `subtle.ConstantTimeCompare` vazava tamanho do
+  token via timing. Agora faz `sha256.Sum256` de ambos antes de comparar.
+- **G4** (médio) `server.go`: `GetHealth` probeiava RCON mesmo quando desabilitado.
+- **G5** (médio) `autoshutdown.go`: `runSystemctl` sem deadline podia bloquear
+  goroutine para sempre. Adicionado `withDeadline`.
+- **G6** (médio) `rcon/client.go`: timeout de 10s podia bloquear ~15s (mutex +
+  dial). Agora usa `net.DialTimeout` pré-flight.
+- **G7** (baixo) `server.go`: `getServiceUptime` podia retornar negativo. Clamp a 0.
+- **G8** (baixo) `rcon/client.go`: `executeLocked` deixava `c.conn` quebrada
+  após erro de dial. Agora close+nil.
+- **G13** (baixo) `server.go`: `StopServer` reportava timeout não-clampado nos
+  eventos. Agora reporta o valor clampado.
+
+**Python (10 bugs em `discord-bot/`)** — corrigidos via subagente, 129 testes passam:
+- **P1** (alto) `bot.py:532`: race condition no console stream — `finally` limpava
+  estado incondicionalmente, corrompendo task de Admin B quando Admin A cancelava.
+  Agora checa `asyncio.current_task() is self.bot._console_task`.
+- **P2** (médio) `config.py`: `RECONNECT_MAX_DELAY` negativo causava busy-spin.
+  Agora clampa a `>=1`.
+- **P3** (médio) `agent_client.py`: `_handle_rpc_error` mutava channel sem lock,
+  causando double-close. Agora adquire `_connect_lock`.
+- **P4** (médio) `embeds.py`: codeblock injection via backticks. Agora sanitizeia
+  runs de 3+ backticks para um único.
+- **P5-P9, P11** (baixo): diversos — channel close documentado, stream cancel,
+  host redaction, discord_token placeholder rejection, health_report length,
+  rate-limiter comment.
+
+**CI (5 bugs em `.github/workflows/ci.yml`)**:
+- **C1** (médio) release job não validava artifacts antes de publicar —
+  `mv ... 2>/dev/null || true` silenciava faltas. Adicionado step de validação.
+- **C2** (médio) sem checksum re-verification. Adicionado `sha256sum -c` por-artifact.
+- **C3** (médio) `cancel-in-progress: false` global desperdiçava runner minutes.
+  Agora `!startsWith(github.ref, 'refs/tags/')`.
+- **C4** (baixo) sem cache de pip em `setup-python`. Adicionado `cache: 'pip'`.
+- **C6** (baixo) `pacman-key --init || true` silenciava falhas de keyring.
+  Removido `|| true`.
+
+### Testes
+
+- **28 testes bash** (subiu de 27 com `tmodloader-test`), todos PASS.
+- Mutation testing: 11 KILLED, 0 SURVIVED, 2 neutral sanity.
+- Go: 55 testes passam (`go test -race`).
+- Python: 129 testes passam (via subagente com deps instaladas).
+
 ## [1.2.0] — 2026-08-23
 
 ### Adicionado

@@ -394,6 +394,15 @@ systemctl_quiet_or_warn() {
 }
 
 # ---------------------------------------------------------------------------
+# Internet connectivity check. Returns 0 if reached github.com (https).
+# Single source of truth — reused by mc-manifests.sh, tmodloader.sh, terraria.
+# ---------------------------------------------------------------------------
+has_internet() {
+    command_exists curl || return 1
+    curl -fsSL --connect-timeout 5 --max-time 10 https://github.com >/dev/null 2>&1
+}
+
+# ---------------------------------------------------------------------------
 # Virtualization detection. Returns 0 if container/VPS (skip host tuning).
 # ---------------------------------------------------------------------------
 is_virtualized() {

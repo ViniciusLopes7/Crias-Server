@@ -4,6 +4,7 @@ package server
 import (
         "bytes"
         "context"
+        "crypto/sha256"
         "crypto/subtle"
         "errors"
         "fmt"
@@ -138,8 +139,19 @@ func validateToken(ctx context.Context, expected string, ip string) error {
                 log.Printf("auth falha: ip=%s reason=token_ausente", ip)
                 return status.Error(codes.Unauthenticated, "x-api-token metadata ausente")
         }
-        // Constant-time comparison prevents timing attacks.
-        if subtle.ConstantTimeCompare([]byte(tokens[0]), []byte(expected)) != 1 {
+        // gRPC metadata allows duplicate x-api-token keys; reject any request
+        // that supplies more than one value (G2).
+        if len(tokens) > 1 {
+                log.Printf("auth falha: ip=%s reason=token_duplicado count=%d", ip, len(tokens))
+                return status.Error(codes.Unauthenticated, "token inválido")
+        }
+        // Constant-time comparison prevents timing attacks. Hash both sides to
+        // a fixed length (32 bytes) before comparing so attackers can't infer the
+        // expected token length via ConstantTimeCompare's early-exit on
+        // unequal lengths (G3).
+        sumExpected := sha256.Sum256([]byte(expected))
+        sumProvided := sha256.Sum256([]byte(tokens[0]))
+        if subtle.ConstantTimeCompare(sumExpected[:], sumProvided[:]) != 1 {
                 log.Printf("auth falha: ip=%s reason=token_invalido", ip)
                 return status.Error(codes.Unauthenticated, "token inválido")
         }
@@ -293,7 +305,9 @@ func (s *Server) StopServer(ctx context.Context, req *criasv1.StopRequest) (*cri
                 EventType:   "ServerStopped",
                 ServiceName: s.cfg.Server.ServiceName,
                 Stack:       s.cfg.Server.Stack,
-                Metadata:    map[string]string{"timeout_seconds": fmt.Sprintf("%d", req.GetTimeoutSeconds())},
+                // Report the clamped timeout so consumers don't see a value (e.g. 600)
+                // that doesn't match the --timeout actually passed to systemctl (G13).
+                Metadata: map[string]string{"timeout_seconds": fmt.Sprintf("%d", timeoutSec)},
         })
 
         return &criasv1.StopResponse{
@@ -381,8 +395,10 @@ func (s *Server) GetHealth(ctx context.Context, req *criasv1.GetHealthRequest) (
                 }
         }
 
-        // If RCON is enabled, probe responsiveness.
-        if s.rcon != nil {
+        // If RCON is enabled, probe responsiveness. rcon.NewClient always
+        // returns a non-nil client, so the s.rcon != nil guard alone is
+        // insufficient — we must also check the config flag (G4).
+        if s.rcon != nil && s.cfg.Server.RCON.Enabled {
                 _, _, err := s.rcon.PlayerList(ctx)
                 if err == nil {
                         resp.RconResponsive = true
@@ -420,7 +436,7 @@ func (s *Server) SendRconCommand(ctx context.Context, req *criasv1.SendRconComma
                 return nil, status.Errorf(codes.PermissionDenied, "comando %q não está na whitelist", strings.Fields(command)[0])
         }
 
-        if s.rcon == nil {
+        if s.rcon == nil || !s.cfg.Server.RCON.Enabled {
                 return nil, status.Error(codes.FailedPrecondition, "rcon desabilitado na configuração")
         }
 
@@ -708,7 +724,13 @@ func (s *Server) getServiceUptime(ctx context.Context, service string) int64 {
                         return 0
                 }
         }
-        return int64(time.Since(t).Seconds())
+        uptime := int64(time.Since(t).Seconds())
+        // Clock skew or a future-dated ExecMainStartTimestamp could yield a
+        // negative uptime; clamp to 0 to avoid confusing callers (G7).
+        if uptime < 0 {
+                uptime = 0
+        }
+        return uptime
 }
 
 // getServiceMemoryUsedMB returns the service's resident memory in MB.

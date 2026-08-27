@@ -37,7 +37,13 @@ fi
 BACKUP_SERVER_DIR="${SERVER_DIR:-$DEFAULT_SERVER_DIR}"
 BACKUP_STACK_NAME="terraria"
 BACKUP_SERVICE_NAME="${BACKUP_SERVICE_NAME:-terraria}"
+# Diretórios de backup: worlds/ + config/ sempre; Mods/ + Worlds/ se tModLoader.
 BACKUP_DIRS=("worlds" "config")
+
+# Detecta tModLoader: se server/LaunchUtils/ScriptCaller.sh existe, inclui Mods/ e Worlds/.
+if [ -x "$BACKUP_SERVER_DIR/server/LaunchUtils/ScriptCaller.sh" ]; then
+    BACKUP_DIRS+=("Mods" "Worlds")
+fi
 
 # Inherit legacy variables (backward compat).
 BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-7}"

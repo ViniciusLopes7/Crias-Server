@@ -42,6 +42,10 @@ OVERRIDABLE_VARS=(
     BACKUP_REMOTE_PATH
     BACKUP_NOTIFY_WEBHOOK
     INSTALL_AGENT
+    INSTALL_SSH
+    TERRARIA_USE_TMODLOADER
+    TERRARIA_TMODLOADER_VERSION
+    TERRARIA_TMODLOADER_MODS
 )
 
 capture_env_overrides() {
@@ -136,9 +140,11 @@ load_config_file() {
                     value="${value:1:${#value}-2}"
                 fi
 
-                value="${value//\$\(/\\$\(}"
-                value="${value//\`/\\\`}"
-                value="${value//\$\{/\\$\{}"
+                # set_config_var usa printf -v '%s' que não interpreta
+                # command substitution nem expansão de variáveis, então
+                # $(, ${, e ` são tratados como literais (sem escaping).
+                # A validação de variáveis perigosas (case acima) protege
+                # contra hijack de PATH/IFS/etc.
 
                 set_config_var "$key" "$value"
             else

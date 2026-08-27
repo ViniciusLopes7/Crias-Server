@@ -1,20 +1,20 @@
 # ROADMAP — Crias-Server
 
 > Status de implementação e próximos passos.
-> Última atualização: 2026-08-23.
+> Última atualização: 2026-08-26.
 
-## ✅ Implementado (v1.2.0)
+## ✅ Implementado (v1.2.1)
 
 ### Branch `main` (única, monorepo)
 
 | Componente | Status | Detalhes |
 |------------|--------|----------|
-| **OpenSSH na ISO + host** | ✅ (v1.2.0) | `openssh` em `packages.x86_64`; `install.sh` pergunta se habilita SSH no host → cria usuário `crias` com sudo, habilita `sshd`, `PermitRootLogin no` |
+| **tModLoader (Terraria com mods)** | ✅ (v1.2.1) | `shared/lib/tmodloader.sh` — GitHub Releases dinâmico, catálogo curado (Calamity, Thorium, etc.), SteamCMD, `Mods/enabled.json`. Substitui vanilla quando `TERRARIA_USE_TMODLOADER=true`. |
+| **OpenSSH na ISO + host** | ✅ (v1.2.0) | `openssh` em `packages.x86_64`; `install.sh` pergunta se habilita SSH no host → cria usuário `crias` com sudo, `PermitRootLogin no` |
 | **TUI (gum)** | ✅ (v1.2.0) | `shared/lib/tui.sh` — wrapper `gum` com fallback `read` automático; `gum` pré-instalado na ISO |
 | **Versão MC dinâmica** | ✅ (v1.2.0) | `shared/lib/mc-manifests.sh` — busca manifests Mojang/Fabric/Quilt/NeoForge/Forge; seleção fuzzy; snapshots marcados |
 | **Seletor de modpacks Modrinth** | ✅ (v1.2.0) | Top-10 / busca / vanilla / slug manual; compatibilidade server-side; sugestão de MC mais próxima |
 | **Loaders** | ✅ (v1.2.0) | `fabric | quilt | vanilla | forge | neoforge` — `paper` **removido** |
-| **tModLoader (Terraria)** | 🚧 WIP (v1.2.0) | Flag `TERRARIA_USE_TMODLOADER` + stub; apenas avisa WIP, continua vanilla |
 | **Refactoring shell** | ✅ | 3 novas libs compartilhadas (`stack-installer.sh`, `backup-engine.sh`, `setup-cron.sh`) + `tui.sh` + `mc-manifests.sh` |
 | **Hardening systemd** | ✅ | `envsubst` em templates `.service`, `CapabilityBoundingSet=`, `SystemCallFilter=@system-service`, etc. |
 | **Supply chain** | ⚠️ | SHA256 dos artefatos de release gerado no CI; install.sh não verifica checksums em runtime |
@@ -47,16 +47,16 @@
 
 ---
 
-## 🔮 Planejado (Pós-v1.2.0)
+## 🔮 Planejado (Pós-v1.2.1)
 
 ### Alta prioridade
 
-- [ ] **tModLoader completo** (Terraria) — implementar instalação real de mods
-  no Terraria via tModLoader (atualmente é WIP/stub em v1.2.0).
 - [ ] **Métricas Prometheus no agente** — `crias_agent_grpc_requests_total`,
   `crias_agent_rcon_errors_total`, `crias_agent_players_online`.
 - [ ] **Wake-on-LAN endpoint** no agente — para ligar PC do jogador remotamente.
 - [ ] **TLS nativo no agente** — não depender exclusivamente de Tailscale Funnel.
+- [ ] **Agente Discord para Terraria** — tModLoader não tem RCON nativo; explorar
+  console stream via journalctl para o `crias-bot` suportar Terraria.
 
 ### Média prioridade
 

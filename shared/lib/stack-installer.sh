@@ -312,6 +312,12 @@ run_stack_install() {
         return 1
     fi
 
+    # 3b. Mods opcionais (tModLoader: SteamCMD; Minecraft: QoL mods).
+    # Hook separado de stack_install_qol_mods para não conflitar.
+    if declare -F stack_install_mods >/dev/null 2>&1; then
+        stack_install_mods
+    fi
+
     # 4. Mods QoL opcionais (apenas Minecraft define)
     if declare -F stack_install_qol_mods >/dev/null 2>&1; then
         stack_install_qol_mods

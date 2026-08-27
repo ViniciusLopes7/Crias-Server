@@ -48,7 +48,7 @@ backup_init() {
             load_config_file "$runtime_env"
         else
             # Fallback: validate key=value only, no shell constructs.
-            if grep -qE '(^|[^\\])\$|`|\|\||&&|;|^[[:space:]]*(source|\.)[[:space:]]|^[[:space:]]*exit[[:space:]]' "$runtime_env" 2>/dev/null; then
+            if grep -qE '(^|[^\\])\$|`|\$\(|\|\||&&|;|^[[:space:]]*(source|\.)[[:space:]]|^[[:space:]]*exit[[:space:]]' "$runtime_env" 2>/dev/null; then
                 backup_log "ERRO: Arquivo env contém construções perigosas: $runtime_env"
                 return 1
             fi
@@ -192,6 +192,9 @@ create_backup() {
     if ionice -c2 -n7 tar -I "zstd ${BACKUP_ZSTD_LEVEL}" -cf "$BACKUP_DIR/$BACKUP_NAME" "${backup_dirs[@]}"; then
         adopt_backup_ownership "$BACKUP_DIR/$BACKUP_NAME"
         backup_log "Backup criado: $BACKUP_DIR/$BACKUP_NAME"
+        # Limpa o trap EXIT apos sucesso para nao re-executar backup_post_hook
+        # quando o processo caller terminar.
+        trap - EXIT INT TERM
         return 0
     fi
 

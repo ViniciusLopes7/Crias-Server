@@ -66,6 +66,9 @@ bash tests/tui-fallback-test.sh
 echo "[quick-script-tests] Validando biblioteca de manifests (parsing + sugestão)..."
 bash tests/mc-manifests-test.sh
 
+echo "[quick-script-tests] Validando biblioteca tModLoader (releases + catálogo)..."
+bash tests/tmodloader-test.sh
+
 echo "[quick-script-tests] Validando contrato de checksum por mod..."
 assert_file minecraft/install.sh
 assert_grep_fixed "file_name_norm=\"\${file_name//-/_}\"" minecraft/install.sh

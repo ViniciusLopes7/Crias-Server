@@ -355,7 +355,13 @@ class MinecraftCog(commands.Cog):
     async def say(self, interaction: discord.Interaction, message: str) -> None:
         if not await self._check_moderator(interaction):
             return
-        # per-user rate limit
+        # per-user rate limit.
+        # P11: the rate-limit slot is consumed BEFORE input validation
+        # intentionally. Validating first would let an attacker probe the
+        # validator (e.g., sending borderline-length messages to learn the
+        # exact length / character limits) without consuming a slot, enabling
+        # enumeration via crafted invalid inputs. The cost (a moderator
+        # "wastes" a slot on a malformed message) is acceptable.
         if not self.bot._rate_limiter.is_allowed(interaction.user.id):
             await interaction.response.send_message(
                 embed=warning(
@@ -530,7 +536,13 @@ class MinecraftCog(commands.Cog):
             logger.info("Console stream cancelado")
             raise
         finally:
-            self.bot._console_stream_active = False
+            # P1: only clear state if this task is still the recorded console
+            # task. If Admin A's task was cancelled and Admin B immediately
+            # started a new task, task A's finally must NOT clobber task B's
+            # freshly-set `_console_stream_active=True` / `_console_task`.
+            if asyncio.current_task() is self.bot._console_task:
+                self.bot._console_stream_active = False
+                self.bot._console_task = None
 
     async def _notify_console_stream_auto_stopped(
         self, failed_channel: discord.TextChannel, reason: str

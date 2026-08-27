@@ -1,0 +1,35 @@
+[
+  {
+    "tag_name": "v2026.06.3.6",
+    "name": "v2026.06.3.6",
+    "prerelease": false,
+    "assets": [
+      {
+        "name": "tModLoader.zip",
+        "browser_download_url": "https://github.com/tModLoader/tModLoader/releases/download/v2026.06.3.6/tModLoader.zip"
+      }
+    ]
+  },
+  {
+    "tag_name": "v2026.05.1.0",
+    "name": "v2026.05.1.0",
+    "prerelease": false,
+    "assets": [
+      {
+        "name": "tModLoader.zip",
+        "browser_download_url": "https://github.com/tModLoader/tModLoader/releases/download/v2026.05.1.0/tModLoader.zip"
+      }
+    ]
+  },
+  {
+    "tag_name": "v2026.07.2.5-preview",
+    "name": "v2026.07.2.5-preview",
+    "prerelease": true,
+    "assets": [
+      {
+        "name": "tModLoader.zip",
+        "browser_download_url": "https://github.com/tModLoader/tModLoader/releases/download/v2026.07.2.5-preview/tModLoader.zip"
+      }
+    ]
+  }
+]

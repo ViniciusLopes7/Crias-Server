@@ -10,6 +10,7 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import grpc
 from grpc import aio as grpc_aio
@@ -51,6 +52,27 @@ def _is_localhost(host: str) -> bool:
     return clean in ("127.0.0.1", "localhost", "::1", "[::1]")
 
 
+def _redact_url(url: str) -> str:
+    """Return ``url`` with any userinfo (``user:pass@``) stripped, for safe logging.
+
+    P7: ``self.host`` may carry credentials (``https://user:pass@host``) when the
+    operator embeds basic-auth in the URL. Logging it verbatim leaks secrets to
+    log aggregators. If parsing fails or the URL has no userinfo, the original
+    string is returned unchanged so we never mask a real leak with a misleading
+    transformation.
+    """
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return url
+    if not parts.username and not parts.password:
+        return url
+    netloc = parts.hostname or ""
+    if parts.port is not None:
+        netloc = f"{netloc}:{parts.port}"
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+
+
 class AgentClient:
     """Async gRPC client for crias-agent, safe for concurrent RPCs."""
 
@@ -84,7 +106,19 @@ class AgentClient:
         self._status_cache_ttl: float = 15.0  # seconds
 
     async def connect(self) -> None:
-        """Connect with exponential backoff up to 60s. Closes stale channel first to avoid FD leak."""
+        """Connect with exponential backoff up to 60s.
+
+        Closes the stale channel before reconnecting to avoid an FD leak.
+
+        P5: closing the channel mid-flight will cause any active streaming
+        RPCs (``StreamConsole`` / ``SubscribeEvents``) on the old channel to
+        fail with ``UNAVAILABLE``. This is intentional — a fresh channel is
+        created below — but callers of ``stream_console`` / ``subscribe_events``
+        must be prepared for abrupt stream termination during reconnect and
+        treat it as a transient error (the ``event_bridge`` task loop and
+        ``_console_stream_loop`` already handle this via their ``except``
+        clauses).
+        """
         async with self._connect_lock:
             # Double-check after lock (another coroutine may have connected).
             if self._stub is not None and self._event_stub is not None:
@@ -114,7 +148,10 @@ class AgentClient:
 
                     self._stub = crias_pb2_grpc.ServerControlStub(self._channel)
                     self._event_stub = crias_pb2_grpc.EventBusStub(self._channel)
-                    logger.info("conectado ao agente em %s", self.host)
+                    # P7: redact any userinfo before logging the host so we
+                    # don't leak embedded basic-auth credentials to log
+                    # aggregators.
+                    logger.info("conectado ao agente em %s", _redact_url(self.host))
                     return
                 except (grpc.RpcError, TimeoutError, OSError) as e:
                     logger.warning("connect falhou (próxima tentativa em %.1fs): %s", delay, e)
@@ -208,22 +245,33 @@ class AgentClient:
         Only resets when the error suggests the channel itself is broken
         (UNAVAILABLE / UNKNOWN); transient per-RPC errors (DEADLINE_EXCEEDED,
         PERMISSION_DENIED, ...) leave the channel intact.
+
+        P3: mutation of ``_stub`` / ``_event_stub`` / ``_channel`` is serialized
+        via ``_connect_lock`` so two concurrently-failing RPCs cannot both
+        observe a non-None ``_channel`` and double-close it (the second would
+        call ``close()`` on an already-closed channel, which is undefined).
         """
         code_fn = getattr(e, "code", None)
         code = code_fn() if callable(code_fn) else None
         if code not in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.UNKNOWN):
             return
         logger.warning("RPC falhou com %s — resetando canal gRPC para forçar reconexão", code)
-        self._stub = None
-        self._event_stub = None
-        # Drop cached status so we don't serve stale data after reconnect.
-        self._status_cache = None
-        if self._channel is not None:
+        async with self._connect_lock:
+            # Re-check under lock: another coroutine may have already reset
+            # the channel while we waited for the lock.
+            if self._channel is None and self._stub is None:
+                return
+            self._stub = None
+            self._event_stub = None
+            # Drop cached status so we don't serve stale data after reconnect.
+            self._status_cache = None
+            channel = self._channel
+            self._channel = None
+        if channel is not None:
             try:
-                await self._channel.close()
+                await channel.close()
             except Exception as close_err:
                 logger.debug("erro ao fechar canal gRPC após falha: %s", close_err)
-            self._channel = None
 
     # --- ServerControl RPCs ---
 
@@ -339,16 +387,25 @@ class AgentClient:
         await self._ensure_connected()
         if self._stub is None:
             raise AgentClientError("não conectado ao agente")
+        stream = self._stub.StreamConsole(
+            crias_pb2.StreamConsoleRequest(tail_lines=tail_lines),
+            metadata=self._metadata(),
+        )
         try:
-            stream = self._stub.StreamConsole(
-                crias_pb2.StreamConsoleRequest(tail_lines=tail_lines),
-                metadata=self._metadata(),
-            )
             async for line in stream:
                 yield line.line
         except grpc.RpcError as e:
             await self._handle_rpc_error(e)
             raise AgentClientError(f"StreamConsole falhou: {e}") from e
+        finally:
+            # P6: cancel the underlying gRPC stream when the consumer stops
+            # iterating (early ``break``, ``agen.aclose()``, GC, or exception).
+            # Without this, the server keeps the stream open until it times out,
+            # leaking resources on the agent side.
+            try:
+                stream.cancel()
+            except Exception:
+                pass
 
     # --- EventBus RPCs ---
 

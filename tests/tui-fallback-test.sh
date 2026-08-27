@@ -158,6 +158,37 @@ else
     fail "tui_choose numerado" "beta" "$result"
 fi
 
+# --- 6b. tui_choose: input INVALIDO (numero fora da faixa) -> default ---
+echo "- tui_choose com input invalido (numero fora da faixa):"
+# Input "99" (fora da faixa) deve cair no default, nao ser atribuido como valor.
+result=""
+result=$(printf '99\n' | { tui_choose r "Escolha" "alpha" "alpha" "beta" "gamma" >&2; echo "$r"; } 2>/dev/null || true)
+if [ "$result" = "alpha" ]; then
+    pass "input '99' (fora da faixa) -> default 'alpha'"
+else
+    fail "tui_choose input invalido 99" "alpha" "$result"
+fi
+
+# --- 6c. tui_choose: input INVALIDO (texto nao-listado) -> default ---
+echo "- tui_choose com input invalido (texto nao-listado):"
+result=""
+result=$(printf 'nao-existe\n' | { tui_choose r "Escolha" "alpha" "alpha" "beta" "gamma" >&2; echo "$r"; } 2>/dev/null || true)
+if [ "$result" = "alpha" ]; then
+    pass "input 'nao-existe' (nao-listado) -> default 'alpha'"
+else
+    fail "tui_choose input texto invalido" "alpha" "$result"
+fi
+
+# --- 6d. tui_choose: input texto valido (match exato com opcao) ---
+echo "- tui_choose com input texto (match exato):"
+result=""
+result=$(printf 'gamma\n' | { tui_choose r "Escolha" "alpha" "alpha" "beta" "gamma" >&2; echo "$r"; } 2>/dev/null || true)
+if [ "$result" = "gamma" ]; then
+    pass "input 'gamma' (match exato) -> gamma"
+else
+    fail "tui_choose texto match" "gamma" "$result"
+fi
+
 echo ""
 echo "[tui-fallback-test] PASS=$PASS FAIL=$FAIL"
 if [ "$FAIL" -gt 0 ]; then

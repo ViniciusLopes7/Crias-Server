@@ -71,7 +71,9 @@ fi
 min_ram_mb=${MIN_RAM%M}
 max_ram_mb=${MAX_RAM%M}
 
-if [ "$min_ram_mb" -ge "$max_ram_mb" ]; then
+# Só corrige se min > max (config inválida). Se min == max (cenario válido
+# quando o usuario quer -Xms==-Xmx, recomendado para producao), mantém.
+if [ "$min_ram_mb" -gt "$max_ram_mb" ]; then
     max_ram_mb=$((max_ram_mb > 1536 ? max_ram_mb : 2048))
     min_ram_mb=$((max_ram_mb * 70 / 100))
     MIN_RAM="${min_ram_mb}M"

@@ -6,6 +6,7 @@ provides per-semantic and per-command builders.
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -13,6 +14,13 @@ import discord
 
 if TYPE_CHECKING:
     pass
+
+
+# P4: matches runs of 3+ consecutive backticks. Sanitizing these in user
+# content prevents premature codeblock-fence termination (a triple-backtick
+# in the middle of `````\n{detail}\n````` would close the fence early and the
+# rest of the content would be parsed as Markdown).
+_BACKTICK_RUN_RE = re.compile(r"`{3,}")
 
 
 # ---------------------------------------------------------------------------
@@ -241,7 +249,15 @@ def health_report(h: dict[str, Any]) -> discord.Embed:
     embed.add_field(name="Porta", value=f"`{port}`", inline=True)
 
     if message:
-        embed.add_field(name="Mensagem", value=message, inline=False)
+        # P9: Discord caps embed field values at 1024 chars; route through
+        # ``truncate_for_codeblock`` so an unusually long agent message
+        # doesn't trigger a 400 from Discord. The backtick-sanitization in
+        # ``truncate_for_codeblock`` is a benign side-effect here.
+        embed.add_field(
+            name="Mensagem",
+            value=truncate_for_codeblock(message, max_len=1024),
+            inline=False,
+        )
 
     return embed
 
@@ -368,7 +384,14 @@ def truncate_for_codeblock(text: str, max_len: int = 1800) -> str:
     Discord caps message length at 2000 chars. Code block fences and
     surrounding framing consume the remaining ~200 chars. Append a
     truncation marker when content is shortened.
+
+    P4: also sanitize runs of 3+ backticks (````` `````) to a single
+    backtick so user content can't prematurely close the fenced code block.
+    All callers of this helper benefit, including ``agent_error`` and
+    ``console_stream_error``.
     """
+    # Sanitize first so the substitution doesn't push us over max_len.
+    text = _BACKTICK_RUN_RE.sub("`", text)
     if len(text) <= max_len:
         return text
     marker = "…(truncado)"

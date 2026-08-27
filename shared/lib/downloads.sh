@@ -92,6 +92,9 @@ download_file() {
 # Download a Modrinth mod with retry. Wraps API query + file download.
 # Usage: download_modrinth_mod <slug> <loader> <game_version> <dest_dir> <file_name>
 # Returns 0 on success, 1 on failure.
+#
+# Delega para mc_fetch_modrinth_project_versions (mc-manifests.sh) que usa
+# mc_curl_get (com User-Agent obrigatório) e jq -c -n para URL encoding correto.
 download_modrinth_mod() {
     local slug="$1"
     local loader="$2"
@@ -104,16 +107,24 @@ download_modrinth_mod() {
         return 0
     fi
 
-    local api_url
-    local mod_url
-
-    api_url="https://api.modrinth.com/v2/project/$slug/version?loaders=%5B%22${loader}%22%5D&game_versions=%5B%22${game_version}%22%5D"
-    mod_url=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors --connect-timeout 10 --max-time 30 "$api_url" 2>/dev/null | jq -r '.[0].files[0].url // empty' 2>/dev/null || true)
-
-    if [ -z "$mod_url" ]; then
-        api_url="https://api.modrinth.com/v2/project/$slug/version?loaders=%5B%22${loader}%22%5D"
-        mod_url=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors --connect-timeout 10 --max-time 30 "$api_url" 2>/dev/null | jq -r '.[0].files[0].url // empty' 2>/dev/null || true)
+    # Usa mc_fetch_modrinth_project_versions (mc-manifests.sh) que inclui
+    # User-Agent e URL encoding correto. Se a lib não estiver carregada, source.
+    if ! declare -F mc_fetch_modrinth_project_versions >/dev/null 2>&1; then
+        # shellcheck source=/dev/null
+        source "$(dirname "${BASH_SOURCE[0]}")/mc-manifests.sh"
     fi
+
+    # Busca versões compatíveis (server-side filter por loader + game_version).
+    local json mod_url
+    json=$(mc_fetch_modrinth_project_versions "$slug" "$loader" "$game_version") || true
+
+    if [ -z "$json" ] || [ "$json" = "[]" ]; then
+        # Fallback: busca sem filtro de game_version (só loader).
+        json=$(mc_fetch_modrinth_project_versions "$slug" "$loader" "") || true
+    fi
+
+    # Extrai URL do primeiro arquivo da primeira versão.
+    mod_url=$(printf '%s' "$json" | jq -r '.[0].files[0].url // empty' 2>/dev/null || true)
 
     if [ -z "$mod_url" ]; then
         print_warning "Nao foi possivel baixar o mod: $file_name"

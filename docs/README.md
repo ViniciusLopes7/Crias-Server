@@ -34,6 +34,7 @@
 | Documento | Descrição |
 |-----------|-----------|
 | [terraria/README.md](terraria/README.md) | Componentes, comandos, aliases, troubleshooting |
+| [tmodloader.md](tmodloader.md) | tModLoader (Terraria com mods) — instalação, catálogo, SteamCMD (v1.2.1) |
 
 ## Controle Remoto Discord
 

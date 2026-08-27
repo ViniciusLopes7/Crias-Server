@@ -23,6 +23,10 @@ source "$SCRIPT_DIR/shared/lib/tui.sh"
 # Minecraft manifests + Modrinth API helpers (dynamic version/modpack selection).
 source "$SCRIPT_DIR/shared/lib/mc-manifests.sh"
 
+# shellcheck source=/dev/null
+# tModLoader versions + SteamCMD + mod catalog (Terraria mods).
+source "$SCRIPT_DIR/shared/lib/tmodloader.sh"
+
 # Load config once before defaults to avoid capturing false values.
 apply_config_with_env_precedence "$CONFIG_FILE"
 
@@ -80,6 +84,8 @@ INSTALL_SSH="${INSTALL_SSH:-}"
 # tModLoader para Terraria (WIP — v1.2.0). Nao implementado completamente.
 # Reservado para futura instalacao de mods no Terraria.
 TERRARIA_USE_TMODLOADER="${TERRARIA_USE_TMODLOADER:-false}"
+TERRARIA_TMODLOADER_VERSION="${TERRARIA_TMODLOADER_VERSION:-}"
+TERRARIA_TMODLOADER_MODS="${TERRARIA_TMODLOADER_MODS:-}"
 
 select_server_type() {
     if [ "$SERVER_TYPE" = "minecraft" ] || [ "$SERVER_TYPE" = "terraria" ]; then
@@ -330,9 +336,11 @@ _prompt_modpack_select_version() {
 
     # Nenhuma versao compativel. Sugerir MC mais proxima.
     print_warning "Nenhuma versao de '$slug' compativel com MC $MINECRAFT_VERSION + $MINECRAFT_LOADER."
-    print_step "Buscando todas as versoes do modpack para sugerir MC mais proxima..."
+    print_step "Buscando versoes do modpack para o loader $MINECRAFT_LOADER (para sugerir MC mais proxima)..."
+    # Filtra por loader (sem MC especifica) para respeitar a escolha do usuario
+    # e evitar sugerir MC de versao que so existe para outro loader.
     local all_json all_versions
-    all_json=$(mc_fetch_modrinth_project_versions "$slug" "" "") || true
+    all_json=$(mc_fetch_modrinth_project_versions "$slug" "$MINECRAFT_LOADER" "") || true
     # Extrai game_versions suportadas (unica, ordenadas pela posicao = mais recente primeiro).
     all_versions=$(printf '%s' "$all_json" | jq -r '
         .[]?.game_versions[]?
@@ -385,12 +393,132 @@ prompt_terraria_options() {
         tui_input TERRARIA_MOTD "MOTD" "$TERRARIA_MOTD"
         tui_input TERRARIA_DOWNLOAD_URL "URL de download do pacote Terraria" "$TERRARIA_DOWNLOAD_URL"
 
-        # tModLoader (WIP — v1.2.0): placeholder, nao implementado.
-        if is_true "$TERRARIA_USE_TMODLOADER"; then
-            print_warning "tModLoader support is WIP (v1.2.0) — ainda nao implementado."
-            print_warning "Continuando com servidor vanilla do Terraria."
+        # tModLoader: pergunta se quer usar (substitui vanilla).
+        if tui_confirm "Usar tModLoader (Terraria com mods)? Substitui o servidor vanilla." "N"; then
+            TERRARIA_USE_TMODLOADER="true"
+            prompt_tmodloader_options
+        else
+            TERRARIA_USE_TMODLOADER="false"
         fi
     fi
+}
+
+# ---------------------------------------------------------------------------
+# tModLoader: seleção de versão (GitHub Releases) + mods (catálogo curado).
+# ---------------------------------------------------------------------------
+prompt_tmodloader_options() {
+    print_step "Buscando versões do tModLoader (GitHub Releases)..."
+
+    if ! mc_has_internet; then
+        print_error "Sem internet para buscar versões do tModLoader."
+        print_error "Defina TERRARIA_TMODLOADER_VERSION em config.env ou conecte-se."
+        if is_true "$NON_INTERACTIVE"; then
+            return 0
+        fi
+        exit 1
+    fi
+
+    # Pergunta se quer ver pre-releases.
+    local include_pre=0
+    if tui_confirm "Mostrar pre-releases do tModLoader na lista?" "N"; then
+        include_pre=1
+    fi
+
+    local versions
+    if ! versions=$(tml_get_versions "$include_pre") || [ -z "$versions" ]; then
+        print_warning "Falha ao buscar versões dinâmicas do tModLoader."
+        print_warning "Usando versão default: ${TERRARIA_TMODLOADER_VERSION:-latest}"
+        if [ -z "$TERRARIA_TMODLOADER_VERSION" ]; then
+            tui_input TERRARIA_TMODLOADER_VERSION "Versão do tModLoader (tag, ex.: v2026.06.3.6)" "latest"
+        fi
+    else
+        local selected
+        if selected=$(printf '%s\n' "$versions" | tui_filter "Selecione a versão do tModLoader (busca fuzzy)") && [ -n "$selected" ]; then
+            TERRARIA_TMODLOADER_VERSION="${selected%% *}"
+            print_success "Versão tModLoader: $TERRARIA_TMODLOADER_VERSION"
+        else
+            print_warning "Seleção cancelada; usando latest."
+            TERRARIA_TMODLOADER_VERSION=""
+        fi
+    fi
+
+    # Seletor de mods: catálogo curado + busca manual + nenhum.
+    prompt_tmodloader_mods
+}
+
+prompt_tmodloader_mods() {
+    local source
+    tui_choose source "Como instalar mods do tModLoader?" "catalog" \
+        "Catálogo curado (Calamity, Thorium, etc.)" \
+        "Sem mods (instalar tModLoader vazio)" \
+        "Workshop IDs manuais (CSV)"
+
+    case "$source" in
+        "Catálogo curado (Calamity, Thorium, etc.)")
+            _prompt_tml_catalog_mods
+            ;;
+        "Sem mods (instalar tModLoader vazio)")
+            TERRARIA_TMODLOADER_MODS=""
+            print_step "tModLoader será instalado sem mods. Você pode adicioná-los depois em Mods/"
+            ;;
+        "Workshop IDs manuais (CSV)")
+            local manual_ids
+            tui_input manual_ids "Workshop IDs (CSV, ex.: 2824688072,2909886416)" "${TERRARIA_TMODLOADER_MODS:-}"
+            TERRARIA_TMODLOADER_MODS="$manual_ids"
+            ;;
+        *)
+            print_warning "Opção inválida; sem mods."
+            TERRARIA_TMODLOADER_MODS=""
+            ;;
+    esac
+}
+
+_prompt_tml_catalog_mods() {
+    print_step "Carregando catálogo de mods do tModLoader..."
+    local catalog
+    catalog=$(tml_mod_catalog_formatted)
+    if [ -z "$catalog" ]; then
+        print_error "Catálogo de mods vazio."
+        return 1
+    fi
+
+    # Multi-seleção do catálogo (checklist TUI).
+    local selected_csv
+    tui_checklist selected_csv "Selecione os mods (espaço para toggle, Enter para confirmar)" "" \
+        "Calamity Mod" \
+        "Calamity Mod Music" \
+        "Thorium Mod" \
+        "Magic Storage" \
+        "Recipe Browser"
+
+    if [ -z "$selected_csv" ]; then
+        print_step "Nenhum mod selecionado no catálogo."
+        TERRARIA_TMODLOADER_MODS=""
+        return 0
+    fi
+
+    # Mapeia display_name -> workshop_id.
+    local workshop_ids=""
+    local first=1
+    local IFS=','
+    local dname
+    for dname in $selected_csv; do
+        [ -z "$dname" ] && continue
+        local wid
+        wid=$(tml_extract_workshop_id_by_displayname "$dname")
+        if [ -n "$wid" ]; then
+            if [ "$first" -eq 1 ]; then
+                workshop_ids="$wid"
+                first=0
+            else
+                workshop_ids="$workshop_ids,$wid"
+            fi
+        fi
+    done
+    unset IFS
+
+    TERRARIA_TMODLOADER_MODS="$workshop_ids"
+    print_success "Mods selecionados: $TERRARIA_TMODLOADER_MODS"
 }
 
 install_tailscale_if_enabled() {
@@ -641,6 +769,8 @@ write_stack_env_file() {
             printf 'TERRARIA_MOTD=%q\n' "$TERRARIA_MOTD"
             printf 'TERRARIA_DOWNLOAD_URL=%q\n' "$TERRARIA_DOWNLOAD_URL"
             printf 'TERRARIA_USE_TMODLOADER=%q\n' "$TERRARIA_USE_TMODLOADER"
+            printf 'TERRARIA_TMODLOADER_VERSION=%q\n' "$TERRARIA_TMODLOADER_VERSION"
+            printf 'TERRARIA_TMODLOADER_MODS=%q\n' "$TERRARIA_TMODLOADER_MODS"
         fi
     } > "$env_file"; then
         rm -f "$env_file"

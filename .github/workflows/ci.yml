@@ -30,9 +30,11 @@ on:
         type: boolean
         default: false
 
+# cancel-in-progress true para branches/PRs (economiza runner minutes);
+# false para tags (nao cancelar releases em andamento).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
   contents: read
@@ -142,6 +144,9 @@ jobs:
         uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5.5.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          # Cache de pip para acelerar runs subsequentes.
+          cache: 'pip'
+          cache-dependency-path: discord-bot/requirements.txt
 
       - name: Install ruff
         run: pip install "ruff>=0.15"
@@ -184,8 +189,10 @@ jobs:
     steps:
       - name: Install deps
         run: |
-          pacman-key --init || true
-          pacman-key --populate archlinux || true
+          # Se keyring falhar, melhor falhar cedo do que instalar pacotes
+          # nao-verificados.
+          pacman-key --init
+          pacman-key --populate archlinux
           pacman -Syu --noconfirm --needed git bash gettext jq
 
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -254,6 +261,9 @@ jobs:
         uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5.5.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          # Cache de pip para acelerar runs subsequentes.
+          cache: 'pip'
+          cache-dependency-path: discord-bot/requirements.txt
 
       - name: Install dependencies
         run: |
@@ -297,11 +307,10 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
-          # pacman-key --init pode falhar em alguns runners; usamos --noconfirm
-          # e continuamos mesmo se houver warning (keyring já vem populado na
-          # imagem archlinux:base-devel atual).
-          pacman-key --init || true
-          pacman-key --populate archlinux || true
+          # Se keyring falhar, melhor falhar cedo do que construir ISO com
+          # pacotes nao-verificados.
+          pacman-key --init
+          pacman-key --populate archlinux
           pacman -Syu --noconfirm --needed archiso git grub
 
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -775,6 +784,46 @@ jobs:
           echo ""
           echo "=== Tamanhos ==="
           du -sh artifacts/*
+
+      - name: Validate required artifacts
+        run: |
+          # Valida que TODOS os artifacts esperados existem antes de publicar.
+          echo "=== Validando artifacts obrigatorios ==="
+          missing=0
+
+          # ISO (se build-iso rodou)
+          if ! ls artifacts/*.iso >/dev/null 2>&1; then
+            echo "WARN: nenhuma ISO encontrada (build-iso pode ter sido skipado)"
+          fi
+
+          # Agent binaries (se build-agent rodou)
+          if ! ls artifacts/crias-agent-*-amd64 >/dev/null 2>&1; then
+            echo "WARN: nenhum crias-agent-*-amd64 encontrado"
+          fi
+
+          # Bot Docker image (se build-bot rodou)
+          if [ ! -f artifacts/crias-bot-image.tar ]; then
+            echo "WARN: crias-bot-image.tar nao encontrado"
+          fi
+
+          # Checksum re-verification dos artifacts que tem .sha256
+          echo "=== Verificando checksums por-artifact ==="
+          for sha_file in artifacts/*.sha256; do
+            [ -f "$sha_file" ] || continue
+            target_file="$(basename "${sha_file%.sha256}")"
+            echo "Verificando $target_file ..."
+            # sha256sum -c espera o filename no .sha256 bater com o arquivo local.
+            (cd artifacts && sha256sum -c "$(basename "$sha_file")") || {
+              echo "ERROR: checksum falhou para $target_file" >&2
+              missing=1
+            }
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            echo "ERROR: validacao de artifacts falhou — abortando release." >&2
+            exit 1
+          fi
+          echo "OK: todos os artifacts validados com sucesso."
 
       - name: Prepare release assets
         run: |

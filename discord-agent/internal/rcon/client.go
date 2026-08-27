@@ -5,6 +5,7 @@ import (
         "context"
         "fmt"
         "log"
+        "net"
         "strings"
         "sync"
         "time"
@@ -47,9 +48,22 @@ func NewClient(host string, port int, password string, enabled bool) *Client {
 var ErrRCONDisabled = fmt.Errorf("rcon desabilitado na configuração")
 
 // defaultDialer opens a real RCON connection.
-// Note: gorcon/rcon v1.3.5 has no WithDialTimeout option; the library's internal default is 5s.
+//
+// A short net.DialTimeout (5s) pre-flight bounds the TCP connect step so a
+// hung dial (firewall drop, unreachable host) can't hold executeLocked's
+// mutex for gorcon's full internal timeout. Without this bound, the 10s
+// backstop in Execute can block on c.mu.Lock() for the dial duration,
+// pushing the effective cap to ~15s instead of the declared 10s (G6).
+//
+// Errors are returned unwrapped — executeLocked adds the "conectar rcon:"
+// prefix consistently for both probe and rcon.Dial failures.
 func defaultDialer(host string, port int, password string) (*rcon.Conn, error) {
         addr := fmt.Sprintf("%s:%d", host, port)
+        probe, err := net.DialTimeout("tcp", addr, 5*time.Second)
+        if err != nil {
+                return nil, err
+        }
+        _ = probe.Close()
         return rcon.Dial(addr, password)
 }
 
@@ -149,6 +163,10 @@ func (c *Client) executeLocked(command string) (string, error) {
 
         out, err := conn.Execute(command)
         if err != nil {
+                // Close and clear the broken connection so the next caller dials fresh
+                // instead of reusing a dead conn on its first attempt (G8).
+                _ = c.conn.Close()
+                c.conn = nil
                 return "", fmt.Errorf("executar rcon %q: %w", command, err)
         }
         return out, nil

@@ -42,9 +42,6 @@ agent.local.yaml
 # OS
 Thumbs.db
 
-# Worklog de desenvolvimento local (mantemos /home/z/my-project/worklog.md fora do repo)
-worklog.md
-
 # Artefatos de build locais
 out/
 release-assets/

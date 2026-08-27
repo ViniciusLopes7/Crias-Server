@@ -46,4 +46,24 @@ if [ "${NESTED_QUOTES:-}" != "path=/opt/server with space=true" ]; then
     exit 1
 fi
 
+# Valores com ${ e $( devem ser preservados literalmente (sem escaping).
+# Ex.: placeholders de chat do Minecraft (§6§l Reino ${PLAYER}).
+# Usa printf para escrever o .env (evita escaping do heredoc).
+printf '%s\n' 'MOTD_PLACEHOLDER=placeholder ${PLAYER} inline' > "$CFG"
+unset MOTD_PLACEHOLDER
+load_config_file "$CFG"
+# Esperado: ${PLAYER} preservado literalmente (não virou \${).
+if [ "${MOTD_PLACEHOLDER:-}" != 'placeholder ${PLAYER} inline' ]; then
+    echo "FAIL: MOTD_PLACEHOLDER não preservou \${ literalmente: '${MOTD_PLACEHOLDER:-}'"
+    exit 1
+fi
+
+printf '%s\n' 'MOTD_SUBSHELL=texto com $(whoami) literal' > "$CFG"
+unset MOTD_SUBSHELL
+load_config_file "$CFG"
+if [ "${MOTD_SUBSHELL:-}" != 'texto com $(whoami) literal' ]; then
+    echo "FAIL: MOTD_SUBSHELL não preservou \$( literalmente: '${MOTD_SUBSHELL:-}'"
+    exit 1
+fi
+
 echo "OK: config-parser-eq-test"

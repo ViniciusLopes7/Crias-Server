@@ -58,8 +58,10 @@ _tui_engine() {
 # ---------------------------------------------------------------------------
 # Seleção única de menu.
 # Uso: tui_choose "var_out" "prompt" "default" "opcao1" "opcao2" ...
-# Atribui a var_out a opção escolhida (ou default se fallback vazio).
-# Retorna 0 em sucesso, 1 se usuário cancelou (Ctrl+C / Esc no gum, EOF no read).
+# Atribui a var_out a opção escolhida (ou default se input vazio/invalido).
+# Retorna 0 sempre (EOF, input invalido, ou cancel no gum usam o default;
+# para não travar fluxos que esperam um valor). Em caso de input invalido,
+# emite print_warning antes de usar o default.
 # ---------------------------------------------------------------------------
 tui_choose() {
     local var_out="$1"
@@ -111,12 +113,22 @@ tui_choose() {
         printf -v "$var_out" '%s' "$default"
         return 0
     fi
-    # Se digitou número, resolve via índice; senão usa o texto literal.
+    # Se digitou número, resolve via índice; valida que está na faixa.
     if [[ "$answer" =~ ^[0-9]+$ ]] && [ "$answer" -ge 1 ] && [ "$answer" -le "${#options[@]}" ]; then
         printf -v "$var_out" '%s' "${options[$((answer - 1))]}"
-    else
-        printf -v "$var_out" '%s' "$answer"
+        return 0
     fi
+    # Se digitou texto, valida que corresponde a uma das opções (match exato).
+    local opt
+    for opt in "${options[@]}"; do
+        if [ "$opt" = "$answer" ]; then
+            printf -v "$var_out" '%s' "$answer"
+            return 0
+        fi
+    done
+    # Input invalido (numero fora da faixa ou texto nao-listado): usa default.
+    print_warning "Opcao invalida: '$answer'. Usando default: '$default'"
+    printf -v "$var_out" '%s' "$default"
     return 0
 }
 

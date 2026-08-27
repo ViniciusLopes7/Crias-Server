@@ -101,7 +101,11 @@ func (s *Server) StartAutoShutdownMonitor(ctx context.Context) {
                                 })
 
                                 // Run systemctl stop; only publish ServerStopped on success.
-                                stopOut, stopErr := s.runSystemctl(ctx, "stop", s.cfg.Server.ServiceName)
+                                // Wrap with a deadline so a hung sudo/systemctl can't block
+                                // the auto-shutdown goroutine indefinitely (G5).
+                                stopCtx, stopCancel := withDeadline(ctx, defaultRPCDeadline)
+                                stopOut, stopErr := s.runSystemctl(stopCtx, "stop", s.cfg.Server.ServiceName)
+                                stopCancel()
                                 if stopErr != nil {
                                         s.bus.Publish(events.Event{
                                                 EventType:   "HealthWarning",

@@ -192,6 +192,8 @@ run_test "setup-cron-manager-test"  "tests/setup-cron-manager-test.sh"
 run_test "qemu-log-parser-test"     "tests/qemu-log-parser-test.sh"
 run_test "tui-fallback-test"        "tests/tui-fallback-test.sh"
 run_test "mc-manifests-test"        "tests/mc-manifests-test.sh"
+run_test "tmodloader-test"           "tests/tmodloader-test.sh"
+run_test "mutation-test"            "tests/mutation-test.sh"
 
 # Testes que requerem ISO construída (SKIP se ISO_PATH não definido).
 run_test "iso-initramfs-validate"        "tests/iso-initramfs-validate.sh"        "true"
@@ -239,27 +241,33 @@ if command -v python3 >/dev/null 2>&1; then
             PY_ENV="PYTHONPATH=discord-bot/src"
         fi
 
-        pytest_log="$(mktemp /tmp/crias-pytest.XXXXXX.log)"
-        # TST-011: --cov para reportar cobertura (pytest-cov já está declarado
-        # em discord-bot/pyproject.toml). --cov-report=term-missing mostra
-        # linhas não cobertas no resumo.
-        # 2E-002: --cov-fail-under=50 impede regressão grave de cobertura
-        # (baseline conservadora — projetos com foco em segurança devem ter
-        # um piso mínimo; aumentar gradualmente conforme suite cresce).
-        if env "$PY_ENV" "$PY_BIN" -m pytest discord-bot/tests/ \
-            -v --tb=short \
-            --cov=crias_bot --cov-report=term-missing --cov-fail-under=50 \
-            > "$pytest_log" 2>&1; then
-            echo "→ PASS"
-            PASS=$((PASS + 1))
-            tail -5 "$pytest_log"
+        # Verifica se pytest está disponível antes de tentar rodar.
+        if ! "$PY_BIN" -c "import pytest" 2>/dev/null; then
+            echo "→ SKIP (pytest não instalado para $PY_BIN)"
+            SKIP=$((SKIP + 1))
         else
-            echo "→ FAIL"
-            tail -30 "$pytest_log"
-            FAIL=$((FAIL + 1))
-            FAILED_TESTS+=("discord-bot pytest")
+            pytest_log="$(mktemp /tmp/crias-pytest.XXXXXX.log)"
+            # TST-011: --cov para reportar cobertura (pytest-cov já está declarado
+            # em discord-bot/pyproject.toml). --cov-report=term-missing mostra
+            # linhas não cobertas no resumo.
+            # 2E-002: --cov-fail-under=50 impede regressão grave de cobertura
+            # (baseline conservadora — projetos com foco em segurança devem ter
+            # um piso mínimo; aumentar gradualmente conforme suite cresce).
+            if env "$PY_ENV" "$PY_BIN" -m pytest discord-bot/tests/ \
+                -v --tb=short \
+                --cov=crias_bot --cov-report=term-missing --cov-fail-under=50 \
+                > "$pytest_log" 2>&1; then
+                echo "→ PASS"
+                PASS=$((PASS + 1))
+                tail -5 "$pytest_log"
+            else
+                echo "→ FAIL"
+                tail -30 "$pytest_log"
+                FAIL=$((FAIL + 1))
+                FAILED_TESTS+=("discord-bot pytest")
+            fi
+            rm -f "$pytest_log"
         fi
-        rm -f "$pytest_log"
     else
         echo "→ SKIP (discord.py ou grpc_tools não instalados)"
         SKIP=$((SKIP + 1))

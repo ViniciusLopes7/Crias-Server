@@ -18,6 +18,18 @@ load_dotenv()
 _TOKEN_RE = re.compile(r"^[0-9a-f]{64}$")
 _TOKEN_PLACEHOLDER = "CHANGE_ME_TO_RANDOM_64_HEX_CHARS"
 
+# P8: known placeholder values for DISCORD_TOKEN — rejecting these prevents
+# shipping a bot with a non-functional token pulled from a sample .env.
+_DISCORD_TOKEN_PLACEHOLDERS = frozenset(
+    {
+        "CHANGE_ME",
+        "your_token_here",
+        "your_discord_token_here",
+        "DISCORD_TOKEN",
+        "your-discord-token",
+    }
+)
+
 
 @dataclass(frozen=True)
 class BotConfig:
@@ -51,10 +63,17 @@ class BotConfig:
 
 
 def load_config() -> BotConfig:
-    """Load config from env; raise ValueError if required vars are missing."""
+    """Load config from env; raise ValueError if required vars are missing or invalid."""
     token = os.environ.get("DISCORD_TOKEN", "")
     if not token:
         raise ValueError("DISCORD_TOKEN não definido no ambiente")
+    # P8: reject obvious placeholder values so the bot fails fast instead of
+    # silently running with a non-functional token.
+    if token in _DISCORD_TOKEN_PLACEHOLDERS:
+        raise ValueError(
+            "DISCORD_TOKEN ainda é um placeholder — gere um token real em "
+            "https://discord.com/developers/applications"
+        )
 
     agent_host = os.environ.get("CRIAS_AGENT_HOST", "")
     if not agent_host:
@@ -81,8 +100,12 @@ def load_config() -> BotConfig:
     chat_mc_id = _parse_optional_int(os.environ.get("DISCORD_CHAT_MC_CHANNEL_ID", ""))
     console_id = _parse_optional_int(os.environ.get("DISCORD_CONSOLE_CHANNEL_ID", ""))
 
-    cache_secs = _parse_int_env("STATUS_CACHE_SECONDS", 15)
-    reconnect_max = _parse_int_env("RECONNECT_MAX_DELAY", 60)
+    # P2: clamp numeric envs to safe floors.
+    #  - STATUS_CACHE_SECONDS >= 0 (0 disables cache, which is OK).
+    #  - RECONNECT_MAX_DELAY >= 1 (negative would make asyncio.wait_for(negative)
+    #    behave as 0, causing a busy-spin reconnect loop).
+    cache_secs = _parse_int_env("STATUS_CACHE_SECONDS", 15, min_value=0)
+    reconnect_max = _parse_int_env("RECONNECT_MAX_DELAY", 60, min_value=1)
 
     # TLS
     tls_ca_path = os.environ.get("CRIAS_AGENT_TLS_CA_PATH", "").strip() or None
@@ -121,21 +144,40 @@ def _parse_id_list(raw: str) -> frozenset[int]:
 
 
 def _parse_optional_int(raw: str) -> int | None:
+    """Parse an optional int env value.
+
+    Returns None for empty/whitespace-only input. Returns None for non-numeric
+    input to remain backward-compatible with existing callers/tests; callers
+    that need strict validation should use `_parse_int_env` instead.
+    """
     raw = raw.strip()
     if not raw:
         return None
     try:
         return int(raw)
     except ValueError:
+        # P10: intentionally returns None (rather than raising) for backward
+        # compatibility with test_config.py::test_parse_optional_int_invalid.
+        # A future major version may raise ValueError here for consistency
+        # with `_parse_int_env`; that change requires updating the test.
         return None
 
 
-def _parse_int_env(name: str, default: int) -> int:
-    """Read int env var with default; raise ValueError if invalid."""
+def _parse_int_env(name: str, default: int, *, min_value: int | None = None) -> int:
+    """Read int env var with default; clamp to ``min_value`` if set.
+
+    Raises ValueError if the value is non-numeric. When ``min_value`` is
+    provided and the parsed value is below it, the floor is returned (e.g.,
+    RECONNECT_MAX_DELAY=-5 → 1) so callers can't trigger busy-spin loops
+    via negative timeouts.
+    """
     raw = os.environ.get(name, "").strip()
     if not raw:
         return default
     try:
-        return int(raw)
+        value = int(raw)
     except ValueError:
         raise ValueError(f"{name} deve ser um inteiro, obtido: {raw!r}") from None
+    if min_value is not None and value < min_value:
+        return min_value
+    return value
