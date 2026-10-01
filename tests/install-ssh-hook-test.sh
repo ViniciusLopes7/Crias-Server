@@ -31,9 +31,9 @@ assert_grep 'install_ssh_if_enabled' "$ROOT_DIR/install.sh"
 assert_grep '^INSTALL_SSH=' "$ROOT_DIR/config.env"
 assert_grep 'INSTALL_SSH' "$ROOT_DIR/shared/lib/config-parser.sh"
 
-# 3. Usuário 'crias' hardcoded como ssh_user (intencional: é o usuário de
+# 3. SSH username configurável (SSH_USER em config.env, default "crias")
 # acesso SSH, NÃO o login user do host que vem do archinstall)
-assert_grep 'local ssh_user="crias"' "$ROOT_DIR/install.sh"
+assert_grep 'SSH_USER:-crias' "$ROOT_DIR/install.sh"
 
 # 4. sudoers drop-in em /etc/sudoers.d/crias-wheel com %wheel ALL=(ALL) ALL
 assert_grep '/etc/sudoers.d/crias-wheel' "$ROOT_DIR/install.sh"

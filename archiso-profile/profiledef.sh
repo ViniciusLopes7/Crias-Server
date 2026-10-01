@@ -62,5 +62,6 @@ file_permissions=(
   # Bootstrap (populado por sync-airootfs.sh a partir de crias-bootstrap.sh).
   ["/usr/local/bin"]="0:0:755"
   ["/usr/local/bin/crias-bootstrap"]="0:0:755"
+  ["/usr/local/bin/crias-tui"]="0:0:755"
   ["/opt/crias-bootstrap.version"]="0:0:644"
 )

@@ -236,11 +236,52 @@ cleanup_old_backups() {
 # ---------------------------------------------------------------------------
 # Entry point: orchestrate the full backup routine.
 # ---------------------------------------------------------------------------
+backup_remote_sync() {
+    if [ -z "${BACKUP_REMOTE_PATH:-}" ]; then
+        return 0
+    fi
+    local backup_file="$BACKUP_DIR/$BACKUP_NAME"
+    if [ ! -f "$backup_file" ]; then
+        backup_log "AVISO: Arquivo de backup nao encontrado para rsync: $backup_file"
+        return 1
+    fi
+    backup_log "Sincronizando backup para $BACKUP_REMOTE_PATH ..."
+    if rsync -az --timeout=300 "$backup_file" "$BACKUP_REMOTE_PATH" 2>/dev/null; then
+        backup_log "Backup remoto sincronizado com sucesso."
+        return 0
+    else
+        backup_log "AVISO: Falha no rsync para $BACKUP_REMOTE_PATH (backup local OK)."
+        return 1
+    fi
+}
+
+backup_notify_webhook() {
+    local status="$1"
+    if [ -z "${BACKUP_NOTIFY_WEBHOOK:-}" ]; then
+        return 0
+    fi
+    local color="3066993"
+    local message="Backup $BACKUP_STACK_NAME concluido com sucesso."
+    if [ "$status" = "failure" ]; then
+        color="15158332"
+        message="Backup $BACKUP_STACK_NAME FALHOU. Verifique os logs."
+    fi
+    local json
+    json=$(printf '{"embeds":[{"title":"Backup %s","description":"%s","color":%s,"timestamp":"%s"}]}' \
+        "$BACKUP_STACK_NAME" "$message" "$color" "$(date -u +%Y-%m-%dT%H:%M:%SZ)")
+    if curl -fsSL -X POST -H "Content-Type: application/json" -d "$json" "$BACKUP_NOTIFY_WEBHOOK" 2>/dev/null; then
+        backup_log "Notificacao webhook enviada ($status)."
+    else
+        backup_log "AVISO: Falha ao enviar notificacao webhook."
+    fi
+}
+
 backup_run() {
     backup_init
 
     if [ ! -d "$BACKUP_SERVER_DIR" ]; then
         backup_log "ERRO: Diretorio do servidor nao encontrado: $BACKUP_SERVER_DIR"
+        backup_notify_webhook "failure"
         exit 1
     fi
 
@@ -250,8 +291,11 @@ backup_run() {
 
     if create_backup; then
         cleanup_old_backups
+        backup_remote_sync
+        backup_notify_webhook "success"
         backup_log "Backup concluido com sucesso."
     else
+        backup_notify_webhook "failure"
         exit 1
     fi
 }

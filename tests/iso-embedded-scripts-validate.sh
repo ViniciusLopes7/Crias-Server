@@ -45,7 +45,7 @@ if ! diff -q "$BOOTSTRAP_SRC" "$BOOTSTRAP_EMB" >/dev/null 2>&1; then
     echo "  Rode sync-airootfs.sh para atualizar." >&2
     exit 1
 fi
-echo "  OK: bootstrap presente, executável, bate com crias-bootstrap.sh"
+echo "  OK: bootstrap + crias-tui presentes"
 
 # --- 3. Drop-in de autologin existe e referencia --autologin root ---
 if [ ! -d "$AUTOLOGIN_DIR" ]; then

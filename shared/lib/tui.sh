@@ -126,6 +126,9 @@ Expõe via Tailscale Funnel: sudo tailscale funnel 8473."
 - monitor net: btop tem aba de network (ou iotop-c para I/O por processo)
 Disponível na ISO Crias-Server (pré-instalado)."
             ;;
+        motd)
+            body="MOTD do Minecraft. Códigos: §6=gold §c=red §a=green §b=aqua §l=bold §r=reset. \\n para nova linha.\nGerador visual: https://comunidademc.com.br/ferramentas/motd/\nGera o código (com §) — copia e cola aqui."
+            ;;
         *)
             body="Ajuda não disponível para o tópico: $topic"
             ;;
@@ -168,10 +171,14 @@ tui_choose() {
     shift 3
     local options=("$@")
 
+    local back_marker=""
+    if [ "${TUI_BACK:-0}" = "1" ]; then
+        back_marker="← Voltar"
+        options=("$back_marker" "${options[@]}")
+    fi
+
     if tui_available; then
         local choice
-        # --header mostra o prompt; --selected pré-seleciona o default se
-        # ele estiver na lista (gum erro se o valor não estiver nas options).
         local selected_args=()
         local opt
         for opt in "${options[@]}"; do
@@ -186,7 +193,11 @@ tui_choose() {
                 --height="${#options[@]}" \
                 "${selected_args[@]}" \
                 "${options[@]}" 2>/dev/null); then
-            printf -v "$var_out" '%s' "$choice"
+            if [ -n "$back_marker" ] && [ "$choice" = "$back_marker" ]; then
+                printf -v "$var_out" '%s' "__BACK__"
+            else
+                printf -v "$var_out" '%s' "$choice"
+            fi
             return 0
         fi
         # Cancelado (Esc/Ctrl+C) — usa default e sinaliza não-cancelado para
@@ -222,6 +233,10 @@ tui_choose() {
     fi
     # Se digitou número, resolve via índice; valida que está na faixa.
     if [[ "$answer" =~ ^[0-9]+$ ]] && [ "$answer" -ge 1 ] && [ "$answer" -le "${#options[@]}" ]; then
+            if [ -n "$back_marker" ] && [ "${options[$((answer - 1))]}" = "$back_marker" ]; then
+                printf -v "$var_out" '%s' "__BACK__"
+                return 0
+            fi
         printf -v "$var_out" '%s' "${options[$((answer - 1))]}"
         return 0
     fi
@@ -229,6 +244,10 @@ tui_choose() {
     local opt
     for opt in "${options[@]}"; do
         if [ "$opt" = "$answer" ]; then
+                if [ -n "$back_marker" ] && [ "$opt" = "$back_marker" ]; then
+                    printf -v "$var_out" '%s' "__BACK__"
+                    return 0
+                fi
             printf -v "$var_out" '%s' "$answer"
             return 0
         fi
@@ -484,6 +503,39 @@ tui_checklist() {
 # Mensagem informativa (pausa até ack).
 # Uso: tui_msg "titulo" "corpo"
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# MOTD preview: mapeia §-codes do Minecraft para ANSI e mostra no terminal.
+# Recebe a string MOTD no $1, printa versão colorida no stdout.
+# ---------------------------------------------------------------------------
+motd_preview() {
+    local motd="$1"
+    local result="$motd"
+    # Mapeia §-codes para ANSI (gum/tput suporta 256-color, mas usamos básico).
+    result="${result//§0/\\033[30m}"   # black
+    result="${result//§1/\\033[34m}"   # dark_blue
+    result="${result//§2/\\033[32m}"   # dark_green
+    result="${result//§3/\\033[36m}"   # dark_aqua
+    result="${result//§4/\\033[31m}"   # dark_red
+    result="${result//§5/\\033[35m}"   # dark_purple
+    result="${result//§6/\\033[33m}"   # gold
+    result="${result//§7/\\033[90m}"   # gray
+    result="${result//§8/\\033[90m}"   # dark_gray
+    result="${result//§9/\\033[94m}"   # blue
+    result="${result//§a/\\033[32m}"   # green
+    result="${result//§b/\\033[96m}"   # aqua
+    result="${result//§c/\\033[31m}"   # red
+    result="${result//§d/\\033[95m}"   # light_purple
+    result="${result//§e/\\033[93m}"   # yellow
+    result="${result//§f/\\033[0m}"    # white (reset)
+    result="${result//§l/\\033[1m}"    # bold
+    result="${result//§o/\\033[3m}"    # italic
+    result="${result//§n/\\033[4m}"    # underline
+    result="${result//§m/\\033[9m}"    # strikethrough
+    result="${result//§r/\\033[0m}"    # reset
+    result="${result//\\\\n/\\n}"      # literal \n → real newline
+    printf '%b\n' "$result\\033[0m"
+}
+
 tui_msg() {
     local title="$1"
     shift

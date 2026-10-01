@@ -147,12 +147,22 @@ prompt_minecraft_options() {
         tui_input MINECRAFT_USER "Usuario do Minecraft" "$MINECRAFT_USER"
         tui_input MINECRAFT_SERVER_DIR "Diretorio do Minecraft" "$MINECRAFT_SERVER_DIR"
         tui_input MINECRAFT_PORT "Porta do Minecraft" "$MINECRAFT_PORT"
+        tui_help "motd" 2>/dev/null || true
         tui_input MINECRAFT_MOTD "MOTD (Message of the Day)" "$MINECRAFT_MOTD"
 
+        motd_preview "$MINECRAFT_MOTD"
+        if tui_confirm "Configurar server icon (server-icon.png)?" "N"; then
+            tui_input MINECRAFT_SERVER_ICON_URL "URL da imagem (PNG 64x64)" "$MINECRAFT_SERVER_ICON_URL"
+        fi
         # Loader selection via TUI (paper not supported).
         tui_help "loader" 2>/dev/null || true
+        while true; do
+        TUI_BACK=1
         tui_choose MINECRAFT_LOADER "Loader (fabric/quilt/vanilla/forge/neoforge)" "$MINECRAFT_LOADER" \
             "fabric" "quilt" "vanilla" "forge" "neoforge"
+        TUI_BACK=0
+        if [ "$MINECRAFT_LOADER" != "__BACK__" ]; then break; fi
+        done
 
         # Dynamic MC version selection via Modrinth/Mojang manifest.
         prompt_minecraft_version_dynamic
@@ -226,11 +236,16 @@ prompt_minecraft_version_dynamic() {
 prompt_minecraft_modpack_dynamic() {
     local source
     tui_help "modpack" 2>/dev/null || true
+    while true; do
+    TUI_BACK=1
     tui_choose source "Fonte do modpack?" "adrenaline" \
         "Top 10 modpacks (Modrinth)" \
         "Buscar modpack por nome" \
         "Vanilla (so loader, sem modpack)" \
         "Slug Modrinth manual"
+    TUI_BACK=0
+    if [ "$source" != "__BACK__" ]; then break; fi
+    done
 
     case "$source" in
         "Top 10 modpacks (Modrinth)")
@@ -952,7 +967,24 @@ cleanup_other_stack_if_needed() {
 # sobe sozinho — este passo configura apenas o host instalado.
 # ---------------------------------------------------------------------------
 install_ssh_if_enabled() {
-    local ssh_user="crias"
+    local ssh_user="${SSH_USER:-crias}"
+
+    # Se SSH_USER não setado e modo interativo, pergunta com validação.
+    if [ -z "${SSH_USER:-}" ] && ! is_true "$NON_INTERACTIVE"; then
+        local reserved_users="root minecraft terraria crias-agent nobody daemon bin sys mail ftp http uuidd dbus nscd"
+        while true; do
+            tui_input ssh_user "Usuario para SSH (acesso ao servidor)" "$ssh_user"
+            if ! [[ "$ssh_user" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+                print_error "Nome invalido. Use letras minuscululas, numeros, _ e -. Comece com letra ou _."
+                continue
+            fi
+            if echo "$reserved_users" | grep -qw "$ssh_user"; then
+                print_error "Nome '$ssh_user' reservado. Escolha outro."
+                continue
+            fi
+            break
+        done
+    fi
 
     # Resolve config interativa se INSTALL_SSH estiver vazio.
     if [ -z "$INSTALL_SSH" ]; then
@@ -1454,6 +1486,50 @@ EOF
     print_warning "NAO commitar /etc/crias/agent.yaml nem exportar o token em logs de CI."
 }
 
+show_install_summary() {
+    echo ""
+    echo "=================================================="
+    echo "  Resumo da instalacao:"
+    echo "=================================================="
+    printf '  %-22s %s\n' "Stack:" "$SERVER_TYPE"
+    printf '  %-22s %s\n' "Diretorio:" "${MINECRAFT_SERVER_DIR:-${TERRARIA_SERVER_DIR}}"
+    printf '  %-22s %s\n' "Porta:" "${MINECRAFT_PORT:-${TERRARIA_PORT}}"
+    printf '  %-22s %s\n' "Usuario do jogo:" "${MINECRAFT_USER:-${TERRARIA_USER}}"
+    printf '  %-22s %s\n' "Tier de hardware:" "${FORCE_HARDWARE_TIER:-auto}"
+    printf '  %-22s %s\n' "Tailscale:" "${INSTALL_TAILSCALE:-pergunta}"
+    printf '  %-22s %s\n' "Tuning de sistema:" "${APPLY_SYSTEM_TUNING:-true}"
+    printf '  %-22s %s\n' "Cleanup stack oposto:" "${CLEANUP_OTHER_STACK:-true}"
+    printf '  %-22s %s\n' "SSH:" "${INSTALL_SSH:-pergunta} (user: ${SSH_USER:-crias})"
+    printf '  %-22s %s\n' "Monitor (btop+ncdu):" "${INSTALL_MONITOR_TOOLS:-pergunta}"
+    printf '  %-22s %s\n' "Agente Discord:" "${INSTALL_AGENT:-pergunta}"
+    if [ "$SERVER_TYPE" = "minecraft" ]; then
+        printf '  %-22s %s\n' "Loader:" "$MINECRAFT_LOADER"
+        printf '  %-22s %s\n' "Versao MC:" "$MINECRAFT_VERSION"
+        printf '  %-22s %s\n' "Modpack:" "${MINECRAFT_MODPACK_SOURCE:-adrenaline} (${MINECRAFT_MODPACK_SLUG:-adrenaline})"
+        printf '  %-22s %s\n' "Online-mode:" "$MINECRAFT_ONLINE_MODE"
+        printf '  %-22s %s\n' "MOTD:" "$MINECRAFT_MOTD"
+        printf '  %-22s %s\n' "Mods QoL:" "$MINECRAFT_INSTALL_QOL_MODS"
+    else
+        printf '  %-22s %s\n' "Mundo:" "$TERRARIA_WORLD_NAME"
+        printf '  %-22s %s\n' "tModLoader:" "${TERRARIA_USE_TMODLOADER:-false}"
+        if is_true "${TERRARIA_USE_TMODLOADER:-false}"; then
+            printf '  %-22s %s\n' "Versao tML:" "${TERRARIA_TMODLOADER_VERSION:-latest}"
+            printf '  %-22s %s\n' "Mods tML:" "${TERRARIA_TMODLOADER_MODS:-nenhum}"
+        fi
+    fi
+    echo "=================================================="
+    echo ""
+
+    if is_true "$NON_INTERACTIVE"; then
+        return 0
+    fi
+
+    if tui_confirm "Confirmar essas configuracoes e iniciar a instalacao?" "Y"; then
+        return 0
+    fi
+    return 1
+}
+
 main() {
     print_header
     # Config already loaded at top-level.
@@ -1480,6 +1556,32 @@ main() {
     else
         prompt_terraria_options
     fi
+
+    while ! show_install_summary; do
+        local review_choice
+        local stack_label="Minecraft"
+        [ "$SERVER_TYPE" = "terraria" ] && stack_label="Terraria"
+        tui_choose review_choice "O que revisar?" "Confirmar" \
+            "Opções globais" \
+            "$stack_label" \
+            "Mudar stack" \
+            "Confirmar"
+        case "$review_choice" in
+            "Confirmar") break ;;
+            "Opções globais") prompt_global_options ;;
+            "Minecraft") prompt_minecraft_options ;;
+            "Terraria") prompt_terraria_options ;;
+            "Mudar stack")
+                select_server_type
+                prompt_global_options
+                if [ "$SERVER_TYPE" = "minecraft" ]; then
+                    prompt_minecraft_options
+                else
+                    prompt_terraria_options
+                fi
+                ;;
+        esac
+    done
 
     install_tailscale_if_enabled
     # Policy gate: ensure EULA acceptance for non-interactive Minecraft installs

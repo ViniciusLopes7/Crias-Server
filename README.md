@@ -241,7 +241,7 @@ Workflow único: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — 12 j
 - `crias-server-full.zip` — repo completo
 - `crias-server-slim.zip` — repo sem `archiso-profile/`, `docs/`, `.github/workflows/` (para quem já tem ISO)
 - `crias-agent-linux-amd64` + `.sha256` — binário do agente Go (x86_64 only; a ISO é x86_64)
-- `crias-bot-image.tar` — Docker image do bot
+- `crias-bot.zip` — Source do bot + Dockerfile (usuário faz `docker build` local)
 - `sha256sums.txt` — checksums de todos os artefatos
 
 ## Testes

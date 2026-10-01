@@ -38,6 +38,15 @@ fi
 
 mkdir -p "$TARGET_DIR"
 cp -a "$SOURCE_FILE" "$TARGET_FILE"
+
+    # Hub TUI central (menu interativo sem precisar lembrar comandos do manager).
+    tui_source="$REPO_ROOT/crias-tui.sh"
+    tui_target="$SCRIPT_DIR/airootfs/usr/local/bin/crias-tui"
+    if [ -f "$tui_source" ]; then
+        cp -a "$tui_source" "$tui_target"
+        chmod 0755 "$tui_target"
+        echo "[sync-airootfs]   $tui_target ($(wc -c < "$tui_target") bytes)"
+    fi
 chmod 0755 "$TARGET_FILE"
 
 # Manifesto de auditoria: qual commit gerou esta ISO.

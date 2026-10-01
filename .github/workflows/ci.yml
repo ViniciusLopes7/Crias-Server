@@ -743,14 +743,18 @@ jobs:
         # Build context é a raiz do repo porque Dockerfile copia ../discord-agent/proto/
         run: docker build -t crias-bot:ci -f discord-bot/Dockerfile .
 
-      - name: Save image as tar
-        run: docker save crias-bot:ci -o /tmp/crias-bot-image.tar
+      - name: Create crias-bot.zip (source + Dockerfile, lightweight)
+        # Zip com o source do bot + proto + Dockerfile. Usuário faz docker build
+        # localmente — mais leve que um .tar de imagem (~200MB) e mais simples.
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          zip -r /tmp/crias-bot.zip discord-bot/ discord-agent/proto/crias.proto
 
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: artifact-bot-image
-          path: /tmp/crias-bot-image.tar
+          name: artifact-bot-zip
+          path: /tmp/crias-bot.zip
           retention-days: 3
 
   # ═══════════════════════════════════════════════════════
@@ -807,8 +811,8 @@ jobs:
           fi
 
           # Bot Docker image (se build-bot rodou)
-          if [ ! -f artifacts/crias-bot-image.tar ]; then
-            echo "WARN: crias-bot-image.tar nao encontrado"
+          if [ ! -f artifacts/crias-bot.zip ]; then
+            echo "WARN: crias-bot.zip nao encontrado"
           fi
 
           # Checksum re-verification dos artifacts que tem .sha256
@@ -844,7 +848,7 @@ jobs:
           mv artifacts/crias-agent-* release-assets/agent/ 2>/dev/null || true
 
           # Bot Docker image
-          mv artifacts/crias-bot-image.tar release-assets/bot/ 2>/dev/null || true
+          mv artifacts/crias-bot.zip release-assets/bot/ 2>/dev/null || true
 
           # Source archives (full + slim)
           # full: repo completo; slim: sem archiso-profile/, docs/, .github/
@@ -906,7 +910,7 @@ jobs:
             [ -f "$f" ] && assets+=("$f")
           done
           # Bot image
-          [ -f release-assets/bot/crias-bot-image.tar ] && assets+=("release-assets/bot/crias-bot-image.tar")
+          [ -f release-assets/bot/crias-bot.zip ] && assets+=("release-assets/bot/crias-bot.zip")
           # Source archives
           assets+=("release-assets/crias-server-full.zip")
           assets+=("release-assets/crias-server-slim.zip")

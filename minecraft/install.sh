@@ -460,6 +460,7 @@ EOF
 # Alias preserving name used by root install.sh.
 run_minecraft_install() {
     run_stack_install
+    download_server_icon_if_set
 }
 
 # Aliases for backward compat with legacy test functions
@@ -483,3 +484,26 @@ apply_minecraft_system_tuning() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     run_minecraft_install
 fi
+
+download_server_icon_if_set() {
+    if [ -z "${MINECRAFT_SERVER_ICON_URL:-}" ]; then
+        return 0
+    fi
+
+    if is_true "${DRY_RUN:-false}"; then
+        print_step "[DRY_RUN] Pulando download do server-icon.png"
+        return 0
+    fi
+
+    print_step "Baixando server-icon.png de $MINECRAFT_SERVER_ICON_URL ..."
+    if ! download_file "$MINECRAFT_SERVER_ICON_URL" "$MINECRAFT_SERVER_DIR/server-icon.png"; then
+        print_warning "Falha ao baixar server-icon. O servidor funciona sem ele."
+        return 0
+    fi
+    print_success "server-icon.png instalado em $MINECRAFT_SERVER_DIR/server-icon.png"
+    if command -v file >/dev/null 2>&1; then
+        local icon_info
+        icon_info=$(file "$MINECRAFT_SERVER_DIR/server-icon.png" 2>/dev/null || true)
+        print_step "Tipo do arquivo: $icon_info"
+    fi
+}

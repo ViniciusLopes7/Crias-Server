@@ -69,14 +69,7 @@ CRIAS_AGENT_TOKEN=<64_hex_chars_gerados_pelo_install_sh>
 
 ```bash
 # Opção A: conectar repo do GitHub no painel do Railway
-# Railway detecta railway.json automaticamente.
-
-# Opção B: Railway CLI
-npm install -g @railway/cli
-railway login
-railway link
-railway up
-```
+# Railway detecta o Dockerfile automaticamente.
 
 ### 3. Sincronizar slash commands
 
@@ -190,7 +183,6 @@ discord-bot/
 ├── pyproject.toml           # Poetry config + deps
 ├── requirements.txt          # pip fallback
 ├── Dockerfile                # Railway build
-├── railway.json              # Railway config
 ├── .env.example              # template de env vars
 ├── src/crias_bot/
 │   ├── __init__.py
