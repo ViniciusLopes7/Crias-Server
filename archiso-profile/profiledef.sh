@@ -53,11 +53,9 @@ airootfs_image_tool_options=('-comp' 'zstd' '-b' '1M')
 #
 # NOTA: O mkarchiso (ver archiso/mkarchiso no repo oficial) faz
 # `declare -A file_permissions=()` ANTES de sourcear este arquivo. Sem isso, a
-# sintaxe ["/root"]="0:0:750" falha em bash 5.2+ com "syntax error: operand
 # expected". Se for sourcear este arquivo standalone (ex: em testes), faça
 # `declare -A file_permissions` antes.
 file_permissions=(
-  ["/root"]="0:0:750"
   # Drop-in de autologin do root no tty1 (padrão archiso upstream).
   ["/etc/systemd/system/getty@tty1.service.d"]="0:0:755"
   ["/etc/systemd/system/getty@tty1.service.d/autologin.conf"]="0:0:644"

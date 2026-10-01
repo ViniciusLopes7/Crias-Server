@@ -60,8 +60,8 @@ WORKDIR /app
 # Create non-root user before COPY so we can use --chown on the COPY steps
 # Use --chown to avoid a separate RUN chown -R layer (doubles image size).
 # with root-owned files; smaller image, fewer layers).
-RUN groupadd --system --gid 1001 crias \
-    && useradd --system --uid 1001 --gid crias --create-home --home-dir /home/crias crias
+RUN groupadd --gid 1001 crias \
+    && useradd --uid 1001 --gid crias --create-home --home-dir /home/crias crias
 
 # Copia venv (completamente isolado de HOME/USER) com --chown direto no COPY.
 COPY --chown=1001:1001 --from=builder /opt/venv /opt/venv
