@@ -1,14 +1,16 @@
 # ROADMAP — Crias-Server
 
 > Status de implementação e próximos passos.
-> Última atualização: 2026-08-26.
+> Última atualização: pós-F1 (v1.3.0).
 
-## ✅ Implementado (v1.2.1)
+## ✅ Implementado (v1.3.0)
 
 ### Branch `main` (única, monorepo)
 
 | Componente | Status | Detalhes |
 |------------|--------|----------|
+| **Bug de login na ISO (F1)** | ✅ (v1.3.0) | Drop-in de autologin do root no tty1 (padrão archiso upstream). Auto-start quebrado removido. Root permanece travado no shadow (hardening preservado). |
+| **Bootstrap mínimo (F1)** | ✅ (v1.3.0) | `crias-bootstrap.sh` baixa a release do GitHub com verificação SHA256 em vez de embutir o repo inteiro na ISO. Username-agnostic. |
 | **tModLoader (Terraria com mods)** | ✅ (v1.2.1) | `shared/lib/tmodloader.sh` — GitHub Releases dinâmico, catálogo curado (Calamity, Thorium, etc.), SteamCMD, `Mods/enabled.json`. Substitui vanilla quando `TERRARIA_USE_TMODLOADER=true`. |
 | **OpenSSH na ISO + host** | ✅ (v1.2.0) | `openssh` em `packages.x86_64`; `install.sh` pergunta se habilita SSH no host → cria usuário `crias` com sudo, `PermitRootLogin no` |
 | **TUI (gum)** | ✅ (v1.2.0) | `shared/lib/tui.sh` — wrapper `gum` com fallback `read` automático; `gum` pré-instalado na ISO |
@@ -25,7 +27,7 @@
 | **Eventos push** | ✅ | `ServerStarted`/`Stopped`, `PlayerJoined`/`Left`, `HealthWarning` → bot posta em `#controle` |
 | **Streaming console** | ✅ | `StreamConsole` RPC (journalctl -f) → bot posta em `#console` |
 | **CI/CD** | ✅ | Workflow único `ci.yml` com 12 jobs paralelos + release unificado |
-| **Testes** | ✅ | 24 testes bash (incl. 2 novos: `tui-fallback-test`, `mc-manifests-test`) + 124 Python + 55 Go |
+| **Testes** | ✅ | Bateria de testes bash (incl. `tui-fallback-test`, `mc-manifests-test`, `crias-bootstrap-test`) + Python + Go (ver `tests/run-all.sh` para o total atual) |
 
 ### Decisões arquiteturais finais
 
@@ -51,6 +53,10 @@
 
 ### Alta prioridade
 
+- [ ] **GUI web (custom Go webapp)** — dashboard CasaOS-style que reusa o
+  `crias-agent` gRPC. Estudo de viabilidade em [docs/gui-feasibility.md](docs/gui-feasibility.md).
+  Gateado por tier (LOW não, MID opcional, HIGH sim). Roadmap de 7 fases
+  (G1-G7) documentado. Implementação pós-F8 (revisão final).
 - [ ] **Métricas Prometheus no agente** — `crias_agent_grpc_requests_total`,
   `crias_agent_rcon_errors_total`, `crias_agent_players_online`.
 - [ ] **Wake-on-LAN endpoint** no agente — para ligar PC do jogador remotamente.
@@ -81,12 +87,12 @@
 
 | Suíte | Tests | Status |
 |-------|-------|--------|
-| `tests/run-all.sh` (orquestrador) | 26 testes bash + 124 Python + 55 Go | ✅ Todos PASS |
+| `tests/run-all.sh` (orquestrador) | Bateria de testes bash + Python + Go (total atual em `run-all.sh`) | ✅ Todos PASS |
 | `tests/tui-fallback-test.sh` (novo v1.2.0) | 13 checks (caminho fallback sem gum) | ✅ Todos PASS |
 | `tests/mc-manifests-test.sh` (novo v1.2.0) | 28 checks (parsing + sugestão, com fixtures) | ✅ Todos PASS |
 | `tests/install-contracts.sh` | 7 contratos (incl. rejeição de `paper`) | ✅ Todos PASS |
-| `discord-bot/tests/` (pytest) | 124 testes Python | ✅ Todos PASS |
-| `discord-agent/internal/{config,rcon,events,server}/` | 55 testes Go (config=19, rcon=12, events=6, server=18) | ✅ Todos PASS (`-race`) |
+| `discord-bot/tests/` (pytest) | Testes Python (discord.py, config, agent_client, embeds) | ✅ Todos PASS |
+| `discord-agent/internal/{config,rcon,events,server}/` | Testes Go por pacote (config, rcon, events, server) | ✅ Todos PASS (`-race`) |
 | `tests/iso-initramfs-validate.sh` | ISO real | ⏭️ SKIP (requer ISO construída) |
 | `tests/iso-live-credentials-validate.sh` | ISO real | ⏭️ SKIP (requer ISO construída) |
 | `tests/iso-qemu-boot.sh` | ISO real | ⏭️ SKIP (requer ISO construída) |

@@ -2,8 +2,9 @@
 # tests/iso-embedded-scripts-validate.sh
 #
 # Valida que o sync-airootfs.sh foi rodado e que os arquivos esperados estão
-# presentes em archiso-profile/airootfs/opt/crias-server/. Roda antes do
-# mkarchiso no CI para falhar cedo se o sync foi esquecido.
+# presentes no airootfs: o bootstrap em /usr/local/bin/crias-bootstrap e o
+# drop-in de autologin em /etc/systemd/system/getty@tty1.service.d/. Roda
+# antes do mkarchiso no CI para falhar cedo se o sync foi esquecido.
 #
 # Este teste NÃO requer ISO construída — ele valida o filesystem do airootfs
 # antes do empacotamento.
@@ -11,117 +12,108 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-EMBEDDED_DIR="$ROOT_DIR/archiso-profile/airootfs/opt/crias-server"
+AIROOTFS="$ROOT_DIR/archiso-profile/airootfs"
+BOOTSTRAP_SRC="$ROOT_DIR/crias-bootstrap.sh"
+BOOTSTRAP_EMB="$AIROOTFS/usr/local/bin/crias-bootstrap"
+AUTOLOGIN_DIR="$AIROOTFS/etc/systemd/system/getty@tty1.service.d"
+AUTOLOGIN_FILE="$AUTOLOGIN_DIR/autologin.conf"
 
-echo "[iso-embedded-scripts-validate] Validando scripts embutidos em $EMBEDDED_DIR ..."
+echo "[iso-embedded-scripts-validate] Validando airootfs em $AIROOTFS ..."
 
-# --- 1. Diretório existe e tem conteúdo ---
-if [ ! -d "$EMBEDDED_DIR" ]; then
-    echo "FAIL: diretório $EMBEDDED_DIR não existe." >&2
+# --- 1. Diretório base do airootfs existe ---
+if [ ! -d "$AIROOTFS" ]; then
+    echo "FAIL: diretório $AIROOTFS não existe." >&2
+    exit 1
+fi
+
+# --- 2. Bootstrap existe e bate com a fonte do repo ---
+if [ ! -f "$BOOTSTRAP_EMB" ]; then
+    echo "FAIL: bootstrap ausente: $BOOTSTRAP_EMB" >&2
     echo "  Rode: bash archiso-profile/sync-airootfs.sh" >&2
     exit 1
 fi
-
-file_count=$(find "$EMBEDDED_DIR" -type f | wc -l)
-if [ "$file_count" -lt 5 ]; then
-    echo "FAIL: $EMBEDDED_DIR tem apenas $file_count arquivos (esperado >= 5)." >&2
-    echo "  Rode: bash archiso-profile/sync-airootfs.sh" >&2
+if [ ! -x "$BOOTSTRAP_EMB" ]; then
+    echo "FAIL: bootstrap não é executável: $BOOTSTRAP_EMB" >&2
     exit 1
 fi
-echo "  OK: $file_count arquivos embutidos"
-
-# --- 2. Arquivos essenciais presentes ---
-required_files=(
-    "install.sh"
-    "config.env"
-    "shared/lib/common.sh"
-    "shared/lib/downloads.sh"
-    "shared/lib/stack-installer.sh"
-    "shared/lib/hardware-profile.sh"
-    "shared/lib/tui.sh"
-    "shared/lib/mc-manifests.sh"
-    "shared/lib/tmodloader.sh"
-    "minecraft/install.sh"
-    "minecraft/mc-manager.sh"
-    "minecraft/minecraft.service"
-    "minecraft/backup-cron.sh"
-    "minecraft/setup-cron.sh"
-    "minecraft/start-server.sh"
-    "terraria/install.sh"
-    "terraria/tt-manager.sh"
-    "terraria/terraria.service"
-    "terraria/backup-cron.sh"
-    "terraria/setup-cron.sh"
-    "terraria/start-terraria.sh"
-    ".sync-manifest"
-)
-
-for rel in "${required_files[@]}"; do
-    target="$EMBEDDED_DIR/$rel"
-    if [ ! -f "$target" ]; then
-        echo "FAIL: arquivo essencial ausente: $rel" >&2
-        exit 1
-    fi
-done
-echo "  OK: todos os ${#required_files[@]} arquivos essenciais presentes"
-
-# --- 3. Permissões executáveis nos .sh ---
-non_exec_scripts=()
-while IFS= read -r -d '' script; do
-    if [ ! -x "$script" ]; then
-        non_exec_scripts+=("$script")
-    fi
-done < <(find "$EMBEDDED_DIR" -name '*.sh' -type f -print0)
-
-if [ ${#non_exec_scripts[@]} -gt 0 ]; then
-    echo "FAIL: ${#non_exec_scripts[@]} script(s) sem permissão de execução:" >&2
-    for s in "${non_exec_scripts[@]}"; do
-        echo "  $s" >&2
-    done
-    echo "  Rode: find $EMBEDDED_DIR -name '*.sh' -exec chmod 755 {} +" >&2
+if [ ! -f "$BOOTSTRAP_SRC" ]; then
+    echo "FAIL: fonte do bootstrap ausente no repo: $BOOTSTRAP_SRC" >&2
     exit 1
 fi
-echo "  OK: todos os .sh têm permissão executável"
-
-# --- 4. Manifesto tem campos obrigatórios ---
-manifest="$EMBEDDED_DIR/.sync-manifest"
-for field in "synced_at" "git_commit" "git_short"; do
-    if ! grep -q "^${field}=" "$manifest"; then
-        echo "FAIL: manifesto ausente campo '$field'" >&2
-        exit 1
-    fi
-done
-echo "  OK: manifesto tem campos synced_at/git_commit/git_short"
-
-# --- 5. install.sh é o mesmo do repo (não foi editado manualmente) ---
-repo_install="$ROOT_DIR/install.sh"
-embedded_install="$EMBEDDED_DIR/install.sh"
-if ! diff -q "$repo_install" "$embedded_install" >/dev/null 2>&1; then
-    echo "FAIL: install.sh embutido difere do install.sh do repo." >&2
+if ! diff -q "$BOOTSTRAP_SRC" "$BOOTSTRAP_EMB" >/dev/null 2>&1; then
+    echo "FAIL: bootstrap embutido difere da fonte do repo." >&2
     echo "  Rode sync-airootfs.sh para atualizar." >&2
     exit 1
 fi
-echo "  OK: install.sh embutido bate com install.sh do repo"
+echo "  OK: bootstrap presente, executável, bate com crias-bootstrap.sh"
 
-# --- 6. profiledef.sh declara file_permissions para os arquivos embutidos ---
+# --- 3. Drop-in de autologin existe e referencia --autologin root ---
+if [ ! -d "$AUTOLOGIN_DIR" ]; then
+    echo "FAIL: diretório de drop-in ausente: $AUTOLOGIN_DIR" >&2
+    exit 1
+fi
+if [ ! -f "$AUTOLOGIN_FILE" ]; then
+    echo "FAIL: drop-in de autologin ausente: $AUTOLOGIN_FILE" >&2
+    exit 1
+fi
+if ! grep -Fq -- '--autologin root' "$AUTOLOGIN_FILE"; then
+    echo "FAIL: drop-in não referencia '--autologin root': $AUTOLOGIN_FILE" >&2
+    exit 1
+fi
+# Sintaxe systemd válida: deve ter [Service] e ao menos um ExecStart=.
+if ! grep -Fq '[Service]' "$AUTOLOGIN_FILE"; then
+    echo "FAIL: drop-in sem seção [Service]: $AUTOLOGIN_FILE" >&2
+    exit 1
+fi
+if ! grep -Eq '^ExecStart=$' "$AUTOLOGIN_FILE"; then
+    echo "FAIL: drop-in sem 'ExecStart=' (reset do default): $AUTOLOGIN_FILE" >&2
+    exit 1
+fi
+echo "  OK: drop-in autologin presente e válido (--autologin root)"
+
+# --- 4. Regressão: .bash_profile e .automated_script.sh NÃO devem existir ---
+# (Foram removidos em F1 — o auto-start quebrado que impedia login.)
+for stale in "$AIROOTFS/root/.bash_profile" "$AIROOTFS/root/.automated_script.sh" "$AIROOTFS/root/customize_airootfs.sh"; do
+    if [ -e "$stale" ]; then
+        echo "FAIL: arquivo stale presente (deveria ter sido removido): $stale" >&2
+        exit 1
+    fi
+done
+echo "  OK: nenhum arquivo stale de auto-start em /root/"
+
+# --- 5. profiledef.sh declara file_permissions para os arquivos embutidos ---
 profiledef="$ROOT_DIR/archiso-profile/profiledef.sh"
-for path in "/opt/crias-server/install.sh" "/opt/crias-server/config.env"; do
+for path in "/usr/local/bin/crias-bootstrap" "/etc/systemd/system/getty@tty1.service.d/autologin.conf"; do
     if ! grep -Fq "[\"$path\"]" "$profiledef"; then
         echo "FAIL: profiledef.sh não declara file_permissions para $path" >&2
         exit 1
     fi
 done
-echo "  OK: profiledef.sh declara file_permissions para arquivos embutidos"
+echo "  OK: profiledef.sh declara file_permissions para bootstrap + autologin"
 
-# --- 7. packages.x86_64 contém os pacotes essenciais (incluindo tailscale,
-# openssh desde v1.2.0, gum desde v1.2.0) ---
+# --- 6. Manifesto de versão do bootstrap ---
+manifest="$AIROOTFS/opt/crias-bootstrap.version"
+if [ ! -f "$manifest" ]; then
+    echo "FAIL: manifesto de versão ausente: $manifest" >&2
+    echo "  Rode: bash archiso-profile/sync-airootfs.sh" >&2
+    exit 1
+fi
+for field in "synced_at" "bootstrap_sha256"; do
+    if ! grep -q "^${field}=" "$manifest"; then
+        echo "FAIL: manifesto ausente campo '$field'" >&2
+        exit 1
+    fi
+done
+echo "  OK: manifesto tem synced_at + bootstrap_sha256"
+
+# --- 7. packages.x86_64 contém pacotes essenciais pro bootstrap ---
 pkgs="$ROOT_DIR/archiso-profile/packages.x86_64"
-for pkg in archiso base linux mkinitcpio mkinitcpio-archiso grub networkmanager tailscale openssh gum jdk21-openjdk sudo jq gettext; do
+for pkg in archiso base linux mkinitcpio mkinitcpio-archiso grub networkmanager tailscale openssh gum jdk21-openjdk sudo jq gettext curl unzip btop ncdu; do
     if ! grep -Eq "^${pkg}\$" "$pkgs"; then
         echo "FAIL: pacote essencial ausente em packages.x86_64: $pkg" >&2
         exit 1
     fi
 done
-echo "  OK: packages.x86_64 contém todos os pacotes essenciais (incl. tailscale, openssh, gum)"
+echo "  OK: packages.x86_64 contém pacotes essenciais (incl. curl, unzip, jq pro bootstrap)"
 
 echo "[iso-embedded-scripts-validate] OK — todos os checks passaram"

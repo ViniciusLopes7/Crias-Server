@@ -7,7 +7,7 @@
 | Documento | Descrição |
 |-----------|-----------|
 | [../README.md](../README.md) | Visão geral + quick start + controle remoto Discord |
-| [../CHANGELOG.md](../CHANGELOG.md) | Histórico de versões (v1.2.0+) |
+| [../CHANGELOG.md](../CHANGELOG.md) | Histórico de versões (v1.3.0+) |
 | [../ROADMAP.md](../ROADMAP.md) | Status de implementação e próximos passos |
 
 ## Tutorial
@@ -20,6 +20,7 @@
 | [hardware-tuning.md](hardware-tuning.md) | Tuning por hardware (tiers LOW/MID/HIGH, thresholds, recalibração) |
 | [restore.md](restore.md) | Restore de backups (passo-a-passo Minecraft + Terraria) |
 | [security.md](security.md) | Firewall, SSH, logs, health checks, hardening systemd, cleanup do stack oposto |
+| [gui-feasibility.md](gui-feasibility.md) | Estudo de viabilidade de GUI web (F6) — opções, tier-gating, roadmap pós-F8 |
 
 ## Stack Minecraft
 
@@ -78,7 +79,7 @@ Workflow único: [../.github/workflows/ci.yml](../.github/workflows/ci.yml) — 
 ## Testes
 
 ```bash
-# Bateria completa (22 testes bash + 124 testes Python + 55 testes Go)
+# Bateria completa de testes bash + Python + Go (ver tests/run-all.sh para o total atual)
 bash tests/run-all.sh
 
 # Apenas bash rápido

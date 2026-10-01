@@ -46,8 +46,8 @@ airootfs_image_tool_options=('-comp' 'zstd' '-b' '1M')
 
 # Permissões explícitas para arquivos do airootfs.
 # mkarchiso aplica estas permissões no momento de empacotar a ISO, sobrescrevendo
-# qualquer permissão do source. Importante para garantir que .automated_script.sh
-# seja executável e que scripts do instalador embutido também sejam.
+# qualquer permissão do source. Importante para garantir que o drop-in de
+# autologin e o bootstrap sejam legíveis/executáveis corretamente.
 #
 # Formato: ["<path>"]="<uid>:<gid>:<octal_mode>"
 #
@@ -58,11 +58,11 @@ airootfs_image_tool_options=('-comp' 'zstd' '-b' '1M')
 # `declare -A file_permissions` antes.
 file_permissions=(
   ["/root"]="0:0:750"
-  ["/root/.automated_script.sh"]="0:0:755"
-  ["/root/.bash_profile"]="0:0:644"
-  # Instalador embutido (populado por sync-airootfs.sh).
-  ["/opt/crias-server"]="0:0:755"
-  ["/opt/crias-server/install.sh"]="0:0:755"
-  ["/opt/crias-server/config.env"]="0:0:644"
-  ["/opt/crias-server/.sync-manifest"]="0:0:644"
+  # Drop-in de autologin do root no tty1 (padrão archiso upstream).
+  ["/etc/systemd/system/getty@tty1.service.d"]="0:0:755"
+  ["/etc/systemd/system/getty@tty1.service.d/autologin.conf"]="0:0:644"
+  # Bootstrap (populado por sync-airootfs.sh a partir de crias-bootstrap.sh).
+  ["/usr/local/bin"]="0:0:755"
+  ["/usr/local/bin/crias-bootstrap"]="0:0:755"
+  ["/opt/crias-bootstrap.version"]="0:0:644"
 )

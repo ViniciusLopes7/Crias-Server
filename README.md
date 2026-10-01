@@ -6,6 +6,8 @@
 
 Instalador modular para servidor de jogos em Arch Linux, com escolha inicial entre Minecraft e Terraria, tuning automático por hardware, hardening systemd, controle remoto via bot Discord e CI/CD completo (build ISO + binário Go + bot Python).
 
+> **v1.3.0 (F1)**: Bug crítico de login na ISO corrigido (drop-in de autologin do root no tty1). Auto-start quebrado removido. Bootstrap mínimo (`crias-bootstrap`) baixa a release do GitHub com verificação SHA256 em vez de embutir o repo inteiro. Veja [CHANGELOG.md](CHANGELOG.md) e [archiso-profile/README.md](archiso-profile/README.md).
+>
 > **v1.2.0**: ISO agora inclui **OpenSSH** e **`gum`** (TUI). O instalador oferece **seleção dinâmica de versão do Minecraft** e **seletor de modpacks** (top-10 Modrinth / busca / vanilla / slug manual) com sugestão de versão compatível. Loader `paper` removido. Veja o [CHANGELOG.md](CHANGELOG.md) para detalhes.
 
 ## Principais recursos
@@ -89,29 +91,18 @@ Flags importantes em `config.env`:
 ├── discord-agent/              # Agente Go (gRPC + RCON + eventos)
 ├── discord-bot/                # Bot Python (discord.py 2.x + slash commands)
 ├── archiso-profile/            # Perfil archiso para build de ISO bootável
-├── tests/                      # 26 testes bash + 124 testes Python + 55 testes Go + helpers
+├── tests/                      # Bateria de testes bash + Python + Go (ver tests/run-all.sh)
 │   ├── fixtures/               #   JSON fixtures para testes de manifest (v1.2.0)
 │   ├── tui-fallback-test.sh    #   Teste do caminho fallback do TUI (v1.2.0)
 │   └── mc-manifests-test.sh    #   Teste de parsing + sugestão de versão (v1.2.0)
 ├── docs/                       # Documentação
-├── CHANGELOG.md                # Histórico de versões (v1.2.0+)
+├── CHANGELOG.md                # Histórico de versões (v1.3.0+)
 └── .github/workflows/          # Workflow único: ci.yml (12 jobs paralelos + release)
 ```
 
 ## Tuning por hardware
 
-O sistema detecta automaticamente RAM total, CPU cores e tipo de disco (HDD/SSD/NVME), e aplica um tier que afeta tanto parâmetros do jogo quanto limites de serviço systemd (`MemoryMax`).
-
-| Tier | Perfil alvo | Comportamento típico |
-|------|-------------|----------------------|
-| LOW  | Máquinas limitadas (≤3 GB RAM ou ≤2 cores) | Menos players, distâncias menores, heap reduzido |
-| MID  | Máquinas intermediárias (≤12 GB ou ≤6 cores) | Balanceado para estabilidade e desempenho |
-| HIGH | Máquinas robustas (>12 GB e >6 cores) | Mais players, distâncias maiores, parâmetros agressivos |
-
-**Override manual** em `config.env`:
-```bash
-FORCE_HARDWARE_TIER="HIGH"   # LOW, MID, HIGH ou vazio para auto
-```
+O sistema detecta automaticamente RAM total, CPU cores e tipo de disco (HDD/SSD/NVME), e aplica um tier **LOW / MID / HIGH** que afeta parâmetros do jogo, limites systemd (`MemoryMax`) e políticas de host (zram, scheduler, cpupower). Override manual via `FORCE_HARDWARE_TIER` em `config.env`. Veja a [tabela completa de tiers + thresholds + recalibração](docs/hardware-tuning.md).
 
 **Recalibração após mudança de hardware** (sem reinstalar):
 ```bash
@@ -198,17 +189,7 @@ Quando `INSTALL_AGENT=true`, o `install.sh` instala:
 
 ### Slash Commands disponíveis no Discord
 
-| Comando | Permissão | Descrição |
-|---------|-----------|-----------|
-| `/mc start` | Admin | Liga o servidor |
-| `/mc stop` | Admin | Desliga graceful |
-| `/mc restart` | Admin | Reinicia |
-| `/mc status` | Todos | Online/offline, players, RAM, tier |
-| `/mc players` | Todos | Lista quem está online |
-| `/mc say <msg>` | Mod+ | Mensagem no chat do jogo via RCON |
-| `/mc logs [n]` | Admin | (planejado — ver ROADMAP.md) Últimas N linhas do journalctl |
-| `/mc console` | Admin | Toggle stream de console no canal #console |
-| `/mc health` | Admin | Health check (porta + RCON) |
+O bot oferece `/mc start | stop | restart | status | players | say | console | health` com permissões por role (Admin/Mod+/Todos). Veja a [tabela completa de comandos + permissões](discord-bot/README.md) no README do bot.
 
 Veja:
 - [discord-agent/README.md](discord-agent/README.md) — Agente Go (gRPC, RCON, eventos)
@@ -266,7 +247,7 @@ Workflow único: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — 12 j
 ## Testes
 
 ```bash
-# Bateria completa (26 testes bash + 124 testes Python + 55 testes Go)
+# Bateria completa de testes bash + Python + Go (ver tests/run-all.sh para o total atual)
 bash tests/run-all.sh
 
 # Apenas bash rápido (incl. tui-fallback-test e mc-manifests-test)
@@ -283,7 +264,7 @@ ISO_PATH=/path/to/crias.iso bash tests/run-all.sh
 ## Documentação
 
 - [docs/README.md](docs/README.md) — Índice central de toda a documentação
-- [CHANGELOG.md](CHANGELOG.md) — Histórico de versões (v1.2.0+)
+- [CHANGELOG.md](CHANGELOG.md) — Histórico de versões (v1.3.0+)
 - [docs/tutorial.md](docs/tutorial.md) — Tutorial passo-a-passo de operação
 - [docs/tui.md](docs/tui.md) — Como o TUI (gum) funciona + fallback (v1.2.0)
 - [docs/minecraft/README.md](docs/minecraft/README.md) — Stack Minecraft + mods

@@ -73,19 +73,15 @@ download_file() {
         return 0
     fi
 
-    tmpfile=$(mktemp)
-    # shellcheck disable=SC2064
-    trap 'rm -f -- "$tmpfile"' RETURN
+    tmpfile=$(mktemp_crias_file)
     mkdir -p "$(dirname "$dest")"
 
     if ! _curl_with_retry "$url" "$tmpfile"; then
         print_error "Falha ao baixar $url"
-        rm -f "$tmpfile"
         return 1
     fi
 
     install -m 0644 "$tmpfile" "$dest"
-    rm -f "$tmpfile"
     return 0
 }
 

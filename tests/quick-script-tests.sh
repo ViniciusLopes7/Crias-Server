@@ -60,6 +60,12 @@ bash tests/config-parser-eq-test.sh
 echo "[quick-script-tests] Validando hook de instalação do agente..."
 bash tests/agent-install-hook-test.sh
 
+echo "[quick-script-tests] Validando hook de instalação do SSH..."
+bash tests/install-ssh-hook-test.sh
+
+echo "[quick-script-tests] Validando hook de instalação das ferramentas de monitoramento..."
+bash tests/install-monitor-hook-test.sh
+
 echo "[quick-script-tests] Validando biblioteca TUI (fallback sem gum)..."
 bash tests/tui-fallback-test.sh
 

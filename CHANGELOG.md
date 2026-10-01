@@ -5,6 +5,345 @@ Todos os mudanças notáveis do projeto Crias-Server serão documentadas neste a
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.3.0] — 2026-F1 (login fix + bootstrap)
+
+### Corrigido
+
+- **Bug crítico de login na ISO**: a ISO estava inutilizável — ao bootar, o
+  usuário via `archiso login:` mas não conseguia logar como `root` (senha
+  travada no `/etc/shadow`) nem como qualquer outro usuário (nenhum existia).
+  A cadeia `.bash_profile` → `.automated_script.sh` → `install.sh` nunca
+  disparava porque login nenhum acontecia.
+  - **Causa-raiz**: o commit `bb5cf64` (refatoração) removeu
+    `archiso-profile/airootfs/root/customize_airootfs.sh` (que setava
+    `root:crias` + criava `Server:crias`) sem adicionar substituto. O teste
+    `iso-live-credentials-validate.sh` foi atualizado para afirmar que root
+    está travado (hardening), mas nenhum mecanismo de login funcional o
+    substituiu.
+  - **Fix**: adicionado drop-in
+    `archiso-profile/airootfs/etc/systemd/system/getty@tty1.service.d/autologin.conf`
+    com `--autologin root` (padrão archiso upstream). Root continua travado
+    no shadow (hardening preservado); o autologin bypassa o prompt de senha
+    apenas no tty1 físico.
+
+### Removido
+
+- **Auto-start quebrado**: removidos `archiso-profile/airootfs/root/.bash_profile`
+  e `archiso-profile/airootfs/root/.automated_script.sh`. Rodar o instalador
+  no live USB não faz sentido (efêmero, da RAM). O usuário faz `archinstall`
+  primeiro, depois roda o instalador no host instalado.
+- **Repo embutido em `/opt/crias-server/`**: removido o mecanismo que copiava
+  20 arquivos do repo para a ISO em `/opt/crias-server/` (via
+  `sync-airootfs.sh`). Era inútil pós-reboot (archinstall cria rootfs limpo;
+  `/opt/crias-server/` não sobrevive). ISO fica menor.
+
+### Adicionado
+
+- **Bootstrap mínimo** (`crias-bootstrap.sh` na raiz do repo, embutido em
+  `/usr/local/bin/crias-bootstrap` na ISO): consulta
+  `api.github.com/repos/.../releases/latest`, baixa `crias-server-slim.zip` +
+  `sha256sums.txt`, verifica SHA256 do zip, extrai em `/mnt/opt/crias-server/`
+  (live ISO pós-`archinstall`) ou `/opt/crias-server/` (host instalado). No
+  host instalado, roda `install.sh` direto; na live ISO, apenas extrai e
+  imprime próximas instruções (evita problemas com `systemctl start` em chroot).
+  - Username-agnostic: não assume nome de usuário (o usuário criado no
+    `archinstall` é quem roda `install.sh` via `sudo`).
+  - Sourceable (guard `BASH_SOURCE`): permite testes unitários das funções
+    sem disparar a lógica de rede.
+- **Novo teste** `tests/crias-bootstrap-test.sh`: valida sintaxe, sourceability,
+    detecção de target, URL da API, verificação SHA256 (match/mismatch/ausente),
+    extração de zip, e static checks (sem username hardcoded, usa curl+API+SHA256).
+- **Asserção de autologin** em `tests/iso-live-credentials-validate.sh`: agora
+  valida que o drop-in `getty@tty1.service.d/autologin.conf` existe e referencia
+  `--autologin root` (teria pego o bug de login).
+- **Modo `--deep-smoke` atualizado** em `tests/iso-qemu-boot.sh`: agora espera
+  pelo prompt de shell de root pós-autologin (regex `root@<host>...#`), em vez
+  do "Pressione [ENTER]" do `.automated_script.sh` removido. Falha com exit 23
+  se detectar login prompt SEM autologin (regressão).
+
+### Mudado
+
+- **`archiso-profile/sync-airootfs.sh`**: simplificado — agora só copia
+  `crias-bootstrap.sh` para `airootfs/usr/local/bin/crias-bootstrap` (executável)
+  + escreve manifesto `.version` com commit + SHA256. Não copia mais 20 arquivos.
+- **`archiso-profile/profiledef.sh` `file_permissions`**: atualizado para os
+  novos arquivos (drop-in autologin, bootstrap, manifesto) e removidas as
+  entradas dos arquivos deletados.
+- **`tests/iso-embedded-scripts-validate.sh`**: reescrito para validar a nova
+  estrutura (bootstrap + drop-in + manifesto), ao invés dos 20 arquivos.
+  Inclui check de regressão (`.bash_profile`/`.automated_script.sh`/`customize_airootfs.sh`
+  não devem existir).
+- **`docs/security.md`**: corrigidas contradições sobre root no live ISO.
+  Antes dizia "senha vazia" (falso — root está travado) e "auto-login" (falso
+  antes do fix). Agora documenta corretamente: root travado no shadow, autologin
+  via drop-in só no tty1, sshd não auto-sobe.
+- **`archiso-profile/README.md`** e **`docs/tutorial.md`**: reescritos com o
+  novo fluxo (boot → archinstall → crias-bootstrap → reboot → install.sh).
+
+### Documentação (F2 — limpeza)
+
+- **`config.env`**: corrigido comentário stale do tModLoader ("WIP — NÃO
+  IMPLEMENTADO COMPLETAMENTE" → implementado em v1.2.1).
+- **`docs/tmodloader.md`**: "Desde a v1.2.0" / "Implementado em v1.2.0" → v1.2.1
+  (bate com CHANGELOG).
+- **Contagem de testes**: removidos números hardcoded (22/24/26/28 bash, 124
+  Python, 55 Go) inconsistentes entre `README.md`, `docs/README.md`, `ROADMAP.md`.
+  Substituídos por frase genérica "bateria de testes bash + Python + Go — ver
+  `tests/run-all.sh` para o total atual" (evita drift futuro quando testes são
+  adicionados).
+- **Tabela de tiers LOW/MID/HIGH**: consolidada — canônico em
+  `docs/hardware-tuning.md`; `README.md` e `docs/tutorial.md` agora linkam em
+  vez de duplicar a tabela.
+- **Tabela de slash commands `/mc`**: consolidada — canônico em
+  `discord-bot/README.md`; `README.md` agora linka em vez de duplicar.
+- **`ROADMAP.md`**: atualizado para v1.3.0 com entradas F1 (login fix + bootstrap)
+  na seção Implementado; contagens de testes trocadas por frase genérica.
+
+### Pacotes (F3 — bump de versões externas)
+
+Bumps validados localmente com Go 1.27.1 + Python 3.12.14 instalados no
+sandbox de desenvolvimento. `go test -race` passou em todos os pacotes Go
+(config, events, rcon, server); `pytest` passou 129 testes no discord-bot.
+
+**Go (discord-agent)**:
+- `google.golang.org/grpc`: v1.62.1 → v1.84.0
+- `google.golang.org/protobuf`: v1.33.0 → v1.36.12
+- `github.com/gorcon/rcon`: v1.3.5 → v1.4.0
+- `golang.org/x/time`: v0.5.0 → v0.16.0
+- `github.com/google/uuid`: v1.6.0 (mesma — já era a última)
+- `gopkg.in/yaml.v3`: v3.0.1 (mesma — já era a última)
+- Indiretos resolvidos por `go mod tidy`: `golang.org/x/net` v0.20.0→v0.57.0,
+  `golang.org/x/sys` v0.16.0→v0.47.0, `golang.org/x/text` v0.14.0→v0.40.0,
+  `google.golang.org/genproto/googleapis/rpc` atualizado. `github.com/golang/protobuf`
+  v1.5.3 removido (não mais necessário como indireto).
+- Diretiva `go` no go.mod: `1.23` → `1.26.0` (alguma dep nova exige Go 1.26+).
+
+**Go runtime (CI + Dockerfile)**:
+- `GO_VERSION`: '1.23' → '1.27.1' (necessário porque go.mod agora exige `go 1.26`)
+- `FROM golang:1.23-alpine` → `golang:1.27.1-alpine` no Dockerfile
+
+**Plugins protoc (Makefile + CI + Dockerfile)**:
+- `protoc-gen-go`: v1.33.0 → v1.36.12
+- `protoc-gen-go-grpc`: v1.3.0 → **v1.6.2** (não v1.84.0 — é módulo próprio
+  com versionamento independente do grpc-go principal; descoberto ao testar)
+
+**Python (discord-bot)**:
+- `discord.py`: 2.4.0 → 2.7.1
+- `grpcio`: 1.62.3 → 1.84.0
+- `grpcio-tools`: 1.62.3 → 1.84.0
+- `protobuf`: 4.25.3 → **7.36.2** (cascata: grpcio-tools 1.84 exige protobuf>=7.35;
+  era S-C/high-risk mas validado com regeneração do grpc_gen)
+- `python-dotenv`: 1.0.1 → 1.2.3
+- `grpc_gen/` regenerado com grpcio-tools 1.84 (compatível com protobuf 7.x runtime)
+
+**Mantido** (intencionalmente não bumped):
+- `mrpack-install` v0.21.0-beta (confirmado pelo usuário como já na última)
+- Python runtime 3.12 (3.14 disponível mas risk de incompatibilidade com discord.py
+  2.7 / grpcio 1.84 não foi validado; fica pra fase futura)
+- Dev deps Python (pytest 8.x, pytest-asyncio 0.23.x, pytest-cov 4.x, mypy 1.9.x)
+  — pytest 9 foi instalado no sandbox e os 129 testes passaram, mas o pyproject
+  segue pinado em ~=8.0.0 (bump de dev deps fica pra fase futura com gates de CI)
+
+### Refatoração (F4 — código)
+
+- **Bug `start-server.sh` non-fabric corrigido**: `-Dfabric.log.disable-ansi=true`
+  era hardcoded para TODOS os loaders (linha 111). Agora gated em
+  `MINECRAFT_LOADER == fabric || == quilt`. Para forge/neoforge/vanilla a flag
+  era no-op (JVM seta mas server não lê), mas a correção semântica foi feita.
+  - `write_minecraft_runtime_env` (minecraft-tuning.sh) agora inclui
+    `MINECRAFT_LOADER` no `runtime.env` (default "fabric" para backward-compat
+    com runtime.env antigo sem a var).
+- **Helper `mktemp_crias_file` / `mktemp_crias_dir` em common.sh**: registry
+  baseado em arquivo (não array em memória — array global + função sourced não
+  propagava no bash 5.2 devido a quirk de escopo com `local`). EXIT trap lê o
+  registry e limpa todos os temps ao final do script. Mais robusto que
+  `trap ... RETURN` (que não dispara se a função é morta).
+- **15 call sites refactorados** para usar `mktemp_crias_*` (remove o
+  `trap 'rm -...' RETURN` manual): downloads.sh, stack-installer.sh,
+  setup-cron.sh, minecraft/install.sh, terraria/install.sh (×2), install.sh (×9).
+  Reduz ~30 linhas de boilerplate de trap.
+- **`mc_parse_quilt_versions`**: verificado — já delega para `mc_parse_fabric_versions`
+  (não havia duplicação real; STUDY-1 report foi impreciso). No-op.
+- **Unificação dos managers (mc-manager.sh + tt-manager.sh)**: **deferrida** para
+  um passe focado. Razão: os testes `setup-cron-manager-test.sh` e
+  `arch-dry-install.sh` acoplam strings literais (`manager_need_root "$SELF"
+  "setup-cron" "$@"` e `stat -c '%U'`) aos arquivos per-stack. A unificação
+  exigiria atualizar esses testes simultaneamente, aumentando o risco. Os
+  managers são ~95% idênticos (~540 linhas total, ~200 deduplicáveis) mas a
+  refatoração merece seu próprio ciclo de validação com debug focado.
+
+**Validação F4** (Go 1.27.1 + Python 3.12 no sandbox):
+- `bash -n` em todos os .sh alterados: PASS
+- `run-all.sh` completo: PASS=31, FAIL=0, SKIP=3 (só ISO-requiring)
+- `mktemp_crias` testado end-to-end: cria temps, registry popula, EXIT trap
+  limpa ao final (verificado com debug — array em memória falhava, registry
+  file funciona).
+
+### TUI + Ferramentas (F5)
+
+- **`tui_help` / mini-wiki** (`tui.sh`): nova função acessível por
+  `tui_help <topic>` exibe ajuda contextual (gum style + borda, ou print
+  fallback). Tópicos: hardware-tier, loader, modpack, online-mode,
+  tailscale, system-tuning, cleanup, ssh, agent, monitor. Callers em
+  `install.sh` chamam `tui_help` antes dos 3 prompts mais complexos
+  (tier, loader, modpack).
+- **Migrados 3 `ask_confirm` → `tui_confirm`**: `install.sh` (tailscale
+  outdated, cleanup stack, install agent). Unifica UX — todos os prompts
+  agora usam `tui_confirm` (gum quando disponível, read fallback).
+- **Fix `--selected` no `tui_choose`**: comentário dizia que `--selected`
+  pré-selecionava o default, mas a chamada `gum choose` não passava a flag.
+  Agora passa `--selected="$default"` (com guard: só se o default estiver na
+  lista de options, pra não erroar o gum).
+- **Theming centralizado**: `TUI_THEME_COLOR` (default 212) +
+  `TUI_THEME_BORDER` (default normal) em `tui.sh`. `tui_msg` não mais
+  hardcode `--foreground="212"`. Override via env vars sem mudar código.
+- **Ferramentas de monitoramento integradas (T-C, sem glances)**:
+  - `btop` + `ncdu` adicionados a `packages.x86_64` (pré-instalados na ISO).
+  - `manager_cmd_monitor` em `manager-common.sh`: `monitor` (ou `monitor cpu`)
+    lança `btop` (fallback `htop`); `monitor disk` lança `ncdu` no
+    `SERVER_DIR`; `monitor net` lança `btop` (fallback `iotop-c`).
+  - Subcomando `monitor` adicionado ao dispatch + show_help de mc-manager.sh
+    e tt-manager.sh.
+  - `install_monitor_tools_if_enabled` em `install.sh`: pergunta se instala
+    btop+ncdu no host pós-archinstall (pré-instalados na ISO mas não no host
+    instalado). Flag `INSTALL_MONITOR_TOOLS` em `config.env`.
+  - `tui_help "monitor"` documenta o subcomando.
+  - `iso-embedded-scripts-validate.sh` atualizado para checar btop+ncdu.
+
+**Visão futura** (registrada para F6/GUI study): TUI como hub central
+headless → eventualmente GUI web estilo CasaOS com ícones por categoria.
+O `tui_help` e o subcomando `monitor` são passos nessa direção (centralização
+de ajuda + acesso a ferramentas via interface).
+
+### GUI study (F6 — estudo, sem código)
+
+- **Novo doc** `docs/gui-feasibility.md`: estudo de viabilidade de GUI web
+  estilo CasaOS. Avalia 6 opções (Cockpit, ttyd, wetty, CasaOS fork,
+  sway+foot, custom Go webapp) com tabela de footprint/licença/fit/esforço.
+  Recomenda **custom Go webapp** que reusa o `crias-agent` gRPC (sem herdar
+  a dependência Docker do CasaOS real). Gateada por tier: LOW não, MID
+  opcional, HIGH sim. Inclui arquitetura proposta, estrutura de repo,
+  auth (token ou Tailscale Whois), e roadmap de 7 fases (G1-G7) pós-F8.
+- **Decisão**: implementação da GUI fica para após F8 (revisão final). O
+  estudo está documentado; o usuário decide se segue.
+
+### Testes + QEMU (F7)
+
+- **Novo teste `install-ssh-hook-test.sh`**: valida `install_ssh_if_enabled`
+  via asserções static (function exists, called in main, INSTALL_SSSH em
+  config-parser, sudoers drop-in `/etc/sudoers.d/crias-wheel` com `%wheel
+  ALL=(ALL) ALL`, sshd drop-in `/etc/ssh/sshd_config.d/10-crias.conf` com
+  `PermitRootLogin no`, useradd+chpasswd+usermod, systemctl enable+restart
+  sshd, DRY_RUN skip, NON_INTERACTIVE skip, read -s senha, INSTALL_SSH=true
+  documentado no README). 11 asserções.
+- **Novo teste `install-monitor-hook-test.sh`**: valida
+  `install_monitor_tools_if_enabled` (function exists, called in main,
+  INSTALL_MONITOR_TOOLS em config-parser, `pacman -S btop ncdu`, DRY_RUN skip,
+  NON_INTERACTIVE skip, subcomando `monitor` referenciado, btop+ncdu em
+  packages.x86_64, manager_cmd_monitor em manager-common.sh, cmd_monitor +
+  dispatch em ambos managers, tui_help "monitor" em tui.sh, fallback btop→htop).
+  12 asserções.
+- **`INSTALL_MONITOR_TOOLS` adicionada a `OVERRIDABLE_VARS`** em
+  config-parser.sh (era uma variável de config que não estava na lista de
+  overridable — agora captura env override corretamente).
+- **QEMU `validate_qemu_log` melhorado (F7)**: novo warning (não failure) se
+  o log tem `archiso login:` MAS não tem `root@archiso` — detecta exatamente
+  o padrão do bug de login do F1 (login prompt apareceu mas autologin não
+  disparou → root shell nunca aparece). Não falha o teste (falso positivo em
+  boot lento) mas alerta para investigar o drop-in de autologin.
+- **Novos testes adicionados a `run-all.sh` + `quick-script-tests.sh`**.
+- **Validação**: run-all.sh completo: PASS=33 (era 31, +2 novos), FAIL=0,
+  SKIP=3 (só ISO-requiring).
+
+### Revisão final + Mutation test (F8)
+
+- **Mutation test expandido** (9 mutações novas, total 22): cobre código de
+  F1-F7 (crias-bootstrap.sh, start-server.sh, manager-common.sh, install.sh
+  SSH/monitor). Resultado: **16 KILLED, 0 SURVIVED, 3 EXPECTED-SURVIVED
+  (gaps documentados), 1 SKIPPED**. Mutation score: 100% dos não-esperados
+  detectados.
+  - **Testes strengthened** em F8 (matam mutações que sobreviveram):
+    - `install-monitor-hook-test.sh`: pattern DRY_RUN broad `[DRY_RUN] Pulando`
+      (match em 6 funções) → específico `[DRY_RUN] Pulando instalação de
+      ferramentas de monitoramento` (mata M61). Adicionado check de ORDEM
+      btop antes de htop (mata M40 — testa presença E ordem, não só presença).
+  - **3 gaps documentados** (EXPECTED-SURVIVED, não falham CI):
+    - M30: `start-server.sh` fabric gating não tem teste direto
+      (minecraft-tuning-test não cobre o flag gating; apenas o tuning).
+    - M50: `PermitRootLogin no` pattern broad (5 ocorrências em comentários +
+      config; mutação da 1a = comentário, não quebra o teste que acha em outras).
+    - M51: `useradd -m -s /bin/bash` 2 ocorrências (interactive + NON_INTERACTIVE;
+      mutação da 1a não quebra o teste que acha a 2a).
+  - M50/M51 revelam limitação dos **grep-based hook tests** (checam presença,
+    não especificidade). Documentado; fortalecer exigiria multi-line patterns.
+- **Unificação leve dos managers (F8)**: `resolve_self` extraído para
+  `manager_resolve_self` em `manager-common.sh` (15 linhas × 2 = 30 linhas
+  removidas de mc-manager.sh + tt-manager.sh). Unificação maior (show_help +
+  case dispatch) **deferida** — exige atualizar testes com acoplamento
+  literal (`manager_need_root "$SELF" "setup-cron"`, `stat -c '%U'`); feito
+  o passe seguro (resolve_self) que não quebra nenhum teste.
+
+### Unificação maior dos managers (F8 — pós-F8 inicial)
+
+- **`manager-common.sh` expandido**: `cmd_start/stop/restart/status/logs`
+  (delegações), `cmd_monitor` (wrapper), `cmd_backup`, `cmd_hardware_report`,
+  `manager_show_help` (parameterizado via `MANAGER_DESC_CONSOLE` +
+  `MANAGER_DESC_HEALTH`), `manager_dispatch` (case statement). Estas funções
+  compartilhadas substituem as duplicadas em ambos managers.
+- **mc-manager.sh + tt-manager.sh trimados**: removidas as funções que
+  moveram para manager-common (cmd_start/..., cmd_backup, cmd_hardware_report,
+  show_help, case dispatch). Mantidas per-stack: stack vars, detected_owner
+  (`stat -c '%U'`), get_prop/get_cfg, cmd_setup_cron (com literal
+  `manager_need_root "$SELF" "setup-cron" "$@"`), cmd_console, cmd_health,
+  cmd_reconfigure_hardware. Adicionadas `MANAGER_DESC_CONSOLE` +
+  `MANAGER_DESC_HEALTH` para o show_help compartilhado. Chamada final é
+  `manager_dispatch "$@"`.
+- **Resultado**: mc-manager.sh 275→209 linhas, tt-manager.sh 265→190 linhas,
+  manager-common.sh 53→206 linhas. Net: ~55 linhas removidas + centralização.
+- **Testes atualizados**: `install-monitor-hook-test.sh` agora checa
+  `cmd_monitor` + `manager_dispatch` em manager-common.sh (não mais per-stack).
+  `setup-cron-manager-test` (literal `manager_need_root`) preservado —
+  cmd_setup_cron continua per-stack. `arch-dry-install` (`stat -c '%U'`)
+  preservado — detected_owner continua per-stack. `quick-script-tests`
+  (`cmd_health()`) preservado — cmd_health continua per-stack.
+
+### Bug fix + limpeza (F8 final)
+
+- **Bug do `tui_help` em chamadas multi-linha corrigido**: as inserções de
+  `tui_help "loader"` e `tui_help "modpack"` (F5) estavam no MEIO de chamadas
+  `tui_choose ... \` multi-linha, quebrando a continuação (`\` lia o tui_help
+  como 4o argumento em vez das options). Movido para ANTES do `tui_choose`.
+  Não foi pego antes porque `arch-dry-install` roda em NON_INTERACTIVE (pula
+  os prompts). `tui_help "hardware-tier"` (antes de `tui_input` single-line)
+  estava OK.
+- **Limpeza de comentários fix-history**: removidas referências a
+  `F1`/`F5`/`v1.3.0`/`v1.2.0`/`extraído`/`corrigido`/`removido em` em
+  comentários de código (manager-common.sh, install.sh). Comentários agora
+  só explicam WHY (não história de fixes). CHANGELOG mantém o histórico
+  (é o lugar certo).
+- **Validação F8 final**: run-all.sh: PASS=33, FAIL=0, SKIP=3. Mutation test:
+  16 KILLED, 0 SURVIVED, 3 EXPECTED-SURVIVED. Todos os testes bash + Go + Python
+  verdes. Cobre: F1 (login fix), F2 (docs), F3 (pacotes), F4 (start-server fix
+  + mktemp), F5 (TUI + ferramentas), F6 (GUI study), F7 (testes), F8 (mutation
+  + unificação leve).
+
+### Resumo consolidado v1.3.0 (F1-F8)
+
+8 fases entregues em 8 zips (crias-server-F1.zip → F8.zip) + 1 consolidado
+final (crias-server-final.zip). Cada zip contém todos os arquivos do repo
+no estado daquela fase.
+
+| Fase | Entrega | Validação |
+|---|---|---|
+| F1 | Login fix + bootstrap (GitHub release download + SHA256) | PASS=29 |
+| F2 | Limpeza docs (duplicatas, contradições, contagem genérica) | PASS=29 |
+| F3 | Pacotes bumped (Go 1.27.1, grpc 1.84, protobuf 7.36, etc.) | PASS=31 (Go+Py locais) |
+| F4 | start-server.sh fix + mktemp_crias helper (15 call sites) | PASS=31 |
+| F5 | TUI refine (mini-wiki, --selected, theming) + btop/ncdu + monitor | PASS=31 |
+| F6 | Estudo viabilidade GUI (doc, sem código) | PASS=31 |
+| F7 | 2 hook tests novos (SSH + monitor) + QEMU autologin warning | PASS=33 |
+| F8 | Mutation test (22 mutações, 16 KILLED) + unificação leve managers | PASS=33 |
+
 ## [1.2.1] — 2026-08-26
 
 ### Adicionado

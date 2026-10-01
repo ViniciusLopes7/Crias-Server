@@ -40,15 +40,17 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: '1.23'
+  GO_VERSION: '1.27.1'
   PYTHON_VERSION: '3.12'
   # protoc-gen-go versions aligned with Dockerfile + Makefile.
   # Definidas como env vars (em vez de literais vX.Y.Z nos comandos) para:
   #   1. Manter a versão em UM lugar (DRY) — bumpar aqui atualiza todos os jobs.
   #   2. Evitar tags mutáveis literais no YAML (auditoria @v[0-9] retorna 0).
-  #   3. Alinhar com o padrão do Makefile (PROTOC_GEN_GO_VERSION ?= v1.33.0).
-  PROTOC_GEN_GO_VERSION: 'v1.33.0'
-  PROTOC_GEN_GO_GRPC_VERSION: 'v1.3.0'
+  #   3. Alinhar com o padrão do Makefile (PROTOC_GEN_GO_VERSION ?= v1.36.12).
+  # Nota: protoc-gen-go-grpc é módulo próprio com versionamento independente do
+  # grpc-go principal (não segue v1.84.0). Ver Makefile.
+  PROTOC_GEN_GO_VERSION: 'v1.36.12'
+  PROTOC_GEN_GO_GRPC_VERSION: 'v1.6.2'
 
 jobs:
   # ═══════════════════════════════════════════════════════
@@ -317,14 +319,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Sync installer into airootfs (embed scripts in ISO)
-        # Popula archiso-profile/airootfs/opt/crias-server/ com cópia do repo
-        # para que a ISO nasça "pronta pra uso" (sem precisar de git clone no
-        # primeiro boot). Ver archiso-profile/sync-airootfs.sh.
+      - name: Sync bootstrap into airootfs (embed bootstrap in ISO)
+        # Popula archiso-profile/airootfs/usr/local/bin/crias-bootstrap a
+        # partir de crias-bootstrap.sh (repo root). O bootstrap baixa a
+        # release do GitHub com verificação SHA256 ao rodar (pós-archinstall).
+        # Ver archiso-profile/sync-airootfs.sh e archiso-profile/README.md.
         run: |
           bash archiso-profile/sync-airootfs.sh
-          echo "=== Conteúdo embutido na ISO (airootfs/opt/crias-server/) ==="
-          find archiso-profile/airootfs/opt/crias-server/ -type f | sort
+          echo "=== Conteúdo embutido na ISO (airootfs/usr/local/bin/) ==="
+          find archiso-profile/airootfs/usr/local/bin/ -type f | sort
+          echo "=== Manifesto ==="
+          cat archiso-profile/airootfs/opt/crias-bootstrap.version 2>/dev/null || true
 
       - name: Validate embedded scripts
         run: bash tests/iso-embedded-scripts-validate.sh

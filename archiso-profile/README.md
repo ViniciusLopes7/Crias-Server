@@ -1,34 +1,51 @@
 # Gerador de ISO (Archiso) para o Crias-Server
 
-A ISO gerada pelo Crias-Server é **pronta pra uso**: ao dar boot, o instalador
-já está embutido em `/opt/crias-server/` e roda automaticamente no primeiro
-login do root. Dependências base (Java 21, NetworkManager, Tailscale,
-**OpenSSH** (v1.2.0), **`gum`** (v1.2.0), ferramentas de sistema) já vêm
-pré-instaladas para acelerar o setup.
+A ISO gerada pelo Crias-Server é um **archiso padrão + pacotes pré-instalados +
+bootstrap mínimo**. Ao dar boot, o root auto-loga no tty1 (padrão archiso
+upstream) e o usuário decide o que fazer: rodar `archinstall` para instalar o
+Arch no disco, depois rodar `crias-bootstrap` para baixar e extrair o
+instalador do Crias-Server a partir da release do GitHub.
 
-> **v1.2.0**: ISO agora inclui `openssh` e `gum`. O `install.sh` pergunta se
-> habilita SSH no host instalado (usuário `crias` + sudo). O `sshd` **não**
-> sobe sozinho no live ISO (mantém o auto-login seguro no tty1); para iniciar
-> manualmente no live: `systemctl start sshd`.
+> **v1.3.0 (F1)**: Removido o auto-start quebrado (`.bash_profile` +
+> `.automated_script.sh` + repo embutido em `/opt/crias-server/`). Adicionado
+> drop-in de autologin do root no tty1 (padrão archiso upstream) e bootstrap
+> mínimo que baixa a release com verificação SHA256. O bug de login (ISO
+> inutilizável — root travado + sem autologin) está corrigido.
 
 ## Como a ISO funciona
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Boot do live USB                                            │
-│    └─> login automático como root no tty1                    │
-│        └─> /root/.bash_profile executa /root/.automated_script.sh
-│                                                              │
-│  /root/.automated_script.sh:                                 │
-│    1. Detecta /opt/crias-server/install.sh (EMBEDDED)        │
-│       ├─ se existir: roda direto (SEM precisar de internet   │
-│       │              para baixar o instalador)               │
-│       └─ se não existir: git clone GitHub (fallback)         │
-│    2. Avisa se internet está indisponível (algumas etapas    │
-│       do install.sh precisam: pacman, downloads)             │
-│    3. Executa install.sh                                     │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  Boot do live USB                                                   │
+│    └─> getty@tty1.service.d/autologin.conf → root autologin no tty1 │
+│        └─> shell de root (NENHUM script auto-starta)                │
+│                                                                     │
+│  Usuário decide o fluxo:                                            │
+│    1. archinstall          (instala Arch no disco em /mnt)          │
+│    2. crias-bootstrap      (baixa release + verifica SHA256 +        │
+│                             extrai em /mnt/opt/crias-server/)        │
+│    3. reboot                                                         │
+│    4. login com usuário criado no archinstall                        │
+│    5. sudo /opt/crias-server/install.sh   (roda o instalador)        │
+└─────────────────────────────────────────────────────────────────────┘
 ```
+
+O bootstrap (`/usr/local/bin/crias-bootstrap` na ISO) é o único arquivo do
+repo embutido. Ele consulta `api.github.com/repos/.../releases/latest`,
+baixa `crias-server-slim.zip` e `sha256sums.txt`, verifica o SHA256 do zip
+contra o checksum, extrai em `/mnt/opt/crias-server/` (ou `/opt/crias-server/`
+se já no host instalado) e — no caso do host instalado — roda `install.sh`
+direto. No caso da live ISO (pós-`archinstall`, mirando `/mnt`), o bootstrap
+apenas extrai e imprime as próximas instruções (reboot + `install.sh`),
+porque `install.sh` rodado em chroot teria problemas com `systemctl start`.
+
+## Por que não embute mais nada
+
+O repo embutido em `/opt/crias-server/` (20 arquivos) era inútil depois do
+reboot: `archinstall` cria rootfs limpo, `/opt/crias-server/` não sobrevive.
+O bootstrap resolve isso baixando a release correta do GitHub com checksum
+(versionada, rastreável, íntegra). ISO fica menor (~5KB de Crias-Server vs.
+~50 arquivos antes). Fallback offline: `git clone` do `main` (sem checksum).
 
 ## Como construir a ISO
 
@@ -44,22 +61,23 @@ pré-instaladas para acelerar o setup.
    sudo pacman -S archiso
    ```
 
-2. **Sincronize os scripts do repo para dentro do airootfs**:
+2. **Sincronize o bootstrap do repo para dentro do airootfs**:
    ```bash
    # A partir da raiz do repo Crias-Server
    bash archiso-profile/sync-airootfs.sh
    ```
-   Este passo copia `install.sh`, `config.env`, `shared/lib/*`, `minecraft/*`,
-   `terraria/*` e `assets/images/branding/*` para dentro de
-   `archiso-profile/airootfs/opt/crias-server/`. Também escreve um
-   `.sync-manifest` com o commit git que gerou a ISO (para auditoria).
+   Este passo copia `crias-bootstrap.sh` (repo root) para
+   `archiso-profile/airootfs/usr/local/bin/crias-bootstrap` (executável) e
+   escreve um manifesto `.version` com o commit git + SHA256 do bootstrap.
 
 3. **(Opcional) Valide que o sync funcionou**:
    ```bash
    bash tests/iso-embedded-scripts-validate.sh
    ```
-   Este teste confere que os 20 arquivos essenciais estão presentes, têm
-   permissão executável, e que o `install.sh` embutido bate com o do repo.
+   Este teste confere que o bootstrap está presente, executável, bate com a
+   fonte do repo, que o drop-in de autologin existe e referencia
+   `--autologin root`, e que nenhum arquivo legacy (`.bash_profile`,
+   `.automated_script.sh`, `customize_airootfs.sh`) está presente.
 
 4. **Construa a ISO**:
    ```bash
@@ -75,48 +93,49 @@ pré-instaladas para acelerar o setup.
 ### Boot na máquina alvo
 
 1. Plug o pendrive e dê boot pela USB.
-2. Ao cair no console do live USB, o `.automated_script.sh` abre sozinho
-   no primeiro login do root.
-3. Para entrar **apenas no shell do live** (sem rodar o instalador):
-   - Defina `CRIAS_SKIP_AUTOSTART=1` no prompt do kernel, ou
-   - Faça login com `CRIAS_SKIP_AUTOSTART=1` antes do Enter.
+2. Root auto-loga no tty1 (sem digitar senha — drop-in de autologin).
+3. Rode `archinstall` para instalar o Arch no disco (cria usuário, data, fuso,
+   hostname, bootloader).
+4. Rode `crias-bootstrap` para baixar/extrair o Crias-Server em `/mnt/opt/`.
+5. `reboot`, faça login com o usuário criado no passo 3.
+6. Rode `sudo /opt/crias-server/install.sh` para configurar o servidor.
 
-### Variáveis de ambiente do bootstrap
+Para entrar **apenas no shell do live** (sem rodar nada): não execute nenhum
+comando. O autologin dá o shell; o que rodar a partir dele é opt-in.
+
+## Variáveis de ambiente do bootstrap
 
 | Variável | Default | Descrição |
 |----------|---------|-----------|
-| `CRIAS_SKIP_AUTOSTART` | (vazio) | Se `1`, não roda o `.automated_script.sh` no login. |
-| `CRIAS_REPO_REF` | `main` | Branch/tag do git para clonar no fallback (se ISO não tiver scripts embutidos). |
+| `CRIAS_REPO` | `ViniciusLopes7/Crias-Server` | Repo do GitHub a consultar. |
+| `CRIAS_RELEASE_TAG` | (vazio = latest) | Tag específica da release (ex.: `v1.3.0`). |
+| `CRIAS_ASSET_ZIP` | `crias-server-slim.zip` | Nome do asset zip na release. |
+| `CRIAS_TARGET` | (auto) | `/mnt` se Arch montado; senão `/`. Override manual. |
+| `GITHUB_TOKEN` | (vazio) | Auth opcional para evitar rate-limit da API. |
 
 ## O que está (e não está) embutido na ISO
 
 ### Embutido (não precisa de internet no boot)
 
-- **Instalador completo**: `install.sh`, `config.env`
-- **Bibliotecas bash**: `shared/lib/*.sh` (common, downloads, hardware-profile, **tui.sh**, **mc-manifests.sh**, etc.)
-- **Stack installers**: `minecraft/install.sh`, `terraria/install.sh`
-- **Manager scripts**: `mc-manager.sh`, `tt-manager.sh`, `backup-cron.sh`, etc.
-- **Systemd templates**: `minecraft.service`, `terraria.service`
-- **Branding**: escudo e banner do Crias (usados em `print_header`)
-- **Pacotes pacman**: Java 21, NetworkManager, Tailscale, **OpenSSH** (v1.2.0),
-  **`gum`** (v1.2.0, TUI), curl, wget, htop, vim, git, etc. (lista completa em
+- **Bootstrap**: `crias-bootstrap` (~5KB) em `/usr/local/bin/`
+- **Pacotes pacman**: Java 21, NetworkManager, Tailscale, OpenSSH, `gum` (TUI),
+  curl, wget, unzip, jq, git, htop, vim, etc. (lista completa em
   `archiso-profile/packages.x86_64`)
+- **Drop-in de autologin**: `getty@tty1.service.d/autologin.conf` (root no tty1)
+
+### Baixado pelo bootstrap (precisa de internet ao rodar `crias-bootstrap`)
+
+- **`crias-server-slim.zip`** da latest release do GitHub (repo sem
+  `archiso-profile/`, `docs/`, `.github/workflows/` — menor).
+- **`sha256sums.txt`** da mesma release (para verificação de integridade).
 
 ### Baixado sob demanda pelo `install.sh`
 
-- **mrpack-install** (se `MINECRAFT_INSTALL_MODPACK=true`) — pinado em versão
-  específica com checksum SHA256.
-- **Mods QoL** (se `MINECRAFT_INSTALL_QOL_MODS=true`) — via Modrinth API.
-- **Modpack Adrenaline** (se `MINECRAFT_MODPACK_SOURCE=adrenaline`) — via
-  Modrinth.
-- **Terraria dedicated server** — `TERRARIA_DOWNLOAD_URL` (oficial re-logic).
-- **crias-agent** (se `INSTALL_AGENT=true`) — binário Go da GitHub release.
-
-> **Nota sobre Tailscale**: Tailscale já vem pré-instalado na ISO (em
-> `packages.x86_64`). O `install.sh` apenas ativa o daemon `tailscaled` se
-> `INSTALL_TAILSCALE=true`. Se você estiver instalando em um host sem a ISO
-> (Arch Linux limpo), o `install.sh` baixa o Tailscale via pacman com fallback
-> para o repo oficial.
+- **mrpack-install** (se `MINECRAFT_INSTALL_MODPACK=true`)
+- **Mods QoL** (se `MINECRAFT_INSTALL_QOL_MODS=true`) via Modrinth API
+- **Modpack Adrenaline** (se `MINECRAFT_MODPACK_SOURCE=adrenaline`) via Modrinth
+- **Terraria dedicated server** — `TERRARIA_DOWNLOAD_URL` (oficial re-logic)
+- **crias-agent** (se `INSTALL_AGENT=true`) — binário Go da GitHub release
 
 ### Não embutido (e não baixado)
 
@@ -126,22 +145,35 @@ pré-instaladas para acelerar o setup.
 
 ## CI/CD
 
-No GitHub Actions, o job `build-iso` (em `.github/workflows/ci.yml`) já executa
+No GitHub Actions, o job `build-iso` (em `.github/workflows/ci.yml`) executa
 `sync-airootfs.sh` e `tests/iso-embedded-scripts-validate.sh` antes do
-`mkarchiso`, garantindo que toda ISO publicada na release tenha o instalador
+`mkarchiso`, garantindo que toda ISO publicada na release tenha o bootstrap
 embutido e validado.
 
 ## Troubleshooting
 
-### "Instalador não embutido na ISO — vou clonar do GitHub (fallback)"
+### "Asset 'crias-server-slim.zip' não encontrado na release"
 
-Você está rodando uma ISO que foi construída sem rodar `sync-airootfs.sh`
-antes do `mkarchiso`. O fallback via git clone ainda funciona se houver
-internet, mas para gerar ISOs "prontas pra uso" execute o sync antes do build.
+A latest release do GitHub ainda não foi publicada (ou o asset `slim.zip`
+não está na release). Verifique
+`https://github.com/ViniciusLopes7/Crias-Server/releases`. Fallback:
+```bash
+git clone https://github.com/ViniciusLopes7/Crias-Server
+cd Crias-Server
+sudo ./install.sh
+```
+
+### "SHA256 mismatch! ... Abortando"
+
+O zip baixado não bate com o checksum em `sha256sums.txt`. Pode ser
+corrupção no download ou comprometimento. Não rode o `install.sh` de um
+zip com checksum falho. Tente novamente; se persistir, use `git clone`
+e audite o código manualmente antes de rodar.
 
 ### ISO muito grande
 
-A ISO típica fica em ~1.5-2GB. Se precisar reduzir:
+A ISO típica fica em ~1.5-2GB (a maior parte é Java 21 + linux-firmware).
+Se precisar reduzir:
 - Comente pacotes opcionais em `packages.x86_64` (ex.: `memtest86+`, `edk2-shell`)
 - Use `airootfs_image_tool_options=('-comp' 'zstd' '-b' '1M' '-Xcompression-level' '19')`
   para compressão mais agressiva (mais lento para bootar)
@@ -153,7 +185,8 @@ A ISO suporta `bios.syslinux` (legacy) + `uefi.grub` (UEFI). Se o hardware
 verifique que o pendrive foi flasheado com `dd` (não Etcher, que às vezes
 tem issues em BIOS antigo).
 
-### Erro "archlinux-keyring" no install.sh
+### "Root não consegue logar no tty2+"
 
-Rode `pacman -Sy archlinux-keyring && pacman -Su` antes do `install.sh`,
-ou sete `INSTALL_TAILSCALE=false` se não precisa do Tailscale agora.
+Isso é **esperado**. O drop-in de autologin só bypassa a senha no tty1.
+Nos demais ttys, root está travado no `/etc/shadow` (hardening preservado).
+Para login em outros ttys, use o usuário criado no `archinstall`.

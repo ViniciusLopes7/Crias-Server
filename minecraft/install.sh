@@ -183,9 +183,7 @@ install_mrpack_install() {
 
     local arch_pkg_url="https://github.com/nothub/mrpack-install/releases/download/${MRPACK_INSTALL_VERSION}/mrpack-install_${MRPACK_INSTALL_VERSION#v}_linux_amd64.pkg.tar.zst"
     local mrpack_tmp_dir
-    mrpack_tmp_dir="$(mktemp -d -t crias-mrpack-XXXXXX)"
-    # shellcheck disable=SC2064
-    trap 'rm -rf -- "$mrpack_tmp_dir"' RETURN
+    mrpack_tmp_dir="$(mktemp_crias_dir)"
     local arch_pkg_local="${mrpack_tmp_dir}/mrpack-install.pkg.tar.zst"
 
     if curl -fsSL --connect-timeout 10 --max-time 60 -o "$arch_pkg_local" "$arch_pkg_url" 2>/dev/null; then

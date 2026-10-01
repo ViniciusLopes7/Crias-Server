@@ -38,9 +38,19 @@ validate_qemu_log() {
         return 1
     fi
 
-    if ! grep -Eqi 'archiso login:|archlinux login:|[A-Za-z0-9._-]+ login:|Welcome to .*Arch Linux|Reached target .*Multi-User|Reached target .*Login Prompts|Please configure the system|Please enter the new timezone|root@archiso|Server@archiso' "$clean_log_file"; then
+    if ! grep -Eqi 'archiso login:|archlinux login:|[A-Za-z0-9._-]+ login:|Welcome to .*Arch Linux|Reached target .*Multi-User|Reached target .*Login Prompts|root@archiso' "$clean_log_file"; then
         echo "Sem marcador de boot completo detectado no log do QEMU." >&2
         return 1
+    fi
+
+    # F7: warning (não failure) se o login prompt apareceu MAS o root shell
+    # não logou. Isso detecta exatamente o bug do F1 (autologin drop-in ausente
+    # -> login prompt aparece mas login impossível -> root shell nunca aparece).
+    # Não falha o teste (pode ser falso positivo em boot lento), mas alerta.
+    if grep -Eqi 'archiso login:|archlinux login:' "$clean_log_file"; then
+        if ! grep -Eq 'root@archiso|root@archlinux' "$clean_log_file"; then
+            echo "AVISO: login prompt detectado mas root shell não — autologin pode ter falhado (ver drop-in getty@tty1.service.d/autologin.conf)." >&2
+        fi
     fi
 
     return 0
@@ -226,23 +236,21 @@ log_user 1
 
 spawn qemu-system-x86_64 -m 2048 -cdrom $env(ISO_FILE) -kernel $env(KERNEL_FILE) -initrd $env(INITRAMFS_FILE) -append $env(KERNEL_CMDLINE) -nographic -no-reboot -monitor none -serial stdio
 
+# Com o drop-in de autologin (getty@tty1.service.d/autologin.conf), o root
+# cai direto no shell sem prompt de login. Procuramos pelo prompt de shell
+# de root (root@<host>:~# ou similar) — prova que o autologin funcionou
+# end-to-end (login bug que motivou F1 estaria detectado aqui).
 expect {
-    -re {(?i)(archiso|archlinux|[A-Za-z0-9._-]+) login:} {
-        send_user "Login prompt detectado (deep smoke sem credenciais hardcoded).\n"
+    -re {root@[A-Za-z0-9._-]+[^\r\n]*[#\$] } {
+        send_user "Root autologin detectado (shell de root ativo no tty1).\n"
         exit 0
     }
-    -re {(?i)Please enter the new timezone name or number} {
-        send_user "Prompt de timezone detectado, enviando ENTER para prosseguir...\n"
-        send "\r"
-        exp_continue
+    -re {(?i)(archiso|archlinux|[A-Za-z0-9._-]+) login:} {
+        send_user "Login prompt detectado SEM autologin — possível regressão do drop-in.\n"
+        exit 23
     }
-    -re {(?i)Pressione \[ENTER\]|Continuar\? \(Y/n\)} {
-        send_user "Prompt inicial detectado, enviando ENTER para prosseguir...\n"
-        send "\r"
-        exp_continue
-    }
-    timeout { send_user "Timeout aguardando prompt de login\n"; exit 21 }
-    eof { send_user "QEMU encerrou antes do prompt de login\n"; exit 22 }
+    timeout { send_user "Timeout aguardando shell de root (autologin pode ter falhado)\n"; exit 21 }
+    eof { send_user "QEMU encerrou antes do shell de root\n"; exit 22 }
 }
 EOF
     qemu_status=$?

@@ -6,14 +6,38 @@ Fluxo único: instalar → operar → troubleshoot. Para detalhes específicos d
 
 ### Pré-requisitos
 
-- Arch Linux (ou distro com `pacman` + `systemd`)
+- Arch Linux instalado (ou distro com `pacman` + `systemd`)
 - Acesso root (`sudo`)
 - Conexão com internet (para baixar pacotes e binários)
 
-### Passo a passo
+### Fluxo primário (via ISO Crias-Server)
+
+A ISO do Crias-Server é um archiso padrão + pacotes pré-instalados + bootstrap.
+O fluxo é:
 
 ```bash
-# 1. Clonar o repositório (ou usar ISO bootável)
+# 1. Boot da ISO → root auto-loga no tty1 (drop-in de autologin)
+# 2. Instalar o Arch no disco (interativo):
+archinstall
+# 3. Baixar + extrair o Crias-Server da release do GitHub (com SHA256):
+crias-bootstrap
+# 4. Reboot no sistema instalado:
+reboot
+# 5. (após reboot) Login com o usuário criado no archinstall
+# 6. Rodar o instalador:
+sudo /opt/crias-server/install.sh
+```
+
+O `crias-bootstrap` consulta `api.github.com/.../releases/latest`, baixa
+`crias-server-slim.zip` + `sha256sums.txt`, verifica o checksum, extrai em
+`/mnt/opt/crias-server/` (live ISO pós-`archinstall`) e imprime as próximas
+instruções. Não roda `install.sh` em chroot (evita problemas com
+`systemctl start`).
+
+### Fluxo fallback (sem ISO, Arch já instalado)
+
+```bash
+# 1. Clonar o repositório
 git clone https://github.com/ViniciusLopes7/Crias-Server.git
 cd Crias-Server
 
@@ -23,6 +47,13 @@ nano config.env
 # 3. Rodar o instalador
 chmod +x install.sh
 sudo ./install.sh
+```
+
+Ou via bootstrap (baixa release com checksum, em vez de clonar `main`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ViniciusLopes7/Crias-Server/main/crias-bootstrap.sh | sudo bash
+# O bootstrap detecta target=/ (host instalado), baixa+verifica+extrai e roda install.sh.
 ```
 
 ### O que o instalador pergunta (v1.2.0 — TUI gum)
@@ -139,11 +170,7 @@ Com base nisso, aplica tier **LOW**, **MID** ou **HIGH** que afeta:
 - Políticas de host (zram, swappiness, scheduler, cpupower governor)
 - Retenção de backup (LOW=5 dias, MID=7, HIGH=10)
 
-| Tier | Critério aproximado | Foco |
-|------|---------------------|------|
-| LOW  | ≤3 GB RAM ou ≤2 cores | Estabilidade em host fraco |
-| MID  | ≤12 GB RAM ou ≤6 cores | Equilíbrio entre desempenho e consumo |
-| HIGH | >12 GB RAM e >6 cores | Melhor throughput e capacidade |
+Veja a [tabela completa de tiers, thresholds e sinais detectados](hardware-tuning.md).
 
 ### Override manual
 

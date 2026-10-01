@@ -4,13 +4,14 @@
 # Build: docker build -t crias-agent:latest -f discord-agent/Dockerfile discord-agent/
 
 # --- Stage 1: builder ---
-FROM golang:1.23-alpine AS builder
+FROM golang:1.27.1-alpine AS builder
 
 # Instala protoc + plugins + ca-certificates (necessário para https em runtime).
 # Pinned versions for reproducible builds.
+# Nota: protoc-gen-go-grpc é módulo próprio (versionamento independente do grpc-go).
 RUN apk add --no-cache protobuf-dev git make build-base \
-    && go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.33.0 \
-    && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
+    && go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12 \
+    && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.2
 
 ENV PATH="$PATH:/root/go/bin"
 

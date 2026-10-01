@@ -46,10 +46,14 @@ logrotate
 unzip
 zstd
 
-# System utilities (mantemos o essencial; htop/vim são úteis para debug no live)
+# System utilities (mantemos o essencial; htop/btop/ncdu/vim são úteis para
+# admin/monitoramento no live). btop e ncdu adicionados em v1.3.0 (F5):
+# integrados ao subcomando `monitor` dos managers (mc/tt-manager.sh monitor).
 nano
 vim
 htop
+btop
+ncdu
 iotop-c
 sudo
 zram-generator

@@ -6,9 +6,13 @@
 # Pinagem exata por versão para reprodutibilidade (DEP-002).
 # Para hash pinning (SLSA L3), gerar com:
 #   pip-compile --generate-hashes --output-file=requirements.txt requirements.in
+#
+# Nota: grpcio-tools 1.84 exige protobuf>=7.35 (não compatível com 4.x).
+# O código grpc_gen/ é regenerado pelo install.sh / run-all.sh com a versão
+# aqui pinada; ao bumpar grpcio-tools, regenere o grpc_gen (ver run-all.sh).
 
-discord.py==2.4.0
-grpcio==1.62.3
-grpcio-tools==1.62.3
-protobuf==4.25.3
-python-dotenv==1.0.1
+discord.py==2.7.1
+grpcio==1.84.0
+grpcio-tools==1.84.0
+protobuf==7.36.2
+python-dotenv==1.2.3

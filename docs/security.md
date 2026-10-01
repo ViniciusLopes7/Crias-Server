@@ -41,21 +41,33 @@ sudo systemctl enable --now nftables
 ### Live ISO
 
 A ISO inclui `openssh` (em `packages.x86_64`), mas o `sshd` **não** sobe
-sozinho no boot do live USB — o comportamento seguro de auto-login no tty1
-é mantido. Para iniciar `sshd` manualmente no live (ex.: para instalar
-remotamente via SSH):
+sozinho no boot do live USB. O `root` está **travado** no `/etc/shadow`
+(hash `!` ou `*` — verificado por `tests/iso-live-credentials-validate.sh`),
+mas um drop-in systemd (`/etc/systemd/system/getty@tty1.service.d/autologin.conf`)
+faz o root auto-logar no tty1 (padrão archiso upstream), bypassando o prompt
+de senha apenas naquele terminal físico.
+
+Para iniciar `sshd` manualmente no live (ex.: para instalar remotamente via
+SSH), você precisa primeiro definir uma senha de root (porque root está
+travado por padrão):
 
 ```bash
-# No console do live ISO:
+# No console do live ISO (como root, já autologado no tty1):
+passwd                  # define uma senha de root (NÃO deixe vazia)
 systemctl start sshd
-# Root tem senha vazia por padrão no live; defina uma antes de expor:
-passwd
+# Agora: ssh root@<ip-do-live>
 ```
 
-> **Atenção**: o live ISO faz auto-login como root no tty1. Se você iniciar
-> o `sshd` no live **sem** definir uma senha de root, qualquer um que alcançar
-> a porta 22 terá shell de root. **Sempre** defina `passwd` antes de iniciar
-> o `sshd` no live ISO, ou restrinja via firewall.
+> **Atenção**: o autologin do root no tty1 é uma conveniência de mídia de
+> instalação local (mesmo modelo do archiso releng, EndeavourOS, Garuda).
+> Se você iniciar o `sshd` no live **sem** definir uma senha de root forte,
+> qualquer um que alcançar a porta 22 NÃO terá shell (root está travado).
+> Mas se você definiu `passwd` com senha fraca, o risco é real. **Sempre**
+> defina uma senha forte OU restrinja via firewall antes de iniciar o `sshd`.
+>
+> Em outros ttys (tty2-tty6), root não consegue logar (senha travada). Para
+> acesso non-root no live, crie um usuário: `useradd -m -G wheel -s /bin/bash
+> <nome>` + `passwd <nome>`.
 
 ### Host instalado (`INSTALL_SSH=true`)
 

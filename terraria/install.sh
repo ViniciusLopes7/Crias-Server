@@ -199,10 +199,8 @@ download_and_install_tmodloader() {
     fi
 
     print_step "Baixando tModLoader de: $tml_url"
-    tml_zip="$(mktemp --suffix=.zip -t crias-tml-XXXXXX)"
-    tmp_dir="$(mktemp -d -t crias-tml-XXXXXX)"
-    # shellcheck disable=SC2064
-    trap 'rm -f -- "$tml_zip"; rm -rf -- "$tmp_dir"' RETURN
+    tml_zip="$(mktemp_crias_file)"
+    tmp_dir="$(mktemp_crias_dir)"
 
     if ! _curl_with_retry "$tml_url" "$tml_zip"; then
         print_error "Falha ao baixar tModLoader de $tml_url"
@@ -239,15 +237,11 @@ download_and_extract_terraria() {
     fi
 
     print_step "Baixando servidor Terraria Vanilla..."
-    tmp_zip="$(mktemp --suffix=.zip -t crias-terraria-XXXXXX)"
-    tmp_dir="$(mktemp -d -t crias-terraria-XXXXXX)"
-    # shellcheck disable=SC2064
-    trap 'rm -f -- "$tmp_zip"; rm -rf -- "$tmp_dir"' RETURN
+    tmp_zip="$(mktemp_crias_file)"
+    tmp_dir="$(mktemp_crias_dir)"
 
     if ! _curl_with_retry "$TERRARIA_DOWNLOAD_URL" "$tmp_zip"; then
         print_error "Falha ao baixar o servidor Terraria de $TERRARIA_DOWNLOAD_URL"
-        rm -f "$tmp_zip"
-        safe_remove_dir "$tmp_dir" || true
         exit 1
     fi
 

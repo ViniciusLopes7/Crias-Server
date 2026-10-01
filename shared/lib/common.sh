@@ -48,6 +48,42 @@ err_ts() {
 }
 
 # ---------------------------------------------------------------------------
+# Temp file/dir helpers with auto-cleanup via a single EXIT trap.
+# Registry-based: each mktemp_crias_* appends the path to a per-process file
+# ($TMPDIR/crias-temps.<pid>); the EXIT trap reads it and removes all entries.
+# This avoids bash's array-scoping quirks when arrays are modified inside
+# sourced-library functions (the in-memory array approach didn't propagate
+# reliably across `source` boundaries). File-based registry is robust.
+# Idempotent across multiple sources (common.sh is sourced by many scripts).
+# ---------------------------------------------------------------------------
+if [ -z "${CRIAS_TEMPS_FILE+x}" ]; then
+    CRIAS_TEMPS_FILE="${TMPDIR:-/tmp}/crias-temps.$$"
+    _crias_cleanup_temps() {
+        if [ -f "$CRIAS_TEMPS_FILE" ]; then
+            while IFS= read -r t || [ -n "$t" ]; do
+                [ -n "$t" ] && rm -rf -- "$t" 2>/dev/null || true
+            done < "$CRIAS_TEMPS_FILE"
+            rm -f -- "$CRIAS_TEMPS_FILE" 2>/dev/null || true
+        fi
+    }
+    trap _crias_cleanup_temps EXIT
+fi
+
+mktemp_crias_file() {
+    local f
+    f="$(mktemp "${TMPDIR:-/tmp}/crias.XXXXXX")" || return 1
+    printf '%s\n' "$f" >> "$CRIAS_TEMPS_FILE"
+    printf '%s\n' "$f"
+}
+
+mktemp_crias_dir() {
+    local d
+    d="$(mktemp -d "${TMPDIR:-/tmp}/crias.XXXXXX")" || return 1
+    printf '%s\n' "$d" >> "$CRIAS_TEMPS_FILE"
+    printf '%s\n' "$d"
+}
+
+# ---------------------------------------------------------------------------
 # Banner and step helpers.
 # ---------------------------------------------------------------------------
 print_header() {

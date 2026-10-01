@@ -191,8 +191,7 @@ remove_legacy_cron_entries() {
         return 0
     fi
 
-    tmp_cron_file="$(mktemp)"
-    trap 'rm -f "$tmp_cron_file"' RETURN
+    tmp_cron_file="$(mktemp_crias_file)"
 
     if crontab -l 2>/dev/null | grep -Fq "$SETUP_CRON_BACKUP_SCRIPT"; then
         local original_count

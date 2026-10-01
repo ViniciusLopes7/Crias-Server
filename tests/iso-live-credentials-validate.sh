@@ -1,4 +1,16 @@
 #!/bin/bash
+# tests/iso-live-credentials-validate.sh
+#
+# Valida credenciais e autologin da ISO construída. Roda contra uma ISO real
+# (requer ISO_PATH). Verifica que:
+#   - root está travado no /etc/shadow (autologin bypassa senha, mas shadow
+#     permanece locked — hardening preservado)
+#   - não existe usuário 'Server' (legado removido) em passwd/wheel
+#   - não existe /root/customize_airootfs.sh (legado removido)
+#   - não existe /root/.bash_profile nem /root/.automated_script.sh (auto-start
+#     quebrado removido em F1)
+#   - existe drop-in de autologin em /etc/systemd/system/getty@tty1.service.d/
+#     que referencia --autologin root
 
 set -euo pipefail
 
@@ -26,7 +38,6 @@ fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(mktemp -d)"
-# Helper safe_cleanup_dir sourced from tests/lib/cleanup.sh (DRY).
 source "$ROOT_DIR/tests/lib/cleanup.sh"
 
 trap 'safe_cleanup_dir "$WORK_DIR" || true' EXIT
@@ -49,15 +60,13 @@ if [ ! -f "$squashfs_file" ]; then
 fi
 
 echo "[iso-live-credentials-validate] Expandindo filesystem live..."
-# -no-xattrs: avoid creating files with capabilities that need root to rm.
 unsquashfs -no-progress -no-xattrs -d "$WORK_DIR/rootfs" "$squashfs_file" >/dev/null
 
 passwd_file="$WORK_DIR/rootfs/etc/passwd"
 group_file="$WORK_DIR/rootfs/etc/group"
 shadow_file="$WORK_DIR/rootfs/etc/shadow"
-legacy_customizer="$WORK_DIR/rootfs/root/customize_airootfs.sh"
-automated_script="$WORK_DIR/rootfs/root/.automated_script.sh"
-bash_profile="$WORK_DIR/rootfs/root/.bash_profile"
+autologin_dir="$WORK_DIR/rootfs/etc/systemd/system/getty@tty1.service.d"
+autologin_file="$autologin_dir/autologin.conf"
 
 for required_file in "$passwd_file" "$group_file" "$shadow_file"; do
     if [ ! -f "$required_file" ]; then
@@ -66,6 +75,7 @@ for required_file in "$passwd_file" "$group_file" "$shadow_file"; do
     fi
 done
 
+# --- Usuário 'Server' legado não deve existir ---
 if grep -Eq '^Server:' "$passwd_file"; then
     echo "Usuario 'Server' nao deveria existir por padrao na ISO (evitar credenciais hardcoded)." >&2
     exit 1
@@ -76,31 +86,32 @@ if awk -F: '$1=="wheel" { if ($4 ~ /(^|,)Server(,|$)/) ok=1 } END { exit ok ? 0 
     exit 1
 fi
 
-if [ -f "$legacy_customizer" ]; then
-    echo "Script legado de customizacao presente na ISO: /root/customize_airootfs.sh (deveria ser removido)." >&2
+# --- Scripts legados não devem existir ---
+for legacy in \
+    "$WORK_DIR/rootfs/root/customize_airootfs.sh" \
+    "$WORK_DIR/rootfs/root/.bash_profile" \
+    "$WORK_DIR/rootfs/root/.automated_script.sh"; do
+    if [ -f "$legacy" ]; then
+        echo "Arquivo legacy presente na ISO (deveria ter sido removido): ${legacy#$WORK_DIR/rootfs}" >&2
+        exit 1
+    fi
+done
+
+# --- Drop-in de autologin do root no tty1 deve existir e ser válido ---
+if [ ! -d "$autologin_dir" ]; then
+    echo "Diretório de drop-in de autologin ausente: ${autologin_dir#$WORK_DIR/rootfs}" >&2
+    exit 1
+fi
+if [ ! -f "$autologin_file" ]; then
+    echo "Drop-in de autologin ausente: ${autologin_file#$WORK_DIR/rootfs}" >&2
+    exit 1
+fi
+if ! grep -Fq -- '--autologin root' "$autologin_file"; then
+    echo "Drop-in de autologin não referencia '--autologin root': ${autologin_file#$WORK_DIR/rootfs}" >&2
     exit 1
 fi
 
-if [ ! -f "$automated_script" ]; then
-    echo "Script de bootstrap ausente na ISO: /root/.automated_script.sh" >&2
-    exit 1
-fi
-
-if [ ! -x "$automated_script" ]; then
-    echo "Script de bootstrap nao esta executavel na ISO: /root/.automated_script.sh" >&2
-    exit 1
-fi
-
-if [ ! -f "$bash_profile" ]; then
-    echo "Autostart do live ISO ausente: /root/.bash_profile" >&2
-    exit 1
-fi
-
-if ! grep -Fq '/root/.automated_script.sh' "$bash_profile"; then
-    echo "Autostart do live ISO nao referencia /root/.automated_script.sh em /root/.bash_profile." >&2
-    exit 1
-fi
-
+# --- Root deve estar travado (autologin bypassa senha, mas shadow permanece locked) ---
 root_hash="$(awk -F: '$1=="root" { print $2 }' "$shadow_file" || true)"
 if [ -z "$root_hash" ]; then
     echo "Usuario root nao encontrado em /etc/shadow da ISO." >&2

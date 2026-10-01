@@ -201,14 +201,11 @@ install_stack_service() {
     # verify before rename to avoid loading a partial unit.
     local unit_target="/etc/systemd/system/${STACK_NAME}.service"
     local unit_tmp
-    unit_tmp="$(mktemp "${TMPDIR:-/tmp}/crias_unit_${STACK_NAME}.XXXXXX")"
-    # shellcheck disable=SC2064
-    trap 'rm -f -- "$unit_tmp"' RETURN
+    unit_tmp="$(mktemp_crias_file)"
 
     if ! envsubst '${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB} ${SERVICE_NAME}' \
             < "$STACK_SERVICE_TEMPLATE" > "$unit_tmp"; then
         print_error "envsubst falhou ao gerar unit file para ${STACK_NAME}."
-        rm -f "$unit_tmp"
         return 1
     fi
 

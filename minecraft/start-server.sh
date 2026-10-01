@@ -108,7 +108,14 @@ JAVA_OPTS+=("-XX:+AlwaysPreTouch")
 if [ "$JAVA_PREFER_IPV4_STACK" = "true" ]; then
     JAVA_OPTS+=("-Djava.net.preferIPv4Stack=true")
 fi
-JAVA_OPTS+=("-Dfabric.log.disable-ansi=true")
+# -Dfabric.log.disable-ansi é propriedade específica do Fabric Loader (prefixo "fabric.").
+# Quilt é compatível com Fabric, então também aplica. Para forge/neoforge/vanilla,
+# a flag seria no-op (JVM seta mas server não lê), mas evitamos por correção semântica.
+# Default "fabric" preserva backward-compat com runtime.env antigo sem MINECRAFT_LOADER.
+MINECRAFT_LOADER="${MINECRAFT_LOADER:-fabric}"
+if [ "$MINECRAFT_LOADER" = "fabric" ] || [ "$MINECRAFT_LOADER" = "quilt" ]; then
+    JAVA_OPTS+=("-Dfabric.log.disable-ansi=true")
+fi
 
 cd "$SERVER_DIR" || exit 1
 

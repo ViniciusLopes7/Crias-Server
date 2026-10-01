@@ -1,29 +1,13 @@
 #!/bin/bash
 # minecraft/mc-manager.sh
 #
-# Minecraft CLI manager. Uses log()/warn()/err() from common.sh and
-# generates show_help dynamically via declare -F.
+# Stack-specific overrides for Minecraft. Shared boilerplate (resolve_self,
+# cmd_start/stop/.../backup/monitor/hardware_report, show_help, dispatch) lives
+# in shared/lib/manager-common.sh.
 
 set -euo pipefail
 
-resolve_self() {
-    local src="${BASH_SOURCE[0]}"
-    local resolved=""
-    if command -v readlink >/dev/null 2>&1; then
-        resolved="$(readlink -f "$src" 2>/dev/null || true)"
-    fi
-    if [ -z "$resolved" ] && command -v realpath >/dev/null 2>&1; then
-        resolved="$(realpath "$src" 2>/dev/null || true)"
-    fi
-    if [ -n "$resolved" ]; then
-        echo "$resolved"
-    else
-        echo "$src"
-    fi
-}
-
-SELF="$(resolve_self)"
-SCRIPT_DIR="$(cd "$(dirname "$SELF")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 DEFAULT_SERVER_DIR="$SCRIPT_DIR"
 if [ ! -f "$DEFAULT_SERVER_DIR/server.properties" ] && [ -f "/opt/minecraft-server/server.properties" ]; then
@@ -72,6 +56,9 @@ fi
 # shellcheck source=/dev/null
 source "$MANAGER_COMMON_LIB"
 
+# SELF precisa ser setado após source do manager-common (que define manager_resolve_self).
+SELF="$(manager_resolve_self)"
+
 if [ -f "$COMMON_LIB" ]; then
     # shellcheck source=/dev/null
     source "$COMMON_LIB"
@@ -93,11 +80,11 @@ get_prop() {
     echo "$default_value"
 }
 
-cmd_start() { manager_cmd_start "$SERVICE_NAME"; }
-cmd_stop() { manager_cmd_stop "$SERVICE_NAME"; }
-cmd_restart() { manager_cmd_restart "$SERVICE_NAME"; }
-cmd_status() { manager_cmd_status "$SERVICE_NAME"; }
-cmd_logs() { manager_cmd_logs "$SERVICE_NAME"; }
+# Descrições específicas para o show_help compartilhado (console/health diferem
+# entre Minecraft e Terraria).
+MANAGER_DESC_CONSOLE="Console interativo via RCON (fallback para logs)"
+MANAGER_DESC_HEALTH="Verifica porta e RCON do servidor"
+
 cmd_console() {
     local rcon_pass
     local rcon_port
@@ -122,14 +109,6 @@ cmd_console() {
     fi
 
     MCRCON_PASS="$rcon_pass" exec mcrcon -H localhost -P "$rcon_port"
-}
-
-cmd_backup() {
-    if [ ! -x "$BACKUP_SCRIPT" ]; then
-        err "Script de backup nao encontrado: $BACKUP_SCRIPT"
-        return 1
-    fi
-    manager_run_as_server_user "$SERVER_USER" "$BACKUP_SCRIPT"
 }
 
 cmd_setup_cron() {
@@ -192,14 +171,6 @@ cmd_reconfigure_hardware() {
     warn "Reconfiguracao aplicada em arquivos. Reinicie o servico para aplicar no runtime: sudo systemctl restart $SERVICE_NAME"
 }
 
-cmd_hardware_report() {
-    if [ -f "$TUNING_STATE" ]; then
-        cat "$TUNING_STATE"
-    else
-        warn "Arquivo de estado nao encontrado: $TUNING_STATE"
-    fi
-}
-
 cmd_health() {
     local server_port
     local rcon_pass
@@ -235,48 +206,4 @@ cmd_health() {
     return 0
 }
 
-# ---------------------------------------------------------------------------
-# show_help generated dynamically via declare -F.
-# ---------------------------------------------------------------------------
-show_help() {
-    cat << EOF
-Uso: $0 <comando>
-
-Comandos disponiveis:
-EOF
-    # List cmd_* functions dynamically and map to description.
-    local fn
-    while IFS= read -r fn; do
-        local cmd="${fn#cmd_}"
-        local desc=""
-        case "$cmd" in
-            start)                      desc="Inicia o servico (systemd)" ;;
-            stop)                       desc="Para o servico (systemd)" ;;
-            restart)                    desc="Reinicia o servico (systemd)" ;;
-            status)                     desc="Mostra status (systemd)" ;;
-            logs)                       desc="Tail dos logs (journalctl)" ;;
-            console)                    desc="Console interativo via RCON (fallback para logs)" ;;
-            health)                     desc="Verifica porta e RCON do servidor" ;;
-            backup)                     desc="Executa backup imediato" ;;
-            setup-cron)                 desc="Configura timer systemd de backup" ;;
-            reconfigure-hardware)       desc="Recalcula tuning (TIER: LOW|MID|HIGH ou vazio)" ;;
-            hardware-report)            desc="Exibe perfil/tuning aplicado" ;;
-        esac
-        printf '  %-30s %s\n' "$cmd" "$desc"
-    done < <(declare -F | awk '{print $3}' | grep -E '^cmd_' | sort)
-}
-
-case "${1:-}" in
-    start) shift; cmd_start "$@" ;;
-    stop) shift; cmd_stop "$@" ;;
-    restart) shift; cmd_restart "$@" ;;
-    status) shift; cmd_status "$@" ;;
-    logs) shift; cmd_logs "$@" ;;
-    console) shift; cmd_console "$@" ;;
-    health) shift; cmd_health "$@" ;;
-    backup) shift; cmd_backup "$@" ;;
-    setup-cron) shift; cmd_setup_cron "$@" ;;
-    reconfigure-hardware) shift; cmd_reconfigure_hardware "${1:-}" ;;
-    hardware-report) shift; cmd_hardware_report "$@" ;;
-    *) show_help; exit 1 ;;
-esac
+manager_dispatch "$@"

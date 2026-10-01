@@ -107,6 +107,7 @@ prompt_global_options() {
 
     echo ""
     if tui_confirm "Deseja revisar opcoes globais?" "N"; then
+        tui_help "hardware-tier" 2>/dev/null || true
         tui_input FORCE_HARDWARE_TIER "Forcar tier de hardware (LOW/MID/HIGH ou vazio para auto)" "$FORCE_HARDWARE_TIER"
 
         if tui_confirm "Instalar/configurar Tailscale?" "Y"; then
@@ -148,7 +149,8 @@ prompt_minecraft_options() {
         tui_input MINECRAFT_PORT "Porta do Minecraft" "$MINECRAFT_PORT"
         tui_input MINECRAFT_MOTD "MOTD (Message of the Day)" "$MINECRAFT_MOTD"
 
-        # Loader selection via TUI (paper removido em v1.2.0).
+        # Loader selection via TUI (paper not supported).
+        tui_help "loader" 2>/dev/null || true
         tui_choose MINECRAFT_LOADER "Loader (fabric/quilt/vanilla/forge/neoforge)" "$MINECRAFT_LOADER" \
             "fabric" "quilt" "vanilla" "forge" "neoforge"
 
@@ -223,6 +225,7 @@ prompt_minecraft_version_dynamic() {
 # ---------------------------------------------------------------------------
 prompt_minecraft_modpack_dynamic() {
     local source
+    tui_help "modpack" 2>/dev/null || true
     tui_choose source "Fonte do modpack?" "adrenaline" \
         "Top 10 modpacks (Modrinth)" \
         "Buscar modpack por nome" \
@@ -545,7 +548,7 @@ install_tailscale_if_enabled() {
             print_warning "Foram detectados pacotes desatualizados no sistema."
             print_warning "Recomendado executar 'pacman -Syu' antes para evitar partial-upgrade."
             if ! is_true "$NON_INTERACTIVE"; then
-                if ! ask_confirm "Continuar mesmo assim?" "N"; then
+                if ! tui_confirm "Continuar mesmo assim?" "N"; then
                     print_error "Instalacao do Tailscale cancelada pelo usuario."
                     return 1
                 fi
@@ -557,10 +560,7 @@ install_tailscale_if_enabled() {
             print_warning "pacman -S tailscale falhou. Tentando via repo oficial Tailscale..."
             # Fallback: add Tailscale repo to pacman.conf.
             local tmpdir
-            tmpdir="$(mktemp -d)"
-            # Cleanup tmpdir on exit.
-            # shellcheck disable=SC2064
-            trap 'rm -rf -- "$tmpdir"' RETURN
+            tmpdir="$(mktemp_crias_dir)"
             if curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 10 \
                     -o "$tmpdir/tailscale.repo" \
                     https://pkgs.tailscale.com/stable/arch/tailscale.repo 2>/dev/null; then
@@ -676,10 +676,7 @@ cleanup_stale_alias_autoload_entries() {
         return 0
     fi
 
-    tmp_file="$(mktemp)"
-    # Cleanup tmp file on exit.
-    # shellcheck disable=SC2064
-    trap 'rm -f -- "$tmp_file"' RETURN
+    tmp_file="$(mktemp_crias_file)"
 
     while IFS= read -r line || [ -n "$line" ]; do
         if [[ "$line" =~ ^\[\ -f\ \"([^\"]+)\"\ \]\ \&\&\ \.\ \"([^\"]+)\"$ ]]; then
@@ -711,10 +708,7 @@ remove_alias_autoload_entry() {
         return 0
     fi
 
-    tmp_file="$(mktemp)"
-    # Cleanup tmp file on exit.
-    # shellcheck disable=SC2064
-    trap 'rm -f -- "$tmp_file"' RETURN
+    tmp_file="$(mktemp_crias_file)"
 
     # Remove lines that exactly match the generated source line or the generated header comment.
     local source_line
@@ -869,11 +863,9 @@ cleanup_stack_by_type() {
     if command -v crontab >/dev/null 2>&1; then
         if crontab -u "$server_user_var" -l 2>/dev/null | grep -Fq "$stack_dir/backup-cron.sh"; then
             local tmp_cron_file
-            tmp_cron_file="$(mktemp "${TMPDIR:-/tmp}/crias_cron.XXXXXX")"
+            tmp_cron_file="$(mktemp_crias_file)"
             local original_count
             original_count=$(crontab -u "$server_user_var" -l 2>/dev/null | wc -l)
-            # shellcheck disable=SC2064
-            trap 'rm -f -- "$tmp_cron_file"' RETURN
             crontab -u "$server_user_var" -l 2>/dev/null | grep -Fv "$stack_dir/backup-cron.sh" > "$tmp_cron_file" || true
             if [ -s "$tmp_cron_file" ]; then
                 crontab -u "$server_user_var" "$tmp_cron_file" >/dev/null 2>&1 || true
@@ -888,11 +880,9 @@ cleanup_stack_by_type() {
         # Also attempt to remove from root crontab if present
         if crontab -l 2>/dev/null | grep -Fq "$stack_dir/backup-cron.sh"; then
             local tmp_cron_root_file
-            tmp_cron_root_file="$(mktemp "${TMPDIR:-/tmp}/crias_cron_root.XXXXXX")"
+            tmp_cron_root_file="$(mktemp_crias_file)"
             local original_count_root
             original_count_root=$(crontab -l 2>/dev/null | wc -l)
-            # shellcheck disable=SC2064
-            trap 'rm -f -- "$tmp_cron_root_file"' RETURN
             crontab -l 2>/dev/null | grep -Fv "$stack_dir/backup-cron.sh" > "$tmp_cron_root_file" || true
             if [ -s "$tmp_cron_root_file" ]; then
                 crontab "$tmp_cron_root_file" >/dev/null 2>&1 || true
@@ -946,7 +936,7 @@ cleanup_other_stack_if_needed() {
         print_warning "Foi detectado stack existente de $other_stack no host."
         print_warning "Essa limpeza preserva dados e apenas desativa o servico do stack oposto: $other_dir"
 
-        if ! ask_confirm "CONFIRMAR DESATIVACAO DO STACK $other_stack?" "N"; then
+        if ! tui_confirm "CONFIRMAR DESATIVACAO DO STACK $other_stack?" "N"; then
             print_warning "Desativacao do stack oposto foi cancelada pelo usuario."
             return 0
         fi
@@ -1103,6 +1093,45 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# Monitoring tools install. Pergunta se instala btop + ncdu no
+# host instalado. Pré-instalados na ISO (para uso no live), mas o host
+# instalado (pós-archinstall) não os tem — esta função as instala para que
+# o subcomando `monitor` dos managers funcione pós-reboot.
+# ---------------------------------------------------------------------------
+install_monitor_tools_if_enabled() {
+    if is_true "$DRY_RUN"; then
+        print_step "[DRY_RUN] Pulando instalação de ferramentas de monitoramento."
+        return 0
+    fi
+
+    if ! is_true "${INSTALL_MONITOR_TOOLS:-}"; then
+        if is_true "$NON_INTERACTIVE"; then
+            return 0
+        fi
+        if ! tui_confirm "Instalar ferramentas de monitoramento (btop, ncdu) no host?" "N"; then
+            print_step "Ferramentas de monitoramento não instaladas (use 'pacman -S btop ncdu' depois se precisar)."
+            return 0
+        fi
+    fi
+
+    print_step "Instalando btop + ncdu..."
+    if ! pacman -S --needed --noconfirm btop ncdu >/dev/null 2>&1; then
+        print_warning "Falha ao instalar btop/ncdu via pacman."
+        print_warning "Instale manualmente: sudo pacman -S btop ncdu"
+        return 1
+    fi
+    print_success "Ferramentas de monitoramento instaladas: btop, ncdu"
+    local manager_name="mc-manager.sh"
+    local stack_prefix="minecraft"
+    if [ "$SERVER_TYPE" = "terraria" ]; then
+        manager_name="tt-manager.sh"
+        stack_prefix="terraria"
+    fi
+    print_step "Subcomando disponível: sudo /opt/${stack_prefix}-server/${manager_name} monitor [cpu|disk|net]"
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Optional remote control agent install. Runs after stack install to read
 # RCON config from server.properties / serverconfig.txt.
 # ---------------------------------------------------------------------------
@@ -1117,7 +1146,7 @@ install_crias_agent_if_enabled() {
         if is_true "$NON_INTERACTIVE"; then
             INSTALL_AGENT="false"
         else
-            if ask_confirm "Instalar agente de controle remoto (crias-agent)?" "N"; then
+            if tui_confirm "Instalar agente de controle remoto (crias-agent)?" "N"; then
                 INSTALL_AGENT="true"
             else
                 INSTALL_AGENT="false"
@@ -1221,9 +1250,7 @@ install_crias_agent_if_enabled() {
     print_step "URL do agente: $agent_url"
 
     local agent_tmp_dir
-    agent_tmp_dir="$(mktemp -d -t crias-agent-XXXXXX)"
-    # shellcheck disable=SC2064
-    trap 'rm -rf -- "$agent_tmp_dir"' RETURN
+    agent_tmp_dir="$(mktemp_crias_dir)"
     local agent_local="${agent_tmp_dir}/crias-agent"
 
     if ! _curl_with_retry "$agent_url" "$agent_local"; then
@@ -1294,9 +1321,7 @@ install_crias_agent_if_enabled() {
 
     # 6. Write agent.yaml atomically.
     local agent_yaml_tmp
-    agent_yaml_tmp="$(mktemp "${TMPDIR:-/tmp}/crias_agent_yaml.XXXXXX")"
-    # shellcheck disable=SC2064
-    trap 'rm -f -- "$agent_yaml_tmp"' RETURN
+    agent_yaml_tmp="$(mktemp_crias_file)"
 
     cat > "$agent_yaml_tmp" << EOF
 agent:
@@ -1332,9 +1357,7 @@ EOF
     # 7. Write sudoers with explicit subcommands (least privilege).
     # Validate with visudo -cf before installing.
     local sudoers_tmp
-    sudoers_tmp="$(mktemp "${TMPDIR:-/tmp}/crias_sudoers.XXXXXX")"
-    # shellcheck disable=SC2064
-    trap 'rm -f -- "$agent_yaml_tmp" "$sudoers_tmp"' RETURN
+    sudoers_tmp="$(mktemp_crias_file)"
 
     cat > "$sudoers_tmp" << EOF
 # /etc/sudoers.d/crias-agent
@@ -1358,9 +1381,7 @@ EOF
 
     # 8. Write and verify systemd unit atomically.
     local unit_tmp
-    unit_tmp="$(mktemp "${TMPDIR:-/tmp}/crias_unit.XXXXXX")"
-    # shellcheck disable=SC2064
-    trap 'rm -f -- "$agent_yaml_tmp" "$sudoers_tmp" "$unit_tmp"' RETURN
+    unit_tmp="$(mktemp_crias_file)"
 
     cat > "$unit_tmp" << 'EOF'
 [Unit]
@@ -1480,6 +1501,9 @@ main() {
 
     # Fase 1+: instala agente de controle remoto (opcional, pergunta interativo).
     install_crias_agent_if_enabled
+
+    # Install monitoring tools (btop, ncdu) on the host.
+    install_monitor_tools_if_enabled
 
     print_success "Instalacao concluida para stack: $SERVER_TYPE"
 }

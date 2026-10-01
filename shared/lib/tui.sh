@@ -45,6 +45,104 @@ tui_available() {
     return 1
 }
 
+# ---------------------------------------------------------------------------
+# Theming centralizado. Override via env vars para customização sem código.
+# gum color codes: 0-255 (216-cube + grayscale). 212 = cyan-ish, default.
+# ---------------------------------------------------------------------------
+TUI_THEME_COLOR="${TUI_THEME_COLOR:-212}"
+TUI_THEME_BORDER="${TUI_THEME_BORDER:-normal}"
+
+# ---------------------------------------------------------------------------
+# Mini-wiki: help contextual por tópico, acessível via tui_help <topic>.
+# Conteúdo resumido dos docs relevantes. Callers chamam antes de prompts
+# complexos (ex.: antes do prompt de tier, chama tui_help "hardware-tier").
+# No gum: exibe com gum style (borda + cor). No fallback: print + read ack.
+# ---------------------------------------------------------------------------
+tui_help() {
+    local topic="$1"
+    local body=""
+    case "$topic" in
+        hardware-tier)
+            body="Tiers LOW/MID/HIGH baseados em RAM/CPU/disco.
+LOW: ≤3GB RAM ou ≤2 cores. MID: ≤12GB ou ≤6 cores. HIGH: >12GB e >6 cores.
+Afeta: heap JVM, max-players, view-distance, MemoryMax systemd, retenção backup.
+Override: FORCE_HARDWARE_TIER em config.env (vazio=auto)."
+            ;;
+        loader)
+            body="Loaders suportados: fabric | quilt | vanilla | forge | neoforge.
+fabric: padrão, compatível com modpacks .mrpack do Modrinth.
+quilt: compatível com a maioria dos mods Fabric.
+vanilla: server.jar oficial, sem mods.
+forge/neoforge: para mods Forge (mrpack-install suporta).
+paper removido em v1.2.0 (sem fluxo .mrpack)."
+            ;;
+        modpack)
+            body="Fontes: Top-10 Modrinth | Busca por nome | Vanilla (só loader) | Slug manual.
+Compatibilidade validada server-side (loader + versão MC).
+Se incompatível: sugere versão MC mais próxima e pergunta se troca."
+            ;;
+        online-mode)
+            body="online-mode=true (premium): exige conta Mojang, seguro.
+online-mode=false (offline): qualquer um entra com qualquer nick.
+NUNCA use false em servidor exposto à internet."
+            ;;
+        tailscale)
+            body="Tailscale: VPN mesh (tailnet). Instala tailscaled + ativa.
+'sudo tailscale up' para autenticar.
+'sudo tailscale funnel 8473' expõe o crias-agent via HTTPS público
+(para o bot Discord no Railway conectar sem estar na VPN)."
+            ;;
+        system-tuning)
+            body="Tuning de host: zram (swap em RAM), sysctl (swappiness/vfs_cache),
+I/O scheduler (bfq HDD / mq-deadline SSD), cpupower governor.
+Pulado automaticamente em container/VPS (VIRT_TUNING_BEHAVIOR=auto).
+Force com VIRT_TUNING_BEHAVIOR=force (não recomendado)."
+            ;;
+        cleanup)
+            body="Cleanup do stack oposto (não-destrutivo):
+- systemctl stop + disable do stack oposto
+- remove autoload de aliases
+- remove entradas de crontab de backup
+PRESERVA: dados em /opt/, usuários, backups existentes."
+            ;;
+        ssh)
+            body="SSH no host instalado (INSTALL_SSH=true):
+- instala openssh + habilita sshd.service
+- cria usuário 'crias' (grupo wheel = sudo, senha pedida)
+- PermitRootLogin no (root proibido via SSH)
+Conexão: ssh crias@<ip> (use a senha definida)."
+            ;;
+        agent)
+            body="crias-agent: binário Go (gRPC em localhost:8473).
+Controle remoto via Discord bot (discord.py 2.x no Railway).
+Slash commands: /mc start|stop|restart|status|players|say|console|health.
+Token auto-gerado em /etc/crias/agent.yaml (chmod 0640).
+Expõe via Tailscale Funnel: sudo tailscale funnel 8473."
+            ;;
+        monitor)
+            body="Ferramentas de monitoramento (subcomando 'monitor'):
+- monitor (ou monitor cpu): btop (fallback htop) — CPU/RAM/processos
+- monitor disk: ncdu — explorador de uso de disco interativo
+- monitor net: btop tem aba de network (ou iotop-c para I/O por processo)
+Disponível na ISO Crias-Server (pré-instalado)."
+            ;;
+        *)
+            body="Ajuda não disponível para o tópico: $topic"
+            ;;
+    esac
+
+    if tui_available; then
+        gum style --border="$TUI_THEME_BORDER" --padding="1 2" --foreground="$TUI_THEME_COLOR" \
+            -- "Ajuda: $topic" "" "$body" 2>/dev/null || true
+        gum confirm --default=yes -- "Continuar?" 2>/dev/null || true
+    else
+        print_prompt "Ajuda: $topic"
+        printf '  %s\n' "$body"
+        read -r -p "$(printf '%b' "${CYAN}  ➜ [Enter] para continuar: ${NC}")" _answer || true
+    fi
+    return 0
+}
+
 # User-Agent / identificação consistente (gum não usa, mas mantemos para
 # referência caso logs precisem identificar origem do TUI).
 _tui_engine() {
@@ -73,11 +171,20 @@ tui_choose() {
     if tui_available; then
         local choice
         # --header mostra o prompt; --selected pré-seleciona o default se
-        # ele estiver na lista (case-sensitive; fazemos match exacto).
+        # ele estiver na lista (gum erro se o valor não estiver nas options).
+        local selected_args=()
+        local opt
+        for opt in "${options[@]}"; do
+            if [ "$opt" = "$default" ]; then
+                selected_args=(--selected="$default")
+                break
+            fi
+        done
         # gum choose printa a opção escolhida no stdout; exit 0=ok, 130=cancel.
         if choice=$(gum choose \
                 --header="$prompt" \
                 --height="${#options[@]}" \
+                "${selected_args[@]}" \
                 "${options[@]}" 2>/dev/null); then
             printf -v "$var_out" '%s' "$choice"
             return 0
@@ -383,8 +490,8 @@ tui_msg() {
     local body="$*"
 
     if tui_available; then
-        # gum style formata com borda; gum confirm sem prompt = só ok.
-        gum style --border=normal --padding="1 2" --foreground="212" \
+        # gum style formata com borda; theming centralizado em TUI_THEME_*.
+        gum style --border="$TUI_THEME_BORDER" --padding="1 2" --foreground="$TUI_THEME_COLOR" \
             -- "$title" "" "$body" 2>/dev/null || true
         # Pausa até Enter (gum não tem msgbox puro; confirm --default=yes funciona).
         gum confirm --default=yes -- "Continuar?" 2>/dev/null || true

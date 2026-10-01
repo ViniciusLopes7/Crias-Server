@@ -36,9 +36,16 @@ if [ -n "$bad_ionice" ]; then
   errors=$((errors+1))
 fi
 
-echo "Checking for presence of git clone in automated ISO bootstrap..."
-if grep -qR "git clone" archiso-profile/airootfs/root/.automated_script.sh; then
-  echo "Note: .automated_script.sh contains git clone — ensure ISO build includes signed installer or verify manually." >&2
+echo "Checking bootstrap uses curl+release download (not git clone as primary)..."
+# O bootstrap deve baixar da release do GitHub via curl, não clonar o repo.
+# git clone só é aceito em mensagens de fallback (comentadas ou em strings de erro).
+bootstrap_src="crias-bootstrap.sh"
+if [ -f "$bootstrap_src" ]; then
+  # Conta ocorrências de git clone fora de contexto de fallback (strings/mensagens).
+  git_clone_count=$(grep -cE '^[[:space:]]*git clone' "$bootstrap_src" || true)
+  if [ "$git_clone_count" -gt 0 ]; then
+    echo "Note: crias-bootstrap.sh contém 'git clone' como comando ativo — preferir curl+release download." >&2
+  fi
 fi
 
 if [ "$errors" -ne 0 ]; then

@@ -1,10 +1,10 @@
 # tModLoader (Terraria com mods)
 
-Desde a v1.2.0, o Crias-Server suporta **tModLoader** como substituto do
+Desde a v1.2.1, o Crias-Server suporta **tModLoader** como substituto do
 servidor vanilla do Terraria. O tModLoader é a plataforma oficial de mods do
 Terraria (sucessor do tAPI), mantido pela equipe oficial.
 
-> **Status**: Implementado em v1.2.0. Substitui o binário vanilla quando
+> **Status**: Implementado em v1.2.1. Substitui o binário vanilla quando
 > `TERRARIA_USE_TMODLOADER=true`. Usa a mesma porta (7777), o mesmo diretório
 > (`/opt/terraria-server`), e a mesma service unit systemd (`terraria.service`).
 
