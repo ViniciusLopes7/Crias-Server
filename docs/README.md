@@ -66,8 +66,6 @@ Workflow único: [../.github/workflows/ci.yml](../.github/workflows/ci.yml) — 
 
 | Job | Função |
 |-----|--------|
-| `build-iso` | `mkarchiso` (ISO bootável) |
-| `test-iso-qemu` | Boot real da ISO no QEMU (BIOS + UEFI) — depende de build-iso |
 | `build-agent` | Build Go linux/amd64 — depende de lint-go + test-go |
 | `build-bot` | Docker build smoke — depende de lint-python + test-python |
 

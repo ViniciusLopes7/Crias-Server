@@ -40,11 +40,10 @@ sudo systemctl enable --now nftables
 
 ### Live ISO
 
-A ISO inclui `openssh` (em `packages.x86_64`), mas o `sshd` **não** sobe
+O `install.sh` instala `openssh` se necessário. O `sshd` **não** sobe
 sozinho no boot do live USB. O `root` está **travado** no `/etc/shadow`
 (hash `!` ou `*` — verificado por `tests/iso-live-credentials-validate.sh`),
 mas um drop-in systemd (`/etc/systemd/system/getty@tty1.service.d/autologin.conf`)
-faz o root auto-logar no tty1 (padrão archiso upstream), bypassando o prompt
 de senha apenas naquele terminal físico.
 
 Para iniciar `sshd` manualmente no live (ex.: para instalar remotamente via
@@ -59,7 +58,6 @@ systemctl start sshd
 ```
 
 > **Atenção**: o autologin do root no tty1 é uma conveniência de mídia de
-> instalação local (mesmo modelo do archiso releng, EndeavourOS, Garuda).
 > Se você iniciar o `sshd` no live **sem** definir uma senha de root forte,
 > qualquer um que alcançar a porta 22 NÃO terá shell (root está travado).
 > Mas se você definiu `passwd` com senha fraca, o risco é real. **Sempre**

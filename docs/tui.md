@@ -40,7 +40,7 @@ que expõe funções de alto nível (`tui_choose`, `tui_filter`, `tui_confirm`,
 | `curl` | `core/curl` | Sim, para buscar versões/modpacks nas APIs. |
 | TTY | stdin interativo | Sim, para `gum` renderizar. Em CI (`NON_INTERACTIVE=true`), o TUI não é usado. |
 
-`gum` já vem pré-instalado na ISO (em [`packages.x86_64`](../archiso-profile/packages.x86_64)).
+Para instalar o gum: `sudo pacman -S gum` (não vem no Arch base).
 
 ## Comportamento de fallback
 
@@ -106,7 +106,7 @@ bash shared/lib/tui.sh selftest
 bash tests/tui-fallback-test.sh
 ```
 
-O caminho `gum` (com TTY) é exercitado manualmente na ISO live, não em CI.
+O caminho `gum` (com TTY) é exercitado manualmente, não em CI.
 
 ## Veja também
 

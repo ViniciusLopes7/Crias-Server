@@ -67,7 +67,7 @@ assert_grep 'is_true.*NON_INTERACTIVE' "$ROOT_DIR/install.sh"
 # 10. Senha pedida interativamente com read -s (sem echo) + confirmação
 assert_grep 'read.*-r.*-s' "$ROOT_DIR/install.sh"
 
-# 11. Suporte a override via INSTALL_SSH=true documentado no README
-assert_grep 'INSTALL_SSH=true' "$ROOT_DIR/README.md"
+# 11. SSH documentado no tutorial
+assert_grep 'SSH_USER' "$ROOT_DIR/docs/tutorial.md"
 
 echo "OK: install-ssh-hook-test"

@@ -1,6 +1,6 @@
 # Tutorial de Operação — Crias-Server
 
-Instalar → operar → troubleshoot. Para detalhes específicos de cada stack, veja [minecraft/README.md](minecraft/README.md) ou [terraria/README.md](terraria/README.md).
+Instalar → operar → troubleshoot. Para detalhes específicos de cada stack, veja [mminecraft/README.md](mminecraft/README.md) ou [terraria/README.md](terraria/README.md).
 
 ## 1. Instalação
 
@@ -295,7 +295,7 @@ sudo journalctl -u minecraft-backup.service -n 50
 
 ## 10. Veja também
 
-- [minecraft/README.md](minecraft/README.md) — Stack Minecraft
+- [mminecraft/README.md](mminecraft/README.md) — Stack Minecraft
 - [terraria/README.md](terraria/README.md) — Stack Terraria
 - [hardware-tuning.md](hardware-tuning.md) — Tiers e recalibração
 - [restore.md](restore.md) — Restore de backups

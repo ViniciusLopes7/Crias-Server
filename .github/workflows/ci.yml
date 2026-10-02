@@ -1,18 +1,18 @@
 # .github/workflows/ci.yml
 #
-# Workflow único do Crias-Server. Jobs rodam em paralelo:
+# Crias-Server — CI/CD completo (lint + test + build + release)
 #
 #   lint-shell ─┐
 #   lint-go ────┤
 #   lint-python ┤
-#   test-go ─────┤──→ build-agent ─┤──→ release (consolida todos artefatos)
+#   test-go ─────┤──→ build-agent ─┤──→ release
 #   test-python ─┘──→ build-bot ───┘
 #
-# Release é criada apenas em:
-#   - push de tag v*.*.* (release manual)
-#   - workflow_dispatch com input release=true
-#
-# Em push/PR normal, apenas lint + test + build rodam (sem release).
+# Triggers:
+#   - push to main          → lint + test + build (no release)
+#   - push tag v*.*.*       → lint + test + build + release (stable)
+#   - PR to main            → lint + test only (no build, no release)
+#   - workflow_dispatch     → full pipeline + optional release
 
 name: CI
 
@@ -25,6 +25,7 @@ on:
   workflow_dispatch:
     inputs:
       create_release:
+        description: 'Criar release do GitHub (consolida agent + bot + source + checksums)'
         type: boolean
         default: false
 
@@ -428,14 +429,12 @@ jobs:
           echo "=== Validando artifacts obrigatorios ==="
           missing=0
 
-          fi
-
           # Agent binaries (se build-agent rodou)
           if ! ls artifacts/crias-agent-*-amd64 >/dev/null 2>&1; then
             echo "WARN: nenhum crias-agent-*-amd64 encontrado"
           fi
 
-          # Bot Docker image (se build-bot rodou)
+          # Bot zip (se build-bot rodou)
           if [ ! -f artifacts/crias-bot.zip ]; then
             echo "WARN: crias-bot.zip nao encontrado"
           fi
@@ -446,7 +445,6 @@ jobs:
             [ -f "$sha_file" ] || continue
             target_file="$(basename "${sha_file%.sha256}")"
             echo "Verificando $target_file ..."
-            # sha256sum -c espera o filename no .sha256 bater com o arquivo local.
             (cd artifacts && sha256sum -c "$(basename "$sha_file")") || {
               echo "ERROR: checksum falhou para $target_file" >&2
               missing=1
@@ -461,13 +459,12 @@ jobs:
 
       - name: Prepare release assets
         run: |
-
-          fi
+          mkdir -p release-assets/agent release-assets/bot
 
           # Agent binaries + checksums
           mv artifacts/crias-agent-* release-assets/agent/ 2>/dev/null || true
 
-          # Bot Docker image
+          # Bot zip
           mv artifacts/crias-bot.zip release-assets/bot/ 2>/dev/null || true
 
           # Source archives (full + slim)
@@ -479,9 +476,9 @@ jobs:
           (cd release-assets/_pkg/full && zip -qr ../../crias-server-full.zip .)
           (cd release-assets/_pkg/slim && zip -qr ../../crias-server-slim.zip .)
 
-          # Global checksum. Strip one subdir level so sha256sum -c works
-          # with flattened GitHub release assets.
+          # Global checksum
           cd release-assets
+          find . -type f \( -name '*.zip' -o -name 'crias-agent-*' -o -name 'sha256sums.txt' \) \
             -exec sha256sum {} \; | sed 's|  \./[^/]*/|  |' > sha256sums.txt
           cat sha256sums.txt
 
@@ -518,8 +515,6 @@ jobs:
         run: |
           # CICD-001: todos os usos da tag via env var
           assets=()
-            [ -f "$f" ] && assets+=("$f")
-          done
           # Agent binaries
           for f in release-assets/agent/*; do
             [ -f "$f" ] && assets+=("$f")
@@ -541,10 +536,42 @@ jobs:
             *-beta*|*-rc*) PRERELEASE="true" ;;
           esac
 
+          RELEASE_NOTES=$(cat <<'RN'
+          ## O que há de novo
+
+          Veja [CHANGELOG.md](https://github.com/ViniciusLopes7/Crias-Server/blob/main/CHANGELOG.md) para detalhes completos.
+
+          ## Artefatos
+
+          | Arquivo | Descrição |
+          |---------|-----------|
+          | `crias-agent-linux-amd64` | Binário do agente Go (controle remoto via Discord) |
+          | `crias-agent-linux-amd64.sha256` | Checksum do agente |
+          | `crias-bot.zip` | Source do bot Python + Dockerfile (faça `docker build` local) |
+          | `crias-server-full.zip` | Repo completo (com docs, tests, workflows) |
+          | `crias-server-slim.zip` | Repo sem docs/tests/workflows (mais leve) |
+          | `sha256sums.txt` | Checksums de todos os artefatos |
+
+          ## Instalação
+
+          ```bash
+          # Pré-requisito: Arch Linux instalado (https://archlinux.org/download/)
+          curl -fsSL https://raw.githubusercontent.com/ViniciusLopes7/Crias-Server/main/crias-bootstrap.sh | sudo bash
+          ```
+
+          ## Verificação
+
+          ```bash
+          sha256sum -c sha256sums.txt   # valida integridade dos artefatos
+          gh attestation verify crias-agent-linux-amd64 --repo ViniciusLopes7/Crias-Server  # SLSA provenance
+          ```
+          RN
+          )
+
           gh release create "${RELEASE_TAG}" \
             "${assets[@]}" \
-            --title "Release ${RELEASE_TAG}" \
-            --generate-notes \
+            --title "Crias-Server ${RELEASE_TAG}" \
+            --notes "${RELEASE_NOTES}" \
             --prerelease="${PRERELEASE}"
 
       - name: Attest build provenance
