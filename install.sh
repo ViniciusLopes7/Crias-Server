@@ -1131,6 +1131,7 @@ EOF
 # o subcomando `monitor` dos managers funcione pós-reboot.
 # ---------------------------------------------------------------------------
 install_monitor_tools_if_enabled() {
+    deploy_crias_tui
     if is_true "$DRY_RUN"; then
         print_step "[DRY_RUN] Pulando instalação de ferramentas de monitoramento."
         return 0
@@ -1530,6 +1531,25 @@ show_install_summary() {
     return 1
 }
 
+deploy_crias_tui() {
+    if is_true "$DRY_RUN"; then
+        print_step "[DRY_RUN] Pulando deploy do crias-tui."
+        return 0
+    fi
+
+    local tui_source="$SCRIPT_DIR/crias-tui.sh"
+    local tui_dest="/usr/local/bin/crias-tui"
+
+    if [ ! -f "$tui_source" ]; then
+        print_warning "crias-tui.sh nao encontrado em $tui_source. Pulando deploy."
+        return 0
+    fi
+
+    install -m 0755 "$tui_source" "$tui_dest"
+    print_success "crias-tui deployado em $tui_dest"
+    print_step "Rode: sudo crias-tui  (menu interativo do hub)"
+}
+
 main() {
     print_header
     # Config already loaded at top-level.
@@ -1606,6 +1626,7 @@ main() {
 
     # Install monitoring tools (btop, ncdu) on the host.
     install_monitor_tools_if_enabled
+    deploy_crias_tui
 
     print_success "Instalacao concluida para stack: $SERVER_TYPE"
 }

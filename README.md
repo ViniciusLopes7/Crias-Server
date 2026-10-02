@@ -4,9 +4,8 @@
     <img src="assets/images/branding/EscudoCrias.png" alt="Escudo Crias" width="220" />
 </p>
 
-Instalador modular para servidor de jogos em Arch Linux, com escolha inicial entre Minecraft e Terraria, tuning automático por hardware, hardening systemd, controle remoto via bot Discord e CI/CD completo (build ISO + binário Go + bot Python).
+Instalador modular para servidor de jogos em Arch Linux, com escolha inicial entre Minecraft e Terraria, tuning automático por hardware, hardening systemd, controle remoto via bot Discord e CI/CD completo (binário Go + bot Python).
 
-> **v1.3.0 (F1)**: Bug crítico de login na ISO corrigido (drop-in de autologin do root no tty1). Auto-start quebrado removido. Bootstrap mínimo (`crias-bootstrap`) baixa a release do GitHub com verificação SHA256 em vez de embutir o repo inteiro. Veja [CHANGELOG.md](CHANGELOG.md) e [archiso-profile/README.md](archiso-profile/README.md).
 >
 > **v1.2.0**: ISO agora inclui **OpenSSH** e **`gum`** (TUI). O instalador oferece **seleção dinâmica de versão do Minecraft** e **seletor de modpacks** (top-10 Modrinth / busca / vanilla / slug manual) com sugestão de versão compatível. Loader `paper` removido. Veja o [CHANGELOG.md](CHANGELOG.md) para detalhes.
 
@@ -90,7 +89,6 @@ Flags importantes em `config.env`:
 ├── terraria/                   # Stack Terraria (estrutura espelho do Minecraft)
 ├── discord-agent/              # Agente Go (gRPC + RCON + eventos)
 ├── discord-bot/                # Bot Python (discord.py 2.x + slash commands)
-├── archiso-profile/            # Perfil archiso para build de ISO bootável
 ├── tests/                      # Bateria de testes bash + Python + Go (ver tests/run-all.sh)
 │   ├── fixtures/               #   JSON fixtures para testes de manifest (v1.2.0)
 │   ├── tui-fallback-test.sh    #   Teste do caminho fallback do TUI (v1.2.0)
@@ -225,7 +223,6 @@ Workflow único: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — 12 j
 
 | Job | Função | Runner |
 |-----|--------|--------|
-| `build-iso` | `mkarchiso` (ISO bootável) — depende de lint-shell + test-shell + test-shell-arch | archlinux:base-devel |
 | `test-iso-qemu` | Boot real da ISO no QEMU (BIOS + UEFI) — depende de build-iso | ubuntu-22.04 |
 | `build-agent` | Build Go linux/amd64 — depende de lint-go + test-go | ubuntu-22.04 |
 | `build-bot` | Docker build smoke — depende de lint-python + test-python | ubuntu-22.04 |
@@ -237,9 +234,7 @@ Workflow único: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — 12 j
 | `release` | Baixa todos os artefatos dos 3 builds + valida que ISO passou no QEMU boot test, e cria **uma release única** com tudo |
 
 **Release consolidada** (em tag `v*.*.*` ou `workflow_dispatch` com `create_release=true`):
-- `crias-server-*.iso` — ISO bootável
 - `crias-server-full.zip` — repo completo
-- `crias-server-slim.zip` — repo sem `archiso-profile/`, `docs/`, `.github/workflows/` (para quem já tem ISO)
 - `crias-agent-linux-amd64` + `.sha256` — binário do agente Go (x86_64 only; a ISO é x86_64)
 - `crias-bot.zip` — Source do bot + Dockerfile (usuário faz `docker build` local)
 - `sha256sums.txt` — checksums de todos os artefatos
@@ -258,7 +253,6 @@ bash shared/lib/tui.sh selftest
 bash shared/lib/mc-manifests.sh selftest
 
 # Testes que requerem ISO construída
-ISO_PATH=/path/to/crias.iso bash tests/run-all.sh
 ```
 
 ## Documentação

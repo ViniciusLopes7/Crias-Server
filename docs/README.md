@@ -8,7 +8,6 @@
 |-----------|-----------|
 | [../README.md](../README.md) | Visão geral + quick start + controle remoto Discord |
 | [tutorial.md](tutorial.md) | Fluxo completo: instalar (ISO ou git clone) → operar → troubleshoot |
-| [../archiso-profile/README.md](../archiso-profile/README.md) | Como a ISO funciona (bootstrap, autologin, build) |
 | [../CHANGELOG.md](../CHANGELOG.md) | Histórico de versões |
 | [../ROADMAP.md](../ROADMAP.md) | Status de implementação e próximos passos |
 

@@ -1,87 +1,46 @@
 # Tutorial de Operação — Crias-Server
 
-Fluxo único: instalar → operar → troubleshoot. Para detalhes específicos de cada stack, veja [minecraft/README.md](minecraft/README.md) ou [terraria/README.md](terraria/README.md).
+Instalar → operar → troubleshoot. Para detalhes específicos de cada stack, veja [minecraft/README.md](minecraft/README.md) ou [terraria/README.md](terraria/README.md).
 
 ## 1. Instalação
 
 ### Pré-requisitos
 
-- Arch Linux instalado (ou distro com `pacman` + `systemd`)
+- **Arch Linux instalado** (use a [ISO oficial](https://archlinux.org/download/) + `archinstall`)
 - Acesso root (`sudo`)
-- Conexão com internet (para baixar pacotes e binários)
+- Conexão com internet (pacman, downloads, mods)
 
-### Fluxo primário (via ISO Crias-Server)
-
-A ISO do Crias-Server é um archiso padrão + pacotes pré-instalados + bootstrap.
-O fluxo é:
+### Fluxo principal (recomendado)
 
 ```bash
-# 1. Boot da ISO → root auto-loga no tty1 (drop-in de autologin)
-# 2. (se necessário) arrumar rede:
-#     systemctl start NetworkManager
-#     ping -c 3 github.com
-# 3. Instalar o Arch no disco (interativo):
-archinstall
-# 4. Baixar + extrair o Crias-Server da release do GitHub (com SHA256):
-crias-bootstrap
-# 5. Reboot no sistema instalado:
-reboot
-# 6. (após reboot) Login com o usuário criado no archinstall
-# 7. Rodar o instalador:
-sudo /opt/crias-server/install.sh
+# 1. Instale o Arch Linux (se ainda não tem):
+#    - Baixe a ISO oficial em https://archlinux.org/download/
+#    - Boot pela USB/CD
+#    - Rode: archinstall
+#    - Crie usuário, timezone, hostname, disco, network
+#    - Reboot
+
+# 2. Após reboot, login com o usuário criado no archinstall
+
+# 3. Baixe o Crias-Server (bootstrap com verificação SHA256):
+curl -fsSL https://raw.githubusercontent.com/ViniciusLopes7/Crias-Server/main/crias-bootstrap.sh | sudo bash
+# O bootstrap baixa a release do GitHub, verifica checksum, extrai em /opt/crias-server/
+# e roda o install.sh automaticamente.
+
+# 4. Siga o TUI (menus interativos com gum):
+#    - Stack: Minecraft ou Terraria
+#    - Opções globais (Tailscale, tuning, SSH, monitor)
+#    - Opções do jogo (porta, loader, versão, modpack, MOTD, server icon)
+#    - Resumo → Confirmar → instala
 ```
 
-O `crias-bootstrap` consulta `api.github.com/.../releases/latest`, baixa
-`crias-server-slim.zip` + `sha256sums.txt`, verifica o checksum, extrai em
-`/mnt/opt/crias-server/` (live ISO pós-`archinstall`) e imprime as próximas
-instruções. Não roda `install.sh` em chroot (evita problemas com
-`systemctl start`).
-
-### Fluxo fallback (sem ISO, Arch já instalado)
+### Fluxo alternativo (git clone)
 
 ```bash
-# 1. Clonar o repositório
 git clone https://github.com/ViniciusLopes7/Crias-Server.git
 cd Crias-Server
-
-# 2. (Opcional) Editar config.env com suas preferências
-nano config.env
-
-# 3. Rodar o instalador
-chmod +x install.sh
 sudo ./install.sh
 ```
-
-Ou via bootstrap (baixa release com checksum, em vez de clonar `main`):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ViniciusLopes7/Crias-Server/main/crias-bootstrap.sh | sudo bash
-# O bootstrap detecta target=/ (host instalado), baixa+verifica+extrai e roda install.sh.
-```
-
-### O que o instalador pergunta (v1.2.0 — TUI gum)
-
-O instalador interativo usa **`gum`** para menus, busca fuzzy e prompts (com
-fallback `read` se `gum` ausente). A ordem dos prompts:
-
-1. **Qual stack?** Minecraft ou Terraria — menu TUI
-2. **Opções globais** (opcional revisar):
-   - Forçar tier de hardware (LOW/MID/HIGH ou vazio para auto)
-   - Instalar Tailscale? (recomendado)
-   - Aplicar tuning de sistema? (zram/scheduler/cpupower)
-   - Limpar stack oposto após instalar?
-   - **Habilitar SSH no host?** (v1.2.0 — cria usuário `crias` com sudo)
-3. **Parâmetros específicos do jogo** (Minecraft):
-   - Usuário, diretório, porta, MOTD
-   - **Loader** (fabric/quilt/vanilla/forge/neoforge) — menu TUI *(paper removido em v1.2.0)*
-   - **Versão do Minecraft** — busca fuzzy no manifest dinâmico do loader
-   - online-mode, **modpack** (top-10 Modrinth / busca / vanilla / slug manual)
-   - Versão do modpack (filtrada por compatibilidade loader+MC)
-   - Mods QoL
-4. **Instalar agente de controle remoto?** (crias-agent — opcional, Discord)
-
-> Sem internet, o instalador aborta com mensagem clara (server.jar e modpacks
-> exigem download). Veja [tui.md](tui.md) e [minecraft/modpacks.md](minecraft/modpacks.md).
 
 ### Instalação não-interativa (CI/automação)
 
@@ -89,7 +48,6 @@ fallback `read` se `gum` ausente). A ordem dos prompts:
 sudo -E NON_INTERACTIVE=true \
         ACCEPT_EULA=true \
         SERVER_TYPE=minecraft \
-        INSTALL_AGENT=true \
         ./install.sh
 ```
 
@@ -99,115 +57,105 @@ sudo -E NON_INTERACTIVE=true \
 sudo -E NON_INTERACTIVE=true DRY_RUN=true SERVER_TYPE=minecraft ./install.sh
 ```
 
+### Flags importantes em `config.env`
+
+| Flag | Default | Descrição |
+|------|---------|-----------|
+| `NON_INTERACTIVE` | `false` | Desativa prompts (exige `SERVER_TYPE`) |
+| `DRY_RUN` | `false` | Evita operações destrutivas |
+| `ACCEPT_EULA` | `false` | Aceita EULA Mojang (necessário p/ Minecraft) |
+| `SSH_USER` | `crias` | Nome do usuário SSH (customizável, com validação) |
+| `INSTALL_MONITOR_TOOLS` | `false` | Instala btop + ncdu no host |
+| `MINECRAFT_SERVER_ICON_URL` | vazio | URL de um PNG 64x64 para `server-icon.png` |
+| `BACKUP_REMOTE_PATH` | vazio | `user@host:/path/` para rsync de backup remoto |
+| `BACKUP_NOTIFY_WEBHOOK` | vazio | URL de webhook Discord para notificações de backup |
+
 ---
 
 ## 2. Operação diária
 
-### Start/Stop/Status
+### Start / Stop / Status
 
 ```bash
 # Minecraft
 sudo systemctl start minecraft
 sudo systemctl stop minecraft
 sudo systemctl status minecraft
-mcstatus   # alias (após source /etc/profile.d/crias-server.sh)
 
 # Terraria
 sudo systemctl start terraria
 sudo systemctl stop terraria
 sudo systemctl status terraria
-ttstatus   # alias
 ```
 
-### Console
+### Hub TUI (menu interativo — não precisa lembrar comandos)
 
 ```bash
-# Minecraft (requer mcrcon instalado via AUR)
-mcconsole
-# Ctrl+A, D para sair do console sem parar o servidor
+sudo crias-tui
+# Menu: Servidor / Monitoramento / Backup / Sistema / Sair
+```
 
-# Terraria (apenas logs em tempo real — sem RCON nativo)
+### Console do jogo
+
+```bash
+# Minecraft (requer mcrcon via AUR)
+mcconsole
+
+# Terraria (logs em tempo real — sem RCON nativo)
 ttconsole
-# Ctrl+C para sair
 ```
 
 ### Logs
 
 ```bash
-# Acompanhar logs em tempo real
-mclogs    # alias para: sudo journalctl -u minecraft -f
-ttlogs    # alias para: sudo journalctl -u terraria -f
+# Acompanhar em tempo real
+mclogs    # alias: sudo journalctl -u minecraft -f
+ttlogs    # alias: sudo journalctl -u terraria -f
 
 # Últimas 50 linhas
 sudo journalctl -u minecraft -n 50 --no-pager
-sudo journalctl -u terraria -n 50 --no-pager
 ```
 
-### Carregar aliases de shell
-
-O instalador cria `/etc/profile.d/crias-server.sh` com autoload dos aliases. Para usar imediatamente na sessão atual:
+### Monitoramento (btop / ncdu)
 
 ```bash
-source /etc/profile.d/crias-server.sh
-```
+# CPU/RAM/processos
+sudo mc-manager.sh monitor        # ou: sudo crias-tui → Monitoramento → btop
 
-Ou abra um novo terminal (aliases carregam automaticamente em shells de login).
+# Uso de disco (no diretório do servidor)
+sudo mc-manager.sh monitor disk   # ncdu interativo
+
+# Aliases após source /etc/profile.d/crias-server.sh
+mcstatus   # status do Minecraft
+ttstatus   # status do Terraria
+mchw       # perfil de hardware do Minecraft
+tthw       # perfil de hardware do Terraria
+```
 
 ---
 
 ## 3. Tuning de hardware
 
-### Como funciona
+O sistema detecta RAM, CPU e tipo de disco automaticamente e aplica um tier:
 
-Durante a instalação, o sistema detecta:
+| Tier | Critério | Foco |
+|------|----------|------|
+| LOW | ≤3 GB RAM ou ≤2 cores | Estabilidade em host fraco |
+| MID | ≤12 GB RAM ou ≤6 cores | Equilíbrio |
+| HIGH | >12 GB RAM e >6 cores | Throughput máximo |
 
-- RAM total e disponível
-- Cores e threads de CPU
-- Tipo de disco (HDD/SSD/NVME)
-- Filesystem (ZFS/Btrfs/LVM detectados — tuning de bloco pode ser pulado)
-
-Com base nisso, aplica tier **LOW**, **MID** ou **HIGH** que afeta:
-
-- Parâmetros do jogo (max-players, view-distance, simulation-distance, heap)
-- Limites de serviço systemd (`MemoryMax`)
-- Políticas de host (zram, swappiness, scheduler, cpupower governor)
-- Retenção de backup (LOW=5 dias, MID=7, HIGH=10)
-
-Veja a [tabela completa de tiers, thresholds e sinais detectados](hardware-tuning.md).
-
-### Override manual
-
-Em `config.env`:
-
+**Override manual** em `config.env`:
 ```bash
 FORCE_HARDWARE_TIER="HIGH"   # LOW, MID, HIGH ou vazio para auto
 ```
 
-### Recalibrar após mudança de hardware
-
-Se você trocar VM, adicionar RAM, mudar de HDD para SSD, etc.:
-
+**Recalibrar após mudança de hardware:**
 ```bash
-# Detectar novo hardware e reaplicar tuning
 sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware
-sudo /opt/terraria-server/tt-manager.sh reconfigure-hardware
-
-# Forçar tier específico
-sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware HIGH
-sudo /opt/terraria-server/tt-manager.sh reconfigure-hardware LOW
-
-# Reiniciar para aplicar no runtime
-sudo systemctl restart minecraft
-# ou
-sudo systemctl restart terraria
+sudo /opt/terraria-server/tt-manager.sh reconfigure-hardware HIGH  # forçar tier
 ```
 
-### Ver perfil aplicado
-
-```bash
-mchw   # Minecraft (alias)
-tthw   # Terraria (alias)
-```
+Veja [hardware-tuning.md](hardware-tuning.md) para detalhes.
 
 ---
 
@@ -216,33 +164,29 @@ tthw   # Terraria (alias)
 ### Backup imediato
 
 ```bash
-mcbackup   # Minecraft (alias)
-ttbackup   # Terraria (alias)
+mcbackup   # alias para: sudo /opt/minecraft-server/mc-manager.sh backup
+ttbackup   # alias para: sudo /opt/terraria-server/tt-manager.sh backup
 ```
 
 ### Configurar timer systemd
 
 ```bash
-mcsetupcron   # Minecraft (alias)
-ttsetupcron   # Terraria (alias)
+mcsetupcron   # pergunta frequência: diário, 2x/dia, 4h, semanal
+ttsetupcron
 ```
 
-O script pergunta a frequência:
-1. Diário às 03:00
-2. Duas vezes por dia (03:00 e 15:00)
-3. A cada 4 horas
-4. Semanal (domingo às 03:00)
-5. Personalizado (linha `OnCalendar=` ou `OnUnitActiveSec=`)
+### Backup remoto (rsync)
 
-### Verificar backups
-
+Se `BACKUP_REMOTE_PATH` estiver setado em `config.env`, o backup sincroniza automaticamente via rsync após criar o `.tar.zst` local:
 ```bash
-ls -lh /opt/minecraft-server/backups/
-ls -lh /opt/terraria-server/backups/
+BACKUP_REMOTE_PATH="user@server:/backups/crias/"
+```
 
-# Logs do timer
-sudo journalctl -u minecraft-backup.service -n 50
-sudo journalctl -u terraria-backup.service -n 50
+### Notificação Discord
+
+Se `BACKUP_NOTIFY_WEBHOOK` estiver setado, recebe notificação (embed verde/vermelho) no Discord após cada backup:
+```bash
+BACKUP_NOTIFY_WEBHOOK="https://discord.com/api/webhooks/..."
 ```
 
 ### Restore
@@ -251,160 +195,111 @@ Veja [restore.md](restore.md).
 
 ---
 
-## 5. Cleanup do stack oposto
+## 5. SSH
 
-Se `CLEANUP_OTHER_STACK=true` (default), o instalador detecta stack oposto e pergunta se deseja desativá-lo.
+Se você respondeu "sim" a "Habilitar SSH" durante a instalação:
 
-**O que é desativado (não destrutivo):**
-- `systemctl stop <stack>` + `systemctl disable <stack>`
-- Remoção do autoload de aliases em `/etc/profile.d/crias-server.sh`
-- Remoção de entradas de crontab do backup
+- Usuário criado com `sudo` (nome customizável via `SSH_USER` em `config.env`)
+- `PermitRootLogin no` (root proibido via SSH)
+- Conexão: `ssh <usuario>@<ip-do-servidor>`
 
-**O que NÃO é feito:**
-- Dados em `/opt/` são preservados
-- Usuários do sistema são preservados
-- Backups existentes são preservados
+Veja [security.md](security.md) para hardening adicional.
 
 ---
 
-## 6. Banner e identidade visual
+## 6. MOTD personalizado
 
-O instalador tenta exibir um banner ASCII antes do header padrão. Ordem de busca:
+O MOTD do Minecraft aceita códigos de cor (`§6` = gold, `§l` = bold, etc.) e `\n` para nova linha.
 
-1. `assets/images/branding/banner.txt`
-2. `assets/branding/banner.txt`
-3. `/etc/crias/banner.txt`
+**Gerador visual:** https://comunidademc.com.br/ferramentas/motd/
 
-Para customizar, substitua `assets/images/branding/banner.txt` antes da instalação.
+Durante a instalação, o TUI mostra:
+1. `tui_help "motd"` — explica os códigos + link do gerador
+2. `tui_input` — você cola o MOTD gerado
+3. `motd_preview` — preview colorido (mapeia § para ANSI)
+
+Ou edite direto em `config.env`:
+```bash
+MINECRAFT_MOTD="§6§l🏰 REINO DOS CRIAS 🏰\\n§eAdrenaline + QoL §7| §aA resenha nunca morre...§r"
+```
 
 ---
 
-## 7. Troubleshooting
+## 7. Server icon
+
+Durante a instalação, o TUI pergunta se quer configurar um `server-icon.png`:
+- Você fornece uma URL de imagem PNG 64x64
+- O instalador baixa e coloca em `$SERVER_DIR/server-icon.png`
+- Se o download falhar, o servidor funciona sem icon (warning)
+
+Ou via `config.env`:
+```bash
+MINECRAFT_SERVER_ICON_URL="https://exemplo.com/icon.png"
+```
+
+---
+
+## 8. Controle remoto via Discord (opcional)
+
+Se `INSTALL_AGENT=true`, o instalador configura:
+- **crias-agent** (Go) — gRPC em localhost:8473
+- **crias-bot** (Python) — discord.py no Railway
+
+Slash commands: `/mc start|stop|restart|status|players|say|console|health`
+
+Veja [discord-agent/README.md](../discord-agent/README.md) e [discord-bot/README.md](../discord-bot/README.md).
+
+---
+
+## 9. Troubleshooting
 
 ### Servidor não inicia
 
 ```bash
-# 1. Verificar status detalhado
 sudo systemctl status minecraft
-# ou
-sudo systemctl status terraria
-
-# 2. Ver logs
 sudo journalctl -u minecraft -n 50 --no-pager
-# ou
-sudo journalctl -u terraria -n 50 --no-pager
-
-# 3. Health check (Minecraft: porta + RCON; Terraria: só porta)
 sudo /opt/minecraft-server/mc-manager.sh health
-sudo /opt/terraria-server/tt-manager.sh health
 ```
 
 ### OutOfMemoryError (Minecraft)
-
-Heap está em `/opt/minecraft-server/runtime.env`. Para reduzir:
 
 ```bash
 sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware LOW
 sudo systemctl restart minecraft
 ```
 
-### Servidor lento (TPS baixo)
-
-```bash
-# Minecraft: instalar TabTPS (já vem com QoL mods) e ver TPS na tab list
-# Ou via console:
-mcconsole
-# digite: tps
-
-# Verificar hardware profile
-mchw
-tthw
-```
-
 ### Porta em uso
 
 ```bash
 sudo ss -tlnp | grep -E '25565|7777'
-
-# Matar processo se necessário
 sudo fuser -k 25565/tcp
 ```
 
-### Tailscale não conecta
+### Sem internet na VM (VirtualBox)
 
 ```bash
-sudo systemctl status tailscaled
-sudo tailscale status
-sudo tailscale up --force-reauth
+systemctl start NetworkManager
+nmcli device connect enp0s3
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
 ```
-
-Veja [Tailscale.md](Tailscale.md) para mais detalhes.
 
 ### Backup falha
 
 ```bash
-# Verificar se serviço está ativo (backup pula se offline)
-sudo systemctl is-active minecraft
-# ou
-sudo systemctl is-active terraria
-
-# Verificar espaço em disco
-df -h /opt/
-
-# Verificar logs do timer
+sudo systemctl is-active minecraft    # backup pula se servidor offline
+df -h /opt/                            # verifica espaço
 sudo journalctl -u minecraft-backup.service -n 50
-sudo journalctl -u terraria-backup.service -n 50
 ```
-
-### Console interativo não abre (Minecraft)
-
-Requer `mcrcon` instalado via AUR:
-
-```bash
-yay -S mcrcon
-# ou
-git clone https://aur.archlinux.org/mcrcon.git
-cd mcrcon && makepkg -si
-```
-
----
-
-## 8. Modo DRY_RUN
-
-Para testar o installer sem alterar o host:
-
-```bash
-sudo -E NON_INTERACTIVE=true DRY_RUN=true SERVER_TYPE=minecraft ./install.sh
-```
-
-Em DRY_RUN:
-- `pacman -S` é pulado
-- `useradd` é pulado
-- `systemctl` é pulado
-- Downloads são pulados (não consome rede)
-- Templates `.service` são gerados mas não escritos em `/etc/systemd/system/`
-- Variável `DRY_RUN=true` é propagada para subprocessos
-
-Útil para:
-- Validar `config.env` antes de instalar de verdade
-- CI (testes de contrato)
-- Debug de lógica do installer
-
----
-
-## 9. Segurança e operação
-
-Para pontos operacionais que não devem ser esquecidos no dia a dia (firewall, rotação de logs, health checks, limitações de MAC), veja [security.md](security.md).
 
 ---
 
 ## 10. Veja também
 
-- [minecraft/README.md](minecraft/README.md) — Stack Minecraft (comandos, mods, troubleshooting)
-- [minecraft/mods.md](minecraft/mods.md) — Guias dos mods QoL (Chunky, EssentialCommands, etc.)
+- [minecraft/README.md](minecraft/README.md) — Stack Minecraft
 - [terraria/README.md](terraria/README.md) — Stack Terraria
-- [Tailscale.md](Tailscale.md) — Conexão via Tailscale (VPN + Funnel)
+- [hardware-tuning.md](hardware-tuning.md) — Tiers e recalibração
 - [restore.md](restore.md) — Restore de backups
-- [security.md](security.md) — Firewall, logs, hardening
-- [../README.md](../README.md) — README principal (visão geral)
-- [../ROADMAP.md](../ROADMAP.md) — Status e próximos passos
+- [security.md](security.md) — Firewall, SSH, hardening
+- [tui.md](tui.md) — Como o TUI funciona
+- [../CHANGELOG.md](../CHANGELOG.md) — Histórico de versões
+- [../ROADMAP.md](../ROADMAP.md) — Próximos passos

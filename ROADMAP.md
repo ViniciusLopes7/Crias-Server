@@ -5,6 +5,8 @@
 
 ## ✅ Implementado (v1.3.0)
 
+> **Nota**: ISO customizada removida — use a ISO oficial do Arch Linux. ISO customizada é um objetivo futuro quando o projeto tiver maturidade.
+
 ### Branch `main` (única, monorepo)
 
 | Componente | Status | Detalhes |

@@ -11,7 +11,6 @@
 #   4. DRY_RUN pula
 #   5. NON_INTERACTIVE sem flag -> skip (não pergunga)
 #   6. Subcomando 'monitor' referenciado (integração com managers)
-#   7. btop + ncdu presentes em packages.x86_64 (pré-instalados na ISO)
 #   8. manager_cmd_monitor existe em manager-common.sh
 
 set -euo pipefail
@@ -44,9 +43,6 @@ assert_grep 'is_true.*NON_INTERACTIVE' "$ROOT_DIR/install.sh"
 # 6. Subcomando 'monitor' referenciado no install.sh (dica ao usuário)
 assert_grep 'monitor \[cpu|disk|net\]' "$ROOT_DIR/install.sh"
 
-# 7. btop + ncdu em packages.x86_64 (pré-instalados na ISO)
-assert_grep '^btop$' "$ROOT_DIR/archiso-profile/packages.x86_64"
-assert_grep '^ncdu$' "$ROOT_DIR/archiso-profile/packages.x86_64"
 
 # 8. manager_cmd_monitor + cmd_monitor (shared wrapper) em manager-common.sh
 assert_grep '^manager_cmd_monitor\(\)' "$ROOT_DIR/shared/lib/manager-common.sh"

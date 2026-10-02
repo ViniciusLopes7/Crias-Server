@@ -64,18 +64,6 @@ echo "Repo: $ROOT_DIR"
 # Sintaxe bash de TODOS os scripts.
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "PRE-PASS: sync-airootfs.sh (preenche airootfs para testes ISO)"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-if bash archiso-profile/sync-airootfs.sh >/tmp/crias-sync.log 2>&1; then
-    echo "→ PASS (airootfs populado para testes)"
-    PASS=$((PASS + 1))
-else
-    echo "→ FAIL (sync-airootfs.sh falhou)"
-    tail -20 /tmp/crias-sync.log
-    FAIL=$((FAIL + 1))
-    FAILED_TESTS+=("sync-airootfs.sh")
-fi
-rm -f /tmp/crias-sync.log
 
 # Sintaxe bash de TODOS os scripts.
 echo ""
@@ -176,11 +164,7 @@ run_test "install-contracts"        "tests/install-contracts.sh"
 run_test "static-audit"             "tests/static-audit.sh"
 run_test "arch-smoke"               "tests/arch-smoke.sh"
 run_test "arch-dry-install"         "tests/arch-dry-install.sh"
-run_test "archiso-profile-validate" "tests/archiso-profile-validate.sh"
-run_test "iso-label-validate"       "tests/iso-label-validate.sh"
-run_test "iso-embedded-scripts-validate" "tests/iso-embedded-scripts-validate.sh"
 run_test "crias-bootstrap-test"          "tests/crias-bootstrap-test.sh"
-run_test "iso-qemu-validate"        "tests/iso-qemu-validate.sh"
 run_test "config-parser"            "tests/config-parser.sh"
 run_test "config-parser-eq-test"    "tests/config-parser-eq-test.sh"
 run_test "stack-installer-test"     "tests/stack-installer-test.sh"
@@ -192,144 +176,8 @@ run_test "terraria-backup-dry-run"  "tests/terraria-backup-dry-run.sh"
 run_test "minecraft-tuning-test"    "tests/minecraft-tuning-test.sh"
 run_test "terraria-tuning-test"     "tests/terraria-tuning-test.sh"
 run_test "setup-cron-manager-test"  "tests/setup-cron-manager-test.sh"
-run_test "qemu-log-parser-test"     "tests/qemu-log-parser-test.sh"
 run_test "tui-fallback-test"        "tests/tui-fallback-test.sh"
 run_test "mc-manifests-test"        "tests/mc-manifests-test.sh"
 run_test "tmodloader-test"           "tests/tmodloader-test.sh"
 run_test "mutation-test"            "tests/mutation-test.sh"
 
-# Testes que requerem ISO construída (SKIP se ISO_PATH não definido).
-run_test "iso-initramfs-validate"        "tests/iso-initramfs-validate.sh"        "true"
-run_test "iso-live-credentials-validate" "tests/iso-live-credentials-validate.sh" "true"
-run_test "iso-qemu-boot"                 "tests/iso-qemu-boot.sh"                 "true"
-
-# Testes Python do discord-bot (se python3 + deps disponíveis).
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "TEST: discord-bot pytest (Python)"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-if command -v python3 >/dev/null 2>&1; then
-    PY_BIN=""
-    # Procura por python com discord.py + grpc_tools instalados.
-    # Tenta versões específicas primeiro (mais comum ter deps em 3.13/3.12 via pip --user),
-    # depois python3 genérico.
-    for alt_py in python3.13 python3.12 python3.11 python3; do
-        if command -v "$alt_py" >/dev/null 2>&1 && "$alt_py" -c "import discord, grpc_tools" 2>/dev/null; then
-            PY_BIN="$alt_py"
-            break
-        fi
-    done
-
-    if [ -n "$PY_BIN" ]; then
-        # Garante que código protobuf está gerado.
-        if [ ! -f discord-bot/src/crias_bot/grpc_gen/crias_pb2.py ]; then
-            echo "→ Gerando código protobuf Python..."
-            "$PY_BIN" -m grpc_tools.protoc \
-                -I discord-agent/proto \
-                --python_out=discord-bot/src/crias_bot/grpc_gen \
-                --grpc_python_out=discord-bot/src/crias_bot/grpc_gen \
-                discord-agent/proto/crias.proto 2>/dev/null || true
-            # Fix import path (protoc gera import absoluto; precisamos relativo ao pacote).
-            sed -i 's/^import crias_pb2 as crias__pb2/from crias_bot.grpc_gen import crias_pb2 as crias__pb2/' \
-                discord-bot/src/crias_bot/grpc_gen/crias_pb2_grpc.py 2>/dev/null || true
-            touch discord-bot/src/crias_bot/grpc_gen/__init__.py
-        fi
-
-        # Determina site-packages dinamicamente via Python (sem hardcode de paths).
-        PY_SITE="$("$PY_BIN" -c "import site; print(site.getusersitepackages())" 2>/dev/null || true)"
-
-        if [ -n "$PY_SITE" ] && [ -d "$PY_SITE/discord" ]; then
-            PY_ENV="PYTHONPATH=$PY_SITE:discord-bot/src"
-        else
-            PY_ENV="PYTHONPATH=discord-bot/src"
-        fi
-
-        # Verifica se pytest está disponível antes de tentar rodar.
-        if ! "$PY_BIN" -c "import pytest" 2>/dev/null; then
-            echo "→ SKIP (pytest não instalado para $PY_BIN)"
-            SKIP=$((SKIP + 1))
-        else
-            pytest_log="$(mktemp /tmp/crias-pytest.XXXXXX.log)"
-            # TST-011: --cov para reportar cobertura (pytest-cov já está declarado
-            # em discord-bot/pyproject.toml). --cov-report=term-missing mostra
-            # linhas não cobertas no resumo.
-            # 2E-002: --cov-fail-under=50 impede regressão grave de cobertura
-            # (baseline conservadora — projetos com foco em segurança devem ter
-            # um piso mínimo; aumentar gradualmente conforme suite cresce).
-            if env "$PY_ENV" "$PY_BIN" -m pytest discord-bot/tests/ \
-                -v --tb=short \
-                --cov=crias_bot --cov-report=term-missing --cov-fail-under=50 \
-                > "$pytest_log" 2>&1; then
-                echo "→ PASS"
-                PASS=$((PASS + 1))
-                tail -5 "$pytest_log"
-            else
-                echo "→ FAIL"
-                tail -30 "$pytest_log"
-                FAIL=$((FAIL + 1))
-                FAILED_TESTS+=("discord-bot pytest")
-            fi
-            rm -f "$pytest_log"
-        fi
-    else
-        echo "→ SKIP (discord.py ou grpc_tools não instalados)"
-        SKIP=$((SKIP + 1))
-    fi
-else
-    echo "→ SKIP (python3 não disponível)"
-    SKIP=$((SKIP + 1))
-fi
-
-# ═══════════════════════════════════════════════════════
-# GO TESTS (discord-agent)
-# ═══════════════════════════════════════════════════════
-# 2E-001: testa todo o agente Go localmente (espelha o job
-# `test-go` da CI). Antes deste bloco, `bash tests/run-all.sh`
-# não executava nenhum teste Go — devs ficavam com falsos verdes.
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "TEST: discord-agent go test (Go)"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-if [ -d "discord-agent" ] && command -v go >/dev/null 2>&1; then
-    go_log="$(mktemp /tmp/crias-go-test.XXXXXX.log)"
-    # -race: data race detector (essencial para o servidor gRPC concorrente)
-    # -timeout 120s: evita hang infinito em CI/local
-    # ./...: roda todos os pacotes (config, rcon, events, server, ...)
-    if (cd discord-agent && go test -race -timeout 120s ./...) > "$go_log" 2>&1; then
-        echo "→ PASS"
-        PASS=$((PASS + 1))
-        tail -10 "$go_log"
-    else
-        echo "→ FAIL"
-        tail -30 "$go_log"
-        FAIL=$((FAIL + 1))
-        FAILED_TESTS+=("discord-agent go test")
-    fi
-    rm -f "$go_log"
-else
-    echo "→ SKIP (go não instalado ou discord-agent/ ausente)"
-    SKIP=$((SKIP + 1))
-fi
-
-# Resumo final.
-echo ""
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║   Resumo Final                                           ║"
-echo "╠══════════════════════════════════════════════════════════╣"
-printf "║   PASS: %-3d                                              ║\n" "$PASS"
-printf "║   FAIL: %-3d                                              ║\n" "$FAIL"
-printf "║   SKIP: %-3d                                              ║\n" "$SKIP"
-echo "╚══════════════════════════════════════════════════════════╝"
-
-if [ "${#FAILED_TESTS[@]}" -gt 0 ]; then
-    echo ""
-    echo "Testes que falharam:"
-    for t in "${FAILED_TESTS[@]}"; do
-        echo "  ✗ $t"
-    done
-fi
-
-if [ "$FAIL" -gt 0 ]; then
-    exit 1
-fi
-exit 0

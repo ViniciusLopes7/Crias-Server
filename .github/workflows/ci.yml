@@ -5,7 +5,6 @@
 #   lint-shell ─┐
 #   lint-go ────┤
 #   lint-python ┤
-#   test-shell ─┤──→ build-iso ────┐
 #   test-go ─────┤──→ build-agent ─┤──→ release (consolida todos artefatos)
 #   test-python ─┘──→ build-bot ───┘
 #
@@ -26,7 +25,6 @@ on:
   workflow_dispatch:
     inputs:
       create_release:
-        description: 'Criar release no final (consolida ISO + agent + bot)'
         type: boolean
         default: false
 
@@ -171,7 +169,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run shell test suite
-        # Roda bateria bash (sem testes ISO que precisam de ISO real).
         # install-contracts e arch-dry-install rodam em container Arch separado.
         run: |
           bash tests/quick-script-tests.sh
@@ -292,376 +289,7 @@ jobs:
         run: PYTHONPATH=src python -m pytest tests/ -v --tb=short --cov=crias_bot --cov-report=term-missing --cov-fail-under=50
 
   # ═══════════════════════════════════════════════════════
-  # BUILD (3 jobs paralelos: ISO, agent, bot) — só em main ou tag
   # ═══════════════════════════════════════════════════════
-
-  build-iso:
-    name: Build ISO
-    needs: [lint-shell, test-shell, test-shell-arch]
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-22.04
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    container:
-      image: archlinux:base-devel
-      options: --privileged --security-opt seccomp=unconfined
-    steps:
-      - name: Install dependencies
-        run: |
-          # Se keyring falhar, melhor falhar cedo do que construir ISO com
-          # pacotes nao-verificados.
-          pacman-key --init
-          pacman-key --populate archlinux
-          pacman -Syu --noconfirm --needed archiso git grub
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Sync bootstrap into airootfs (embed bootstrap in ISO)
-        # Popula archiso-profile/airootfs/usr/local/bin/crias-bootstrap a
-        # partir de crias-bootstrap.sh (repo root). O bootstrap baixa a
-        # release do GitHub com verificação SHA256 ao rodar (pós-archinstall).
-        # Ver archiso-profile/sync-airootfs.sh e archiso-profile/README.md.
-        run: |
-          bash archiso-profile/sync-airootfs.sh
-          echo "=== Conteúdo embutido na ISO (airootfs/usr/local/bin/) ==="
-          find archiso-profile/airootfs/usr/local/bin/ -type f | sort
-          echo "=== Manifesto ==="
-          cat archiso-profile/airootfs/opt/crias-bootstrap.version 2>/dev/null || true
-
-      - name: Validate embedded scripts
-        run: bash tests/iso-embedded-scripts-validate.sh
-
-      - name: Build ISO
-        run: |
-          mkdir -p out
-          rm -rf /tmp/archiso-tmp
-          mkarchiso -v -w /tmp/archiso-tmp -o out/ archiso-profile/
-
-      - name: Generate checksums
-        run: |
-          cd out
-          sha256sum *.iso > sha256sums-iso.txt
-
-      - name: Upload ISO artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: artifact-iso
-          path: |
-            out/*.iso
-            out/sha256sums-iso.txt
-          retention-days: 7
-
-  test-iso-qemu:
-    name: Test ISO (QEMU boot)
-    needs: [build-iso]
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-22.04
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Download ISO artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: artifact-iso
-          path: iso-download/
-
-      - name: Find ISO file
-        id: find_iso
-        run: |
-          ISO_FILE="$(find iso-download/ -name '*.iso' -type f | head -1)"
-          if [ -z "$ISO_FILE" ]; then
-            echo "FAIL: nenhuma ISO encontrada em iso-download/" >&2
-            ls -la iso-download/ >&2
-            exit 1
-          fi
-          echo "ISO encontrada: $ISO_FILE"
-          ls -lh "$ISO_FILE"
-          echo "iso_path=$ISO_FILE" >> "$GITHUB_OUTPUT"
-
-      - name: Validate ISO 9660 format
-        run: |
-          ISO_FILE="${{ steps.find_iso.outputs.iso_path }}"
-          # Verifica magic bytes de ISO 9660
-          file "$ISO_FILE"
-          if ! file "$ISO_FILE" | grep -qi 'ISO 9660'; then
-            echo "FAIL: arquivo não é ISO 9660 válido" >&2
-            exit 1
-          fi
-          # Verifica El Torito boot record no setor 17 da ISO 9660.
-          # Estrutura ISO 9660:
-          #   setor 16 (offset 32768): Primary Volume Descriptor (tipo 1)
-          #   setor 17 (offset 34816): El Torito Boot Record (tipo 0)
-          #   setor 18 (offset 36864): VD Set Terminator (tipo 255)
-          # O Boot Record tem a string "EL TORITO SPECIFICATION" no offset 7
-          # dentro do setor.
-          #
-          # IMPORTANTE: NÃO usar EL_TORITO="$(dd ...)" + echo | grep, porque:
-          #   1. Offset 32769 (setor 16+1) aponta para o PVD, não o Boot Record.
-          #      O offset correto é o setor 17 (skip=17 com bs=2048).
-          #   2. bash $(...) stripa null bytes de output binário, corrompendo
-          #      a comparação (warning: "ignored null byte in input").
-          # Solução: pipe direto dd | grep -a (grep -a trata binário como texto).
-          if dd if="$ISO_FILE" bs=2048 skip=17 count=1 2>/dev/null | grep -aq 'EL TORITO SPECIFICATION'; then
-            echo "OK: El Torito boot record presente (ISO é bootável)"
-          else
-            echo "FAIL: El Torito boot record não encontrado no setor 17" >&2
-            echo "  (dump do setor 17 para debug:)" >&2
-            dd if="$ISO_FILE" bs=2048 skip=17 count=1 2>/dev/null | od -c | head -4 >&2
-            exit 1
-          fi
-
-      - name: Install QEMU and OVMF (UEFI firmware)
-        run: |
-          sudo apt-get update
-          # libarchive-tools fornece o binário bsdtar (no Ubuntu/Debian o
-          # pacote não se chama "bsdtar" — é "libarchive-tools").
-          sudo apt-get install -y qemu-system-x86 qemu-utils ovmf libarchive-tools
-          echo "=== QEMU version ==="
-          qemu-system-x86_64 --version | head -2
-          echo "=== OVMF firmware ==="
-          ls -la /usr/share/OVMF/ 2>/dev/null || ls -la /usr/share/ovmf/ 2>/dev/null || true
-
-      - name: Enable KVM for faster QEMU boot
-        # GitHub Actions ubuntu-22.04 runners têm /dev/kvm disponível.
-        # KVM acelera o boot de ~10 min (emulação pura) para ~30s (virtualização).
-        # Sem KVM, o kernel pode não completar boot em 5 min.
-        id: kvm
-        run: |
-          if [ -e /dev/kvm ]; then
-            sudo chmod 666 /dev/kvm
-            echo "✓ KVM disponível (/dev/kvm acessível)"
-            echo "has_kvm=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "⚠ KVM não disponível — boot será lento (emulação TCG)"
-            echo "has_kvm=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Extract kernel and initramfs from ISO for QEMU -kernel boot
-        # Extraí vmlinuz e initramfs da ISO para boot via QEMU -kernel.
-        # Vantagem: podemos adicionar console=ttyS0,115200 via -append sem
-        # afetar a ISO de produção (que não tem console=ttyS0 para evitar
-        # loop de serial-getty em hardware real).
-        id: extract_kernel
-        run: |
-          ISO_FILE="${{ steps.find_iso.outputs.iso_path }}"
-          WORK_DIR="/tmp/iso-extract"
-          mkdir -p "$WORK_DIR"
-
-          # bsdtar extrai arquivos da ISO sem montar
-          kernel_rel="$(bsdtar -tf "$ISO_FILE" | grep -E '.*/boot/x86_64/vmlinuz-linux$' | head -n 1 || true)"
-          initramfs_rel="$(bsdtar -tf "$ISO_FILE" | grep -E '.*/boot/x86_64/initramfs-linux\.img$' | head -n 1 || true)"
-
-          if [ -z "$kernel_rel" ] || [ -z "$initramfs_rel" ]; then
-            echo "FAIL: kernel ou initramfs não encontrados na ISO" >&2
-            exit 1
-          fi
-
-          echo "Extraindo: $kernel_rel"
-          echo "Extraindo: $initramfs_rel"
-          bsdtar -xf "$ISO_FILE" -C "$WORK_DIR" "$kernel_rel" "$initramfs_rel"
-
-          KERNEL_FILE="$WORK_DIR/$kernel_rel"
-          INITRAMFS_FILE="$WORK_DIR/$initramfs_rel"
-
-          # Detecta install_dir (arch) e iso_label do profiledef
-          install_dir="${kernel_rel%/boot/x86_64/vmlinuz-linux}"
-          install_dir="${install_dir#/}"
-          echo "install_dir=$install_dir" >> "$GITHUB_OUTPUT"
-          echo "kernel_path=$KERNEL_FILE" >> "$GITHUB_OUTPUT"
-          echo "initramfs_path=$INITRAMFS_FILE" >> "$GITHUB_OUTPUT"
-
-          # Lê iso_label da ISO (volume label)
-          ISO_LABEL="$(file "$ISO_FILE" | grep -oE "'[^']+ '" | head -1 | tr -d "' ")"
-          if [ -z "$ISO_LABEL" ]; then
-            # Fallback: label padrão do profiledef.sh
-            ISO_LABEL="CRIAS00000"
-          fi
-          echo "iso_label=$ISO_LABEL" >> "$GITHUB_OUTPUT"
-          echo "Kernel: $KERNEL_FILE"
-          echo "Initramfs: $INITRAMFS_FILE"
-          echo "install_dir: $install_dir"
-          echo "iso_label: $ISO_LABEL"
-
-      - name: Boot ISO in QEMU (kernel direct boot) — complete validation
-        run: |
-          ISO_FILE="${{ steps.find_iso.outputs.iso_path }}"
-          KERNEL_FILE="${{ steps.extract_kernel.outputs.kernel_path }}"
-          INITRAMFS_FILE="${{ steps.extract_kernel.outputs.initramfs_path }}"
-          INSTALL_DIR="${{ steps.extract_kernel.outputs.install_dir }}"
-          ISO_LABEL="${{ steps.extract_kernel.outputs.iso_label }}"
-          HAS_KVM="${{ steps.kvm.outputs.has_kvm }}"
-
-          echo "=== QEMU kernel direct boot (420s / 7 min complete validation) ==="
-          echo "KVM: $HAS_KVM"
-          echo "Kernel: $KERNEL_FILE"
-          echo "Initramfs: $INITRAMFS_FILE"
-          echo "install_dir: $INSTALL_DIR"
-          echo "iso_label: $ISO_LABEL"
-          #
-          # Boot via QEMU -kernel/-initrd/-append em vez de -cdrom/-boot d.
-          # Vantagem: podemos injetar console=ttyS0,115200 via -append sem
-          # afetar a ISO de produção (que usa console=tty0 apenas para evitar
-          # loop de serial-getty em hardware real).
-          #
-          # O kernel e initramfs são os mesmos da ISO (extraídos com bsdtar).
-          # O -cdrom anexa a ISO para que o archiso hooks encontrem o squashfs.
-          #
-          # Kernel cmdline:
-          #   archisobasedir=arch archisolabel=<label> — archiso params
-          #   edd=off                              — pula EDD BIOS probing
-          #   console=ttyS0,115200                 — serial para QEMU capturar
-          #   console=tty0                         — VGA também (não causa loop
-          #                                         porque QEMU tem serial real)
-          #   earlyprintk=serial,ttyS0,115200      — mensagens early do kernel
-          #   loglevel=8                           — verbosity máxima
-          #
-          # NOTA: console=ttyS0 aqui NÃO causa o loop serial-getty porque:
-          #   1. É injetado apenas no QEMU (via -append), não na ISO de produção
-          #   2. QEMU -serial mon:stdio fornece um terminal serial real,
-          #      então agetty não falha
-          #   3. Na ISO de produção (hardware real), console=ttyS0 não está
-          #      presente → sem serial-getty → sem loop
-          #
-          KVM_ARGS=""
-          if [ "$HAS_KVM" = "true" ]; then
-            KVM_ARGS="-enable-kvm -cpu host"
-          else
-            KVM_ARGS="-cpu max"
-          fi
-
-          # tty0 first = comportamento de produção (VGA primário).
-          # ttyS0 last = /dev/console; todos os consoles registrados recebem output,
-          # então o wizard de Initial Setup aparece no serial também.
-          KERNEL_CMDLINE="archisobasedir=$INSTALL_DIR archisolabel=$ISO_LABEL edd=off console=tty0 console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 loglevel=8"
-          echo "Kernel cmdline: $KERNEL_CMDLINE"
-          echo "QEMU args: $KVM_ARGS -smp 2 -m 4096"
-
-          qemu_log="$(mktemp /tmp/crias-qemu-kernel-XXXXXX.log)"
-          timeout 180 qemu-system-x86_64 \
-            $KVM_ARGS \
-            -smp 2 \
-            -m 4096 \
-            -kernel "$KERNEL_FILE" \
-            -initrd "$INITRAMFS_FILE" \
-            -append "$KERNEL_CMDLINE" \
-            -cdrom "$ISO_FILE" \
-            -nographic \
-            -no-reboot \
-            -serial mon:stdio \
-            </dev/null >"$qemu_log" 2>&1 || true
-
-          echo "=== Log QEMU — primeiras 50 linhas ==="
-          head -50 "$qemu_log"
-          echo ""
-          echo "=== Log QEMU — últimas 100 linhas ==="
-          tail -100 "$qemu_log"
-          echo ""
-          echo "=== Tamanho do log: $(wc -l < "$qemu_log") linhas ==="
-
-          # Validação COMPLETA: kernel deve bootar, archiso carregar, e chegar ao login.
-          PASS=false
-          BOOT_STAGE=""
-
-          # 1. Kernel bootou?
-          if grep -qi 'Linux version' "$qemu_log"; then
-            echo "✓ OK: kernel Linux inicializou"
-            grep -oE 'Linux version [0-9.]+[^ ]*' "$qemu_log" | head -1
-            BOOT_STAGE="kernel-booted"
-          else
-            echo "✗ FAIL: kernel Linux não inicializou em 420s" >&2
-            BOOT_STAGE="kernel-NOT-booted"
-          fi
-
-          # 2. Falhas criticas no log? (kernel panic, emergency mode, mount failure)
-          if grep -qiE 'Kernel panic|emergency mode|Failed to start Switch Root|Failed to mount|Unable to find device with label' "$qemu_log"; then
-            echo "✗ FAIL: marcador de falha de boot encontrado no log" >&2
-            grep -iE 'Kernel panic|emergency mode|Failed to start Switch Root|Failed to mount|Unable to find device with label' "$qemu_log" | head -5 >&2
-            BOOT_STAGE="$BOOT_STAGE+BOOT-FAILURE"
-          fi
-
-          # 3. archiso hooks carregaram?
-          if grep -qi 'archiso' "$qemu_log"; then
-            echo "✓ OK: archiso hooks carregados"
-            BOOT_STAGE="$BOOT_STAGE+archiso"
-          else
-            echo "✗ FAIL: archiso não encontrado no log" >&2
-          fi
-
-          # 4. Boot complete? O wizard de firstboot aparece DEPOIS do boot completo.
-          # Markers: 'Welcome to Arch Linux', 'Initial Setup', 'Please configure',
-          # 'archiso login:', ou 'Reached target .*Multi-User'.
-          if grep -qiE 'Welcome to Arch Linux|Initial Setup|Please configure the system|archiso login:|Reached target .*Multi-User' "$qemu_log"; then
-            echo "✓ OK: boot complete marker reached"
-            grep -iE 'Welcome to Arch Linux|Initial Setup|Please configure the system|archiso login:|Reached target .*Multi-User' "$qemu_log" | head -3
-            BOOT_STAGE="$BOOT_STAGE+boot-complete"
-            PASS=true
-          else
-            echo "✗ FAIL: boot complete marker não reached em 180s" >&2
-            echo "  Últimas 30 linhas do log:" >&2
-            tail -30 "$qemu_log" >&2
-          fi
-
-          echo ""
-          echo "Boot stage: $BOOT_STAGE"
-          rm -f "$qemu_log"
-          if [ "$PASS" != "true" ]; then
-            exit 1
-          fi
-
-      - name: Validate embedded installer is accessible in live ISO
-        run: |
-          echo "=== Validação de que instalador embutido está na ISO ==="
-          ISO_FILE="${{ steps.find_iso.outputs.iso_path }}"
-          # Monta ISO (read-only) e verifica que /opt/crias-server/install.sh existe.
-          # Não podemos bootar e interagir facilmente, mas podemos verificar que
-          # o airootfs.squfs tem o arquivo examinando o conteúdo da ISO.
-          mkdir -p /tmp/iso-mount
-          sudo mount -o loop,ro "$ISO_FILE" /tmp/iso-mount || true
-
-          echo "=== Conteúdo raiz da ISO ==="
-          ls -la /tmp/iso-mount/ || true
-
-          # Verifica que o diretório arch/ existe (install_dir do profiledef.sh)
-          if [ -d /tmp/iso-mount/arch/ ]; then
-            echo "✓ OK: diretório arch/ (install_dir) presente na ISO"
-            ls /tmp/iso-mount/arch/
-          else
-            echo "AVISO: diretório arch/ não encontrado na ISO montada" >&2
-            ls -la /tmp/iso-mount/ >&2
-          fi
-
-          # Verifica presença do vmlinuz e initramfs (boot mínimo)
-          if find /tmp/iso-mount/ -name 'vmlinuz-linux' 2>/dev/null | grep -q .; then
-            echo "✓ OK: vmlinuz-linux presente na ISO"
-          else
-            echo "✗ FAIL: vmlinuz-linux não encontrado na ISO" >&2
-            sudo umount /tmp/iso-mount 2>/dev/null || true
-            exit 1
-          fi
-
-          if find /tmp/iso-mount/ -name 'initramfs-linux.img' 2>/dev/null | grep -q .; then
-            echo "✓ OK: initramfs-linux.img presente na ISO"
-          else
-            echo "✗ FAIL: initramfs-linux.img não encontrado na ISO" >&2
-            sudo umount /tmp/iso-mount 2>/dev/null || true
-            exit 1
-          fi
-
-          sudo umount /tmp/iso-mount 2>/dev/null || true
-          echo "=== Validação de estrutura da ISO: OK ==="
-
-      - name: Validate ISO live credentials and initramfs
-        run: |
-          echo "=== Validação de credenciais e initramfs da ISO ==="
-          ISO_FILE="${{ steps.find_iso.outputs.iso_path }}"
-          ISO_PATH="$ISO_FILE" bash tests/iso-live-credentials-validate.sh
-          ISO_PATH="$ISO_FILE" bash tests/iso-initramfs-validate.sh
 
   build-agent:
     name: Build Agent (${{ matrix.goos }}/${{ matrix.goarch }})
@@ -763,7 +391,7 @@ jobs:
 
   release:
     name: Release (consolidada)
-    needs: [build-iso, test-iso-qemu, build-agent, build-bot]
+    needs: [build-agent, build-bot]
     if: |
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.create_release)
@@ -800,9 +428,6 @@ jobs:
           echo "=== Validando artifacts obrigatorios ==="
           missing=0
 
-          # ISO (se build-iso rodou)
-          if ! ls artifacts/*.iso >/dev/null 2>&1; then
-            echo "WARN: nenhuma ISO encontrada (build-iso pode ter sido skipado)"
           fi
 
           # Agent binaries (se build-agent rodou)
@@ -836,12 +461,7 @@ jobs:
 
       - name: Prepare release assets
         run: |
-          mkdir -p release-assets/iso release-assets/agent release-assets/bot release-assets/src
 
-          # ISO + checksum
-          if [ -f "artifacts/$(ls artifacts/*.iso 2>/dev/null | head -1 | xargs basename)" ]; then
-            mv artifacts/*.iso release-assets/iso/ 2>/dev/null || true
-            mv artifacts/sha256sums-iso.txt release-assets/iso/ 2>/dev/null || true
           fi
 
           # Agent binaries + checksums
@@ -851,11 +471,9 @@ jobs:
           mv artifacts/crias-bot.zip release-assets/bot/ 2>/dev/null || true
 
           # Source archives (full + slim)
-          # full: repo completo; slim: sem archiso-profile/, docs/, .github/
           mkdir -p release-assets/_pkg/full release-assets/_pkg/slim
           git archive --format=tar HEAD | tar -xf - -C release-assets/_pkg/full
           cp -a release-assets/_pkg/full/. release-assets/_pkg/slim/
-          rm -rf release-assets/_pkg/slim/archiso-profile
           rm -rf release-assets/_pkg/slim/docs
           rm -rf release-assets/_pkg/slim/.github/workflows
           (cd release-assets/_pkg/full && zip -qr ../../crias-server-full.zip .)
@@ -864,7 +482,6 @@ jobs:
           # Global checksum. Strip one subdir level so sha256sum -c works
           # with flattened GitHub release assets.
           cd release-assets
-          find . -type f \( -name '*.iso' -o -name '*.zip' -o -name 'crias-agent-*' -o -name '*.tar' \) \
             -exec sha256sum {} \; | sed 's|  \./[^/]*/|  |' > sha256sums.txt
           cat sha256sums.txt
 
@@ -901,8 +518,6 @@ jobs:
         run: |
           # CICD-001: todos os usos da tag via env var
           assets=()
-          # ISO
-          for f in release-assets/iso/*; do
             [ -f "$f" ] && assets+=("$f")
           done
           # Agent binaries
@@ -939,6 +554,5 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
-            release-assets/*.iso
             release-assets/*.zip
             release-assets/agent/crias-agent-*
