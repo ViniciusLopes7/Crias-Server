@@ -17,14 +17,17 @@ O fluxo é:
 
 ```bash
 # 1. Boot da ISO → root auto-loga no tty1 (drop-in de autologin)
-# 2. Instalar o Arch no disco (interativo):
+# 2. (se necessário) arrumar rede:
+#     systemctl start NetworkManager
+#     ping -c 3 github.com
+# 3. Instalar o Arch no disco (interativo):
 archinstall
-# 3. Baixar + extrair o Crias-Server da release do GitHub (com SHA256):
+# 4. Baixar + extrair o Crias-Server da release do GitHub (com SHA256):
 crias-bootstrap
-# 4. Reboot no sistema instalado:
+# 5. Reboot no sistema instalado:
 reboot
-# 5. (após reboot) Login com o usuário criado no archinstall
-# 6. Rodar o instalador:
+# 6. (após reboot) Login com o usuário criado no archinstall
+# 7. Rodar o instalador:
 sudo /opt/crias-server/install.sh
 ```
 

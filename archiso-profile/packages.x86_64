@@ -12,6 +12,7 @@ dosfstools
 e2fsprogs
 squashfs-tools
 arch-install-scripts
+archinstall
 edk2-shell
 memtest86+
 usbutils
