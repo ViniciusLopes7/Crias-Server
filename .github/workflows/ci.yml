@@ -476,9 +476,9 @@ jobs:
           (cd release-assets/_pkg/full && zip -qr ../../crias-server-full.zip .)
           (cd release-assets/_pkg/slim && zip -qr ../../crias-server-slim.zip .)
 
-          # Global checksum
+          # Global checksum (não inclui sha256sums.txt no find — é o arquivo de saída)
           cd release-assets
-          find . -type f \( -name '*.zip' -o -name 'crias-agent-*' -o -name 'sha256sums.txt' \) \
+          find . -type f \( -name '*.zip' -o -name 'crias-agent-*' \) \
             -exec sha256sum {} \; | sed 's|  \./[^/]*/|  |' > sha256sums.txt
           cat sha256sums.txt
 
