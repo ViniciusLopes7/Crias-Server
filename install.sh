@@ -969,23 +969,6 @@ cleanup_other_stack_if_needed() {
 install_ssh_if_enabled() {
     local ssh_user="${SSH_USER:-crias}"
 
-    # Se SSH_USER não setado e modo interativo, pergunta com validação.
-    if [ -z "${SSH_USER:-}" ] && ! is_true "$NON_INTERACTIVE"; then
-        local reserved_users="root minecraft terraria crias-agent nobody daemon bin sys mail ftp http uuidd dbus nscd"
-        while true; do
-            tui_input ssh_user "Usuario para SSH (acesso ao servidor)" "$ssh_user"
-            if ! [[ "$ssh_user" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
-                print_error "Nome invalido. Use letras minuscululas, numeros, _ e -. Comece com letra ou _."
-                continue
-            fi
-            if echo "$reserved_users" | grep -qw "$ssh_user"; then
-                print_error "Nome '$ssh_user' reservado. Escolha outro."
-                continue
-            fi
-            break
-        done
-    fi
-
     # Resolve config interativa se INSTALL_SSH estiver vazio.
     if [ -z "$INSTALL_SSH" ]; then
         if is_true "$NON_INTERACTIVE"; then
@@ -1001,6 +984,23 @@ install_ssh_if_enabled() {
 
     if ! is_true "$INSTALL_SSH"; then
         return 0
+    fi
+
+    # Só pergunta o nome do usuário se SSH foi confirmado.
+    if [ -z "${SSH_USER:-}" ] && ! is_true "$NON_INTERACTIVE"; then
+        local reserved_users="root minecraft terraria crias-agent nobody daemon bin sys mail ftp http uuidd dbus nscd"
+        while true; do
+            tui_input ssh_user "Usuario para SSH (acesso ao servidor)" "$ssh_user"
+            if ! [[ "$ssh_user" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+                print_error "Nome invalido. Use letras minuscululas, numeros, _ e -. Comece com letra ou _."
+                continue
+            fi
+            if echo "$reserved_users" | grep -qw "$ssh_user"; then
+                print_error "Nome '$ssh_user' reservado. Escolha outro."
+                continue
+            fi
+            break
+        done
     fi
 
     if is_true "$DRY_RUN"; then
@@ -1131,7 +1131,6 @@ EOF
 # o subcomando `monitor` dos managers funcione pós-reboot.
 # ---------------------------------------------------------------------------
 install_monitor_tools_if_enabled() {
-    deploy_crias_tui
     if is_true "$DRY_RUN"; then
         print_step "[DRY_RUN] Pulando instalação de ferramentas de monitoramento."
         return 0

@@ -190,10 +190,15 @@ crias_bootstrap_main() {
         return 1
     fi
 
-    # Instala jq e unzip se faltando (necessários para parsear JSON + extrair zip)
+    # Reconecta stdin ao terminal (curl|bash não fornece TTY em stdin,
+    # fazendo tui_available() falhar e todos os prompts auto-aceitarem defaults).
+    exec </dev/tty 2>/dev/null || true
+
+    # Instala jq, unzip e gum se faltando
     local missing_deps=""
     command -v jq >/dev/null 2>&1 || missing_deps="$missing_deps jq"
     command -v unzip >/dev/null 2>&1 || missing_deps="$missing_deps unzip"
+    command -v gum >/dev/null 2>&1 || missing_deps="$missing_deps gum"
     if [ -n "$missing_deps" ]; then
         log "Instalando dependências:$missing_deps ..."
         if [ "$(id -u)" -eq 0 ]; then
