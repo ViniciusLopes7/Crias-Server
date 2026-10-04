@@ -229,19 +229,18 @@ crias_bootstrap_main() {
     ok "Arquivos extraídos em $install_dir"
 
     if [ "$target" = "/mnt" ]; then
-        # Live ISO pós-archinstall: NÃO rodar install.sh em chroot
-        # (systemctl start falha em chroot; o usuário roda install.sh
-        # no host real após reboot, onde systemd funciona).
+        # Live ISO com /mnt montado (archinstall ainda em andamento).
+        # Não roda install.sh aqui — o usuário deve rebootar primeiro
+        # e rodar o curl no sistema instalado.
         echo ""
-        ok "Repo Crias-Server extraído em /mnt/opt/crias-server/ (novo sistema)."
-        log "Próximos passos:"
-        log "  1. reboot"
-        log "  2. Faça login com o usuário criado no archinstall"
-        log "  3. sudo /opt/crias-server/install.sh"
+        ok "Repo extraído em /mnt/opt/crias-server/."
+        warn "Você está na live ISO com /mnt montado."
+        warn "Reboot primeiro, faça login, e rode:"
+        warn "  curl -fsSL https://raw.githubusercontent.com/$CRIAS_REPO/main/crias-bootstrap.sh | sudo bash"
         return 0
     fi
 
-    # Host instalado: roda install.sh direto (systemd funcional).
+    # Host instalado (pós-reboot): roda install.sh direto.
     log "Rodando install.sh no host atual..."
     if [ "$(id -u)" -ne 0 ]; then
         sudo "$install_dir/install.sh"
@@ -251,8 +250,9 @@ crias_bootstrap_main() {
 }
 
 # Só roda a main quando executado (não quando sourceado por testes).
-# set -euo pipefail fica dentro do guard para não poluir o shell que sourceia.
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+# `return 0` só funciona em contexto de source; falha quando executado/piped.
+# Funciona com: ./crias-bootstrap.sh, bash crias-bootstrap.sh, curl ... | bash
+if ! (return 0 2>/dev/null); then
     set -euo pipefail
     crias_bootstrap_main "$@"
 fi
