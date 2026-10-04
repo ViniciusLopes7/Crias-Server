@@ -172,8 +172,28 @@ crias_bootstrap_main() {
     log "Install dir: $install_dir"
 
     if ! command -v curl >/dev/null 2>&1; then
-        err "curl não encontrado. Instale: pacman -S curl"
+        err "curl não encontrado. Instale: sudo pacman -S curl"
         return 1
+    fi
+
+    # Instala jq e unzip se faltando (necessários para parsear JSON + extrair zip)
+    local missing_deps=""
+    command -v jq >/dev/null 2>&1 || missing_deps="$missing_deps jq"
+    command -v unzip >/dev/null 2>&1 || missing_deps="$missing_deps unzip"
+    if [ -n "$missing_deps" ]; then
+        log "Instalando dependências:$missing_deps ..."
+        if [ "$(id -u)" -eq 0 ]; then
+            pacman -S --needed --noconfirm $missing_deps >/dev/null 2>&1 || {
+                err "Falha ao instalar:$missing_deps. Rode: sudo pacman -S$missing_deps"
+                return 1
+            }
+        else
+            sudo pacman -S --needed --noconfirm $missing_deps >/dev/null 2>&1 || {
+                err "Falha ao instalar:$missing_deps. Rode: sudo pacman -S$missing_deps"
+                return 1
+            }
+        fi
+        ok "Dependências instaladas:$missing_deps"
     fi
 
     log "Verificando conectividade com github.com..."
