@@ -107,7 +107,7 @@ prompt_global_options() {
 
     echo ""
     if tui_confirm "Deseja revisar opcoes globais?" "N"; then
-        tui_help "hardware-tier" 2>/dev/null || true
+        tui_help "hardware-tier" || true
         tui_input FORCE_HARDWARE_TIER "Forcar tier de hardware (LOW/MID/HIGH ou vazio para auto)" "$FORCE_HARDWARE_TIER"
 
         if tui_confirm "Instalar/configurar Tailscale?" "Y"; then
@@ -147,7 +147,7 @@ prompt_minecraft_options() {
         tui_input MINECRAFT_USER "Usuario do Minecraft" "$MINECRAFT_USER"
         tui_input MINECRAFT_SERVER_DIR "Diretorio do Minecraft" "$MINECRAFT_SERVER_DIR"
         tui_input MINECRAFT_PORT "Porta do Minecraft" "$MINECRAFT_PORT"
-        tui_help "motd" 2>/dev/null || true
+        tui_help "motd" || true
         tui_input MINECRAFT_MOTD "MOTD (Message of the Day)" "$MINECRAFT_MOTD"
 
         motd_preview "$MINECRAFT_MOTD"
@@ -155,7 +155,7 @@ prompt_minecraft_options() {
             tui_input MINECRAFT_SERVER_ICON_URL "URL da imagem (PNG 64x64)" "$MINECRAFT_SERVER_ICON_URL"
         fi
         # Loader selection via TUI (paper not supported).
-        tui_help "loader" 2>/dev/null || true
+        tui_help "loader" || true
         while true; do
         TUI_BACK=1
         tui_choose MINECRAFT_LOADER "Loader (fabric/quilt/vanilla/forge/neoforge)" "$MINECRAFT_LOADER" \
@@ -235,7 +235,7 @@ prompt_minecraft_version_dynamic() {
 # ---------------------------------------------------------------------------
 prompt_minecraft_modpack_dynamic() {
     local source
-    tui_help "modpack" 2>/dev/null || true
+    tui_help "modpack" || true
     while true; do
     TUI_BACK=1
     tui_choose source "Fonte do modpack?" "adrenaline" \

@@ -5,6 +5,36 @@ Todos os mudanças notáveis do projeto Crias-Server serão documentadas neste a
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — F9-TUI-fix (gum stderr regression)
+
+### Corrigido
+
+- **TUI invisível durante `curl | bash`** (bug crítico de UX): ao rodar o
+  instalador via `curl -fsSL https://.../crias-bootstrap.sh | sudo bash`, o
+  bootstrap completava (download, SHA256 verify, extração, chamada a
+  `install.sh`), mas o TUI (`gum choose`, `gum confirm`, `gum input`,
+  `gum filter`) nunca aparecia na tela. O script ficava aparentemente travado;
+  ao pressionar Ctrl+C, aparecia uma "mensagem de stack" — na verdade o ERR
+  trap do `install.sh` imprimindo `Funcao: select_server_type, Linha: 100,
+  Arquivo: install.sh`.
+  - **Causa-raiz**: todas as 8 chamadas interativas de `gum` em
+    `shared/lib/tui.sh` (mais 4 chamadas `tui_help` em `install.sh` e 6 em
+    `crias-tui.sh`) redirecionavam stderr para `/dev/null` com `2>/dev/null`.
+    O código-fonte do gum
+    (https://github.com/charmbracelet/gum/blob/main/choose/command.go#L150)
+    usa `tea.WithOutput(os.Stderr)` explicitamente — o TUI é renderizado em
+    **stderr**, deixando stdout livre para o valor escolhido (capturável via
+    `$(...)`). Redirecionar stderr para `/dev/null` mata o TUI.
+  - **Fix**: removido `2>/dev/null` de todas as chamadas `gum choose`,
+    `gum confirm`, `gum input`, `gum filter`, e `gum style` em
+    `shared/lib/tui.sh`, `install.sh` (chamadas `tui_help`), e `crias-tui.sh`.
+    Comentário de advertência adicionado em `tui.sh` documentando o porquê.
+  - **Teste de regressão**: `tests/static-audit.sh` agora escaneia todos os
+    `.sh` (exceto `tests/`, `docs/`, `.git/`) com regex multiline em perl:
+    `gum\s+(choose|confirm|input|filter)\b[^;)|&]*?2>\/dev\/null` → falha o
+    audit se alguém re-introduzir o padrão. Não cobre `gum style/spin` (não
+    usam bubbletea TUI, então `2>/dev/null` neles é inofensivo).
+
 ## [1.3.0] — 2026-F1 (login fix + bootstrap)
 
 ### Corrigido

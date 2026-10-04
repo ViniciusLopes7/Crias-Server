@@ -47,10 +47,14 @@ tui_available() {
 
 # ---------------------------------------------------------------------------
 # Theming centralizado. Override via env vars para customização sem código.
-# gum color codes: 0-255 (216-cube + grayscale). 212 = cyan-ish, default.
+# IMPORTANT: gum interactive commands (choose, confirm, input, filter) use
+# `tea.WithOutput(os.Stderr)` para renderizar o TUI em stderr, deixando
+# stdout livre para o valor escolhido (capturável via $()).
+# NÃO redirecione stderr dos gum interativos com `2>/dev/null` — isso mata o
+# TUI e o usuário vê apenas o script travar ( Ctrl+C dispara o ERR trap ).
+# Bug histórico: 2>/dev/null foi adicionado defensivamente e quebrou todo o
+# TUI. Removido em <F9-TUI-fix>. Não readicione.
 # ---------------------------------------------------------------------------
-TUI_THEME_COLOR="${TUI_THEME_COLOR:-212}"
-TUI_THEME_BORDER="${TUI_THEME_BORDER:-normal}"
 
 # ---------------------------------------------------------------------------
 # Mini-wiki: help contextual por tópico, acessível via tui_help <topic>.
@@ -136,8 +140,8 @@ Disponível na ISO Crias-Server (pré-instalado)."
 
     if tui_available; then
         gum style --border="$TUI_THEME_BORDER" --padding="1 2" --foreground="$TUI_THEME_COLOR" \
-            -- "Ajuda: $topic" "" "$body" 2>/dev/null || true
-        gum confirm --default=yes -- "Continuar?" 2>/dev/null || true
+            -- "Ajuda: $topic" "" "$body" || true
+        gum confirm --default=yes -- "Continuar?" || true
     else
         print_prompt "Ajuda: $topic"
         printf '  %s\n' "$body"
@@ -188,11 +192,12 @@ tui_choose() {
             fi
         done
         # gum choose printa a opção escolhida no stdout; exit 0=ok, 130=cancel.
+        # TUI é renderizado em stderr (tea.WithOutput) — não suprimir.
         if choice=$(gum choose \
                 --header="$prompt" \
                 --height="${#options[@]}" \
                 "${selected_args[@]}" \
-                "${options[@]}" 2>/dev/null); then
+                "${options[@]}"); then
             if [ -n "$back_marker" ] && [ "$choice" = "$back_marker" ]; then
                 printf -v "$var_out" '%s' "__BACK__"
             else
@@ -279,7 +284,7 @@ tui_filter() {
         # gum filter: busca fuzzy interativa. --header mostra o prompt.
         # --height auto. Printa selecionado no stdout.
         local choice
-        if choice=$(printf '%s\n' "$lines" | gum filter --header="$prompt" 2>/dev/null) && [ -n "$choice" ]; then
+        if choice=$(printf '%s\n' "$lines" | gum filter --header="$prompt") && [ -n "$choice" ]; then
             printf '%s\n' "$choice"
             return 0
         fi
@@ -329,7 +334,7 @@ tui_confirm() {
         if [ "${default_ans^^}" = "Y" ]; then
             gum_default="yes"
         fi
-        if gum confirm --default="$gum_default" -- "$prompt" 2>/dev/null; then
+        if gum confirm --default="$gum_default" -- "$prompt"; then
             return 0
         fi
         return 1
@@ -377,7 +382,7 @@ tui_input() {
         # gum input: --placeholder, --value (pré-preenchido), --prompt.
         # --value já vem como default editável; --char-limit=0 = sem limite.
         local value
-        if value=$(gum input --header="$prompt" --value="$default" --char-limit=0 2>/dev/null) && [ -n "$value" ]; then
+        if value=$(gum input --header="$prompt" --value="$default" --char-limit=0) && [ -n "$value" ]; then
             printf -v "$var_out" '%s' "$value"
             return 0
         fi
@@ -426,7 +431,7 @@ tui_checklist() {
         local raw
         if raw=$(gum choose --no-limit --header="$prompt" --selected="$default_csv" \
                 --height=$(( ${#options[@]} + 2 )) \
-                "${options[@]}" 2>/dev/null); then
+                "${options[@]}"); then
             # gum printa uma opção por linha; junta em CSV.
             selected_csv=""
             local first=1
@@ -544,9 +549,9 @@ tui_msg() {
     if tui_available; then
         # gum style formata com borda; theming centralizado em TUI_THEME_*.
         gum style --border="$TUI_THEME_BORDER" --padding="1 2" --foreground="$TUI_THEME_COLOR" \
-            -- "$title" "" "$body" 2>/dev/null || true
+            -- "$title" "" "$body" || true
         # Pausa até Enter (gum não tem msgbox puro; confirm --default=yes funciona).
-        gum confirm --default=yes -- "Continuar?" 2>/dev/null || true
+        gum confirm --default=yes -- "Continuar?" || true
         return 0
     fi
 

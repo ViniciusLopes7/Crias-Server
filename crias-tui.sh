@@ -103,13 +103,13 @@ main() {
             "📊 Monitoramento" \
             "💾 Backup" \
             "⚙️  Sistema" \
-            "🚪 Sair" 2>/dev/null) || break
+            "🚪 Sair") || break
 
         case "$choice" in
             "🎮 Servidor")
                 local srv_choice
                 srv_choice=$(gum choose --header="Servidor ($stack):" \
-                    "Start" "Stop" "Restart" "Status" "Console" "Logs" "← Voltar" 2>/dev/null) || continue
+                    "Start" "Stop" "Restart" "Status" "Console" "Logs" "← Voltar") || continue
                 case "$srv_choice" in
                     "Start") sudo "$manager_script" start ;;
                     "Stop") sudo "$manager_script" stop ;;
@@ -125,7 +125,7 @@ main() {
                 mon_choice=$(gum choose --header="Monitoramento:" \
                     "btop (CPU/RAM/processos)" \
                     "ncdu (uso de disco)" \
-                    "← Voltar" 2>/dev/null) || continue
+                    "← Voltar") || continue
                 case "$mon_choice" in
                     "btop"*) sudo "$manager_script" monitor cpu ;;
                     "ncdu"*) sudo "$manager_script" monitor disk ;;
@@ -137,7 +137,7 @@ main() {
                 bk_choice=$(gum choose --header="Backup:" \
                     "Backup agora" \
                     "Configurar timer systemd" \
-                    "← Voltar" 2>/dev/null) || continue
+                    "← Voltar") || continue
                 case "$bk_choice" in
                     "Backup agora") sudo "$manager_script" backup ;;
                     "Configurar timer systemd") sudo "$manager_script" setup-cron ;;
@@ -150,12 +150,12 @@ main() {
                     "Reconfigurar hardware (tier)" \
                     "Health check" \
                     "Hardware report" \
-                    "← Voltar" 2>/dev/null) || continue
+                    "← Voltar") || continue
                 case "$sys_choice" in
                     "Reconfigurar hardware"*)
                         local tier_choice
                         tier_choice=$(gum choose --header="Forçar tier?" \
-                            "Auto" "LOW" "MID" "HIGH" "← Voltar" 2>/dev/null) || continue
+                            "Auto" "LOW" "MID" "HIGH" "← Voltar") || continue
                         case "$tier_choice" in
                             "Auto") sudo "$manager_script" reconfigure-hardware ;;
                             "LOW"|"MID"|"HIGH") sudo "$manager_script" reconfigure-hardware "$tier_choice" ;;
