@@ -479,7 +479,7 @@ jobs:
           # Global checksum (não inclui sha256sums.txt no find — é o arquivo de saída)
           cd release-assets
           find . -type f \( -name '*.zip' -o -name 'crias-agent-*' \) \
-            -exec sha256sum {} \; | sed 's|  \./[^/]*/|  |' > sha256sums.txt
+            -exec sha256sum {} \; | sed 's|  \./|  |' > sha256sums.txt
           cat sha256sums.txt
 
       - name: Compute release tag

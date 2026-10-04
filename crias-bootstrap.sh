@@ -109,7 +109,7 @@ crias_verify_sha256() {
         return 0
     fi
     local expected_hash actual_hash
-    expected_hash=$(grep -E "[[:space:]]+${asset_name}\$" "$sha_file" | awk '{print $1}' | head -n1 || true)
+    expected_hash=$(grep -E "[[:space:]]+(\./)?${asset_name}\$" "$sha_file" | awk '{print $1}' | head -n1 || true)
     if [ -z "$expected_hash" ]; then
         warn "Hash de '$asset_name' não encontrado em sha256sums.txt; pulando verificação."
         return 0
@@ -130,8 +130,10 @@ crias_verify_sha256() {
     return 0
 }
 
-# Extrai o zip e sincroniza para o install_dir.
-# O zip do GitHub tem um dir top-level (Crias-Server-<tag>/); achamos e copiamos conteúdo.
+# Extrai o zip e copia para o install_dir.
+# Suporta 2 formatos de zip:
+#   1. CI release zip: arquivos na raiz (install.sh, config.env, shared/, ...)
+#   2. GitHub auto zip: diretório top-level (Crias-Server-<tag>/) com arquivos dentro
 crias_extract_to() {
     local zip_file="$1" install_dir="$2"
     local extract_dir
@@ -146,16 +148,28 @@ crias_extract_to() {
         rm -rf "$extract_dir"
         return 1
     fi
-    local toplevel
-    toplevel=$(find "$extract_dir" -maxdepth 1 -mindepth 1 -type d | head -n1)
-    if [ -z "$toplevel" ]; then
-        toplevel="$extract_dir"
+
+    # Determina de onde copiar: raiz do extract_dir ou diretório top-level
+    local src_dir="$extract_dir"
+    if [ ! -f "$extract_dir/install.sh" ]; then
+        # install.sh não está na raiz — procura num diretório top-level
+        local toplevel
+        toplevel=$(find "$extract_dir" -maxdepth 1 -mindepth 1 -type d -exec test -f '{}/install.sh' \; -print -quit 2>/dev/null || true)
+        if [ -n "$toplevel" ]; then
+            src_dir="$toplevel"
+        else
+            err "install.sh não encontrado no zip (estrutura não reconhecida)."
+            ls -la "$extract_dir/" >&2
+            rm -rf "$extract_dir"
+            return 1
+        fi
     fi
+
     mkdir -p "$install_dir"
     if command -v rsync >/dev/null 2>&1; then
-        rsync -a "$toplevel/" "$install_dir/"
+        rsync -a "$src_dir/" "$install_dir/"
     else
-        cp -a "$toplevel/." "$install_dir/"
+        cp -a "$src_dir/." "$install_dir/"
     fi
     chmod 0755 "$install_dir/install.sh" 2>/dev/null || true
     find "$install_dir" -name '*.sh' -type f -exec chmod 0755 {} +
