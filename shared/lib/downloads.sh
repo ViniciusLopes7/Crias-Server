@@ -11,6 +11,24 @@ should_skip_network() {
     return 1
 }
 
+# Executa `curl "$@"` sob spinner do gum quando o stderr é um TTY interativo,
+# ou curl puro com stderr suprimido quando não (CI/logs não podem receber os
+# escapes ANSI do spinner). O gum spin renderiza em stderr, propaga o exit code
+# do curl e, com --show-output, devolve o stdout do comando ao término — por isso
+# o `-w '%{http_code}'` continua capturável via $(). O meter nativo do curl não
+# polui a tela: o -s (em -fsSL) já o suprime; erros do -S seguem no stderr e são
+# a única coisa que o usuário vê quando o download falha.
+curl_with_progress() {
+    local title="$1"
+    shift
+    if command -v gum >/dev/null 2>&1 && [ -t 2 ]; then
+        gum spin --spinner dot --show-output --title "$title" -- \
+            curl "$@"
+    else
+        curl "$@" 2>/dev/null
+    fi
+}
+
 # curl with exponential backoff for 429/5xx and sane timeouts.
 _curl_with_retry() {
     local url="$1"
@@ -28,7 +46,8 @@ _curl_with_retry() {
             delay=$((delay * 2))
         fi
 
-        if http_code=$(curl -fsSL \
+        if http_code=$(curl_with_progress "Baixando ${url##*/}..." \
+            -fsSL \
             --retry 3 \
             --retry-delay 2 \
             --retry-all-errors \
@@ -36,7 +55,7 @@ _curl_with_retry() {
             --max-time 300 \
             -w '%{http_code}' \
             -o "$output" \
-            "$url" 2>/dev/null); then
+            "$url"); then
             return 0
         fi
 

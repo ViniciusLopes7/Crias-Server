@@ -54,7 +54,10 @@ tui_available() {
 # TUI e o usuário vê apenas o script travar ( Ctrl+C dispara o ERR trap ).
 # Bug histórico: 2>/dev/null foi adicionado defensivamente e quebrou todo o
 # TUI. Removido em <F9-TUI-fix>. Não readicione.
+# gum color codes: 0-255 (216-cube + grayscale). 212 = cyan-ish, default.
 # ---------------------------------------------------------------------------
+TUI_THEME_COLOR="${TUI_THEME_COLOR:-212}"
+TUI_THEME_BORDER="${TUI_THEME_BORDER:-normal}"
 
 # ---------------------------------------------------------------------------
 # Mini-wiki: help contextual por tópico, acessível via tui_help <topic>.

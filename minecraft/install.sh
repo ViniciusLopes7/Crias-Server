@@ -186,7 +186,7 @@ install_mrpack_install() {
     mrpack_tmp_dir="$(mktemp_crias_dir)"
     local arch_pkg_local="${mrpack_tmp_dir}/mrpack-install.pkg.tar.zst"
 
-    if curl -fsSL --connect-timeout 10 --max-time 60 -o "$arch_pkg_local" "$arch_pkg_url" 2>/dev/null; then
+    if curl_with_progress "Baixando mrpack-install ${MRPACK_INSTALL_VERSION}..." -fsSL --connect-timeout 10 --max-time 60 -o "$arch_pkg_local" "$arch_pkg_url"; then
         if pacman -U --noconfirm "$arch_pkg_local"; then
             print_success "mrpack-install instalado via pacman -U (.pkg.tar.zst)"
             return 0
