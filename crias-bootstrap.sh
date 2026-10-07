@@ -192,7 +192,12 @@ crias_bootstrap_main() {
 
     # Reconecta stdin ao terminal (curl|bash não fornece TTY em stdin,
     # fazendo tui_available() falhar e todos os prompts auto-aceitarem defaults).
-    exec </dev/tty 2>/dev/null || true
+    # O 2>/dev/null precisa ficar restrito ao subshell de teste: redirecionamentos
+    # em `exec` sem comando persistem no shell atual, e suprimir o stderr aqui
+    # mataria o TUI do install.sh filho (o gum renderiza em stderr).
+    if (exec </dev/tty) 2>/dev/null; then
+        exec </dev/tty || true
+    fi
 
     # Instala jq, unzip e gum se faltando
     local missing_deps=""
