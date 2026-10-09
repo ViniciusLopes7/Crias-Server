@@ -87,9 +87,17 @@ TERRARIA_USE_TMODLOADER="${TERRARIA_USE_TMODLOADER:-false}"
 TERRARIA_TMODLOADER_VERSION="${TERRARIA_TMODLOADER_VERSION:-}"
 TERRARIA_TMODLOADER_MODS="${TERRARIA_TMODLOADER_MODS:-}"
 
+# Seleção do stack. Sem --force, um SERVER_TYPE válido vindo de config.env ou
+# env var PULA o prompt (precedência documentada); com --force (usado pelo menu
+# de revisão "Mudar stack") o prompt aparece sempre — antes o early-return
+# impedia trocar de stack depois da primeira escolha (bug reportado v1.2.0).
+# Retorna 0 em escolha feita; 1 se o usuário cancelou (voltou) na troca.
 select_server_type() {
-    if [ "$SERVER_TYPE" = "minecraft" ] || [ "$SERVER_TYPE" = "terraria" ]; then
-        return 0
+    local force="${1:-}"
+    if [ "$force" != "--force" ]; then
+        if [ "$SERVER_TYPE" = "minecraft" ] || [ "$SERVER_TYPE" = "terraria" ]; then
+            return 0
+        fi
     fi
 
     if is_true "$NON_INTERACTIVE"; then
@@ -97,7 +105,18 @@ select_server_type() {
         exit 1
     fi
 
-    tui_choose SERVER_TYPE "Qual servidor deseja instalar?" "$SERVER_TYPE" "minecraft" "terraria"
+    local previous="${SERVER_TYPE:-}"
+    if [ "$force" = "--force" ]; then
+        # Na troca, "← Voltar" cancela e mantém o stack atual.
+        TUI_BACK=1
+    fi
+    tui_choose SERVER_TYPE "Qual servidor deseja instalar?" "${SERVER_TYPE:-minecraft}" "minecraft" "terraria"
+    TUI_BACK=0
+    if [ "$SERVER_TYPE" = "__BACK__" ]; then
+        SERVER_TYPE="$previous"
+        return 1
+    fi
+    return 0
 }
 
 prompt_global_options() {
@@ -105,9 +124,14 @@ prompt_global_options() {
         return 0
     fi
 
-    echo ""
+    tui_clear
+    tui_stage "ETAPA 2/5 · OPÇÕES GLOBAIS"
     if tui_confirm "Deseja revisar opcoes globais?" "N"; then
-        tui_help "hardware-tier" || true
+        # Ajuda do tier como opção (antes era um tui_help automático no meio
+        # do fluxo; pedido do usuário: ajuda só quando pedida).
+        if tui_confirm "Ver ajuda sobre tiers de hardware?" "N"; then
+            tui_help "hardware-tier" || true
+        fi
         tui_input FORCE_HARDWARE_TIER "Forcar tier de hardware (LOW/MID/HIGH ou vazio para auto)" "$FORCE_HARDWARE_TIER"
 
         if tui_confirm "Instalar/configurar Tailscale?" "Y"; then
@@ -142,30 +166,42 @@ prompt_minecraft_options() {
         return 0
     fi
 
-    echo ""
+    tui_clear
+    tui_stage "ETAPA 3/5 · CONFIGURAÇÕES DO MINECRAFT"
     if tui_confirm "Deseja revisar configuracoes do Minecraft?" "Y"; then
         tui_input MINECRAFT_USER "Usuario do Minecraft" "$MINECRAFT_USER"
         tui_input MINECRAFT_SERVER_DIR "Diretorio do Minecraft" "$MINECRAFT_SERVER_DIR"
         tui_input MINECRAFT_PORT "Porta do Minecraft" "$MINECRAFT_PORT"
-        tui_help "motd" || true
+        # Ajuda do MOTD como opção (códigos de cor só quando pedida).
+        if tui_confirm "Ver ajuda com os codigos de cor do MOTD?" "N"; then
+            tui_help "motd" || true
+        fi
         tui_input MINECRAFT_MOTD "MOTD (Message of the Day)" "$MINECRAFT_MOTD"
 
         motd_preview "$MINECRAFT_MOTD"
         if tui_confirm "Configurar server icon (server-icon.png)?" "N"; then
             tui_input MINECRAFT_SERVER_ICON_URL "URL da imagem (PNG 64x64)" "$MINECRAFT_SERVER_ICON_URL"
         fi
-        # Loader selection via TUI (paper not supported).
-        tui_help "loader" || true
-        while true; do
+        # Loader: menu com "? Ajuda" (tópico loader) e "← Voltar" (volta ao
+        # resumo/revisão; escolhas já feitas são preservadas).
         TUI_BACK=1
+        TUI_HELP=1
+        TUI_HELP_TOPIC=loader
         tui_choose MINECRAFT_LOADER "Loader (fabric/quilt/vanilla/forge/neoforge)" "$MINECRAFT_LOADER" \
             "fabric" "quilt" "vanilla" "forge" "neoforge"
         TUI_BACK=0
-        if [ "$MINECRAFT_LOADER" != "__BACK__" ]; then break; fi
-        done
+        TUI_HELP=0
+        unset TUI_HELP_TOPIC
+        if [ "$MINECRAFT_LOADER" = "__BACK__" ]; then
+            TUI_PAGE_BACK=1
+            return 0
+        fi
 
         # Dynamic MC version selection via Modrinth/Mojang manifest.
         prompt_minecraft_version_dynamic
+        if [ "${TUI_PAGE_BACK:-0}" = "1" ]; then
+            return 0
+        fi
 
         if tui_confirm "Ativar online-mode=true (premium)?" "N"; then
             MINECRAFT_ONLINE_MODE="true"
@@ -175,6 +211,9 @@ prompt_minecraft_options() {
 
         # Modpack source: dynamic top-10 Modrinth / search / vanilla / manual slug.
         prompt_minecraft_modpack_dynamic
+        if [ "${TUI_PAGE_BACK:-0}" = "1" ]; then
+            return 0
+        fi
 
         if tui_confirm "Instalar mods QoL adicionais?" "Y"; then
             MINECRAFT_INSTALL_QOL_MODS="true"
@@ -217,11 +256,19 @@ prompt_minecraft_version_dynamic() {
     fi
 
     local selected
+    TUI_BACK=1
     if selected=$(printf '%s\n' "$versions" | tui_filter "Selecione a versao do Minecraft (busca fuzzy)") && [ -n "$selected" ]; then
+        TUI_BACK=0
+        if [ "$selected" = "__BACK__" ]; then
+            # "← Voltar" na versão sai da etapa MC e volta ao resumo.
+            TUI_PAGE_BACK=1
+            return 0
+        fi
         # Limpa marker "(snapshot)" se presente.
         MINECRAFT_VERSION="${selected%% *}"
         print_success "Versao selecionada: $MINECRAFT_VERSION"
     else
+        TUI_BACK=0
         print_warning "Selecao cancelada; usando default: $MINECRAFT_VERSION"
     fi
 }
@@ -232,108 +279,133 @@ prompt_minecraft_version_dynamic() {
 # slug Modrinth manual. Busca versoes do modpack compatíveis com o loader+MC
 # selecionado (filtro server-side); se nenhuma compativel, sugere MC mais
 # proxima.
+# Navegação: "← Voltar" no menu de fonte sai da etapa MC (TUI_PAGE_BACK);
+# "← Voltar"/Esc nos sub-flows (top-10, busca, slug) retorna ao menu de fonte
+# (rc=2), sem fallback silencioso de modpack.
 # ---------------------------------------------------------------------------
 prompt_minecraft_modpack_dynamic() {
     local source
-    tui_help "modpack" || true
     while true; do
-    TUI_BACK=1
-    tui_choose source "Fonte do modpack?" "adrenaline" \
-        "Top 10 modpacks (Modrinth)" \
-        "Buscar modpack por nome" \
-        "Vanilla (so loader, sem modpack)" \
-        "Slug Modrinth manual"
-    TUI_BACK=0
-    if [ "$source" != "__BACK__" ]; then break; fi
+        TUI_BACK=1
+        TUI_HELP=1
+        TUI_HELP_TOPIC=modpack
+        tui_choose source "Fonte do modpack?" "Top 10 modpacks (Modrinth)" \
+            "Top 10 modpacks (Modrinth)" \
+            "Buscar modpack por nome" \
+            "Vanilla (so loader, sem modpack)" \
+            "Slug Modrinth manual"
+        TUI_BACK=0
+        TUI_HELP=0
+        unset TUI_HELP_TOPIC
+        case "$source" in
+            "__BACK__")
+                TUI_PAGE_BACK=1
+                return 0
+                ;;
+            "Top 10 modpacks (Modrinth)")
+                _prompt_modpack_top10 || continue
+                ;;
+            "Buscar modpack por nome")
+                _prompt_modpack_search || continue
+                ;;
+            "Vanilla (so loader, sem modpack)")
+                MINECRAFT_MODPACK_SOURCE="vanilla"
+                MINECRAFT_INSTALL_MODPACK="false"
+                return 0
+                ;;
+            "Slug Modrinth manual")
+                MINECRAFT_MODPACK_SOURCE="modrinth"
+                tui_input MINECRAFT_MODPACK_SLUG "Slug do modpack no Modrinth" "${MINECRAFT_MODPACK_SLUG:-adrenaline}"
+                _prompt_modpack_select_version "$MINECRAFT_MODPACK_SLUG" || continue
+                ;;
+            *)
+                print_warning "Opcao invalida; mantendo fonte atual."
+                continue
+                ;;
+        esac
+        break
     done
-
-    case "$source" in
-        "Top 10 modpacks (Modrinth)")
-            _prompt_modpack_top10 ;;
-        "Buscar modpack por nome")
-            _prompt_modpack_search ;;
-        "Vanilla (so loader, sem modpack)")
-            MINECRAFT_MODPACK_SOURCE="vanilla"
-            MINECRAFT_INSTALL_MODPACK="false"
-            return 0
-            ;;
-        "Slug Modrinth manual")
-            MINECRAFT_MODPACK_SOURCE="modrinth"
-            tui_input MINECRAFT_MODPACK_SLUG "Slug do modpack no Modrinth" "${MINECRAFT_MODPACK_SLUG:-adrenaline}"
-            _prompt_modpack_select_version "$MINECRAFT_MODPACK_SLUG"
-            ;;
-        *)
-            print_warning "Opcao invalida; mantendo default (adrenaline)."
-            MINECRAFT_MODPACK_SOURCE="adrenaline"
-            MINECRAFT_MODPACK_SLUG="adrenaline"
-            ;;
-    esac
 
     if [ "$MINECRAFT_MODPACK_SOURCE" != "vanilla" ]; then
         MINECRAFT_INSTALL_MODPACK="true"
     fi
 }
 
+# Retorna 0 quando um modpack foi escolhido; 2 para "voltar ao menu de fonte"
+# (inclui Esc/falha de rede no sub-menu — nada fatal: a API falhar não pode
+# derrubar o installer, como acontecia antes via set -e).
 _prompt_modpack_top10() {
     print_step "Buscando top 10 modpacks no Modrinth (por downloads) ..."
     if ! mc_has_internet; then
-        print_error "Sem internet para buscar modpacks. Conecte-se e tente novamente."
-        exit 1
+        print_error "Sem internet para buscar modpacks. Tente outra fonte (ou vanilla)."
+        return 2
     fi
     local json results selected
     json=$(mc_fetch_modrinth_search_modpacks "" 10) || true
     results=$(mc_parse_modrinth_search "$json")
     if [ -z "$results" ]; then
-        print_error "Nenhum modpack encontrado na busca do Modrinth."
-        return 1
+        print_warning "Nenhum modpack encontrado na busca do Modrinth. Tente outra fonte."
+        return 2
     fi
+    TUI_BACK=1
     if selected=$(printf '%s\n' "$results" | tui_filter "Selecione o modpack (top 10 Modrinth)") && [ -n "$selected" ]; then
+        TUI_BACK=0
+        if [ "$selected" = "__BACK__" ]; then
+            print_step "Voltando ao menu de fontes..."
+            return 2
+        fi
         MINECRAFT_MODPACK_SOURCE="modrinth"
         MINECRAFT_MODPACK_SLUG=$(mc_extract_slug "$selected")
         print_success "Modpack: $MINECRAFT_MODPACK_SLUG"
         _prompt_modpack_select_version "$MINECRAFT_MODPACK_SLUG"
-    else
-        print_warning "Selecao cancelada; usando default adrenaline."
-        MINECRAFT_MODPACK_SOURCE="adrenaline"
-        MINECRAFT_MODPACK_SLUG="adrenaline"
+        return $?
     fi
+    TUI_BACK=0
+    print_warning "Selecao cancelada; voltando ao menu de fontes."
+    return 2
 }
 
 _prompt_modpack_search() {
     local query
     tui_input query "Buscar modpack por nome (ex.: Fabulously Optimized)" ""
     if [ -z "$query" ]; then
-        print_warning "Busca vazia; usando default adrenaline."
-        MINECRAFT_MODPACK_SOURCE="adrenaline"
-        MINECRAFT_MODPACK_SLUG="adrenaline"
-        return 0
+        print_warning "Busca vazia; volte ao menu de fontes."
+        return 2
     fi
     print_step "Buscando modpacks no Modrinth por: $query ..."
     if ! mc_has_internet; then
-        print_error "Sem internet para buscar modpacks."
-        exit 1
+        print_error "Sem internet para buscar modpacks. Tente outra fonte (ou vanilla)."
+        return 2
     fi
     local json results selected
     json=$(mc_fetch_modrinth_search_modpacks "$query" 10) || true
     results=$(mc_parse_modrinth_search "$json")
     if [ -z "$results" ]; then
-        print_error "Nenhum modpack encontrado para '$query'."
-        return 1
+        print_warning "Nenhum modpack encontrado para '$query'. Tente outra fonte."
+        return 2
     fi
+    TUI_BACK=1
     if selected=$(printf '%s\n' "$results" | tui_filter "Resultados para '$query'") && [ -n "$selected" ]; then
+        TUI_BACK=0
+        if [ "$selected" = "__BACK__" ]; then
+            print_step "Voltando ao menu de fontes..."
+            return 2
+        fi
         MINECRAFT_MODPACK_SOURCE="modrinth"
         MINECRAFT_MODPACK_SLUG=$(mc_extract_slug "$selected")
         print_success "Modpack: $MINECRAFT_MODPACK_SLUG"
         _prompt_modpack_select_version "$MINECRAFT_MODPACK_SLUG"
-    else
-        print_warning "Selecao cancelada; usando default adrenaline."
-        MINECRAFT_MODPACK_SOURCE="adrenaline"
-        MINECRAFT_MODPACK_SLUG="adrenaline"
+        return $?
     fi
+    TUI_BACK=0
+    print_warning "Selecao cancelada; voltando ao menu de fontes."
+    return 2
 }
 
 # Seleciona versao do modpack compativel com o loader+MC selecionados.
 # Se nenhuma versao compativel, sugere MC mais proxima e pergunta se troca.
+# "← Voltar" nas listas retorna 2 (o caller re-exibe o menu de fonte); Esc
+# apenas deixa a versão em branco (mrpack-install usa a mais recente).
 _prompt_modpack_select_version() {
     local slug="$1"
     print_step "Buscando versoes de '$slug' compativeis com $MINECRAFT_LOADER + MC $MINECRAFT_VERSION ..."
@@ -342,10 +414,16 @@ _prompt_modpack_select_version() {
     versions=$(mc_parse_modrinth_project_versions "$json")
 
     if [ -n "$versions" ]; then
+        TUI_BACK=1
         if selected=$(printf '%s\n' "$versions" | tui_filter "Versoes compativeis (selecione)") && [ -n "$selected" ]; then
+            TUI_BACK=0
+            if [ "$selected" = "__BACK__" ]; then
+                return 2
+            fi
             MINECRAFT_ADRENALINE_VERSION=$(mc_extract_version_number "$selected")
             print_success "Versao do modpack: $MINECRAFT_ADRENALINE_VERSION"
         else
+            TUI_BACK=0
             print_warning "Sem selecao; mrpack-install usara a mais recente."
             MINECRAFT_ADRENALINE_VERSION=""
         fi
@@ -381,9 +459,19 @@ _prompt_modpack_select_version() {
             # Re-busca versoes do modpack com a nova MC.
             json=$(mc_fetch_modrinth_project_versions "$slug" "$MINECRAFT_LOADER" "$MINECRAFT_VERSION") || true
             versions=$(mc_parse_modrinth_project_versions "$json")
-            if [ -n "$versions" ] && selected=$(printf '%s\n' "$versions" | tui_filter "Versoes compativeis (MC $MINECRAFT_VERSION)") && [ -n "$selected" ]; then
-                MINECRAFT_ADRENALINE_VERSION=$(mc_extract_version_number "$selected")
-                print_success "Versao do modpack: $MINECRAFT_ADRENALINE_VERSION"
+            if [ -n "$versions" ]; then
+                TUI_BACK=1
+                if selected=$(printf '%s\n' "$versions" | tui_filter "Versoes compativeis (MC $MINECRAFT_VERSION)") && [ -n "$selected" ]; then
+                    TUI_BACK=0
+                    if [ "$selected" = "__BACK__" ]; then
+                        return 2
+                    fi
+                    MINECRAFT_ADRENALINE_VERSION=$(mc_extract_version_number "$selected")
+                    print_success "Versao do modpack: $MINECRAFT_ADRENALINE_VERSION"
+                else
+                    TUI_BACK=0
+                    MINECRAFT_ADRENALINE_VERSION=""
+                fi
             else
                 MINECRAFT_ADRENALINE_VERSION=""
             fi
@@ -402,7 +490,8 @@ prompt_terraria_options() {
         return 0
     fi
 
-    echo ""
+    tui_clear
+    tui_stage "ETAPA 3/5 · CONFIGURAÇÕES DO TERRARIA"
     if tui_confirm "Deseja revisar configuracoes do Terraria?" "Y"; then
         tui_input TERRARIA_USER "Usuario do Terraria" "$TERRARIA_USER"
         tui_input TERRARIA_SERVER_DIR "Diretorio do Terraria" "$TERRARIA_SERVER_DIR"
@@ -415,6 +504,9 @@ prompt_terraria_options() {
         if tui_confirm "Usar tModLoader (Terraria com mods)? Substitui o servidor vanilla." "N"; then
             TERRARIA_USE_TMODLOADER="true"
             prompt_tmodloader_options
+            if [ "${TUI_PAGE_BACK:-0}" = "1" ]; then
+                return 0
+            fi
         else
             TERRARIA_USE_TMODLOADER="false"
         fi
@@ -451,10 +543,18 @@ prompt_tmodloader_options() {
         fi
     else
         local selected
+        TUI_BACK=1
         if selected=$(printf '%s\n' "$versions" | tui_filter "Selecione a versão do tModLoader (busca fuzzy)") && [ -n "$selected" ]; then
+            TUI_BACK=0
+            if [ "$selected" = "__BACK__" ]; then
+                # "← Voltar" na versão sai da etapa Terraria e volta ao resumo.
+                TUI_PAGE_BACK=1
+                return 0
+            fi
             TERRARIA_TMODLOADER_VERSION="${selected%% *}"
             print_success "Versão tModLoader: $TERRARIA_TMODLOADER_VERSION"
         else
+            TUI_BACK=0
             print_warning "Seleção cancelada; usando latest."
             TERRARIA_TMODLOADER_VERSION=""
         fi
@@ -466,29 +566,37 @@ prompt_tmodloader_options() {
 
 prompt_tmodloader_mods() {
     local source
-    tui_choose source "Como instalar mods do tModLoader?" "catalog" \
-        "Catálogo curado (Calamity, Thorium, etc.)" \
-        "Sem mods (instalar tModLoader vazio)" \
-        "Workshop IDs manuais (CSV)"
-
-    case "$source" in
-        "Catálogo curado (Calamity, Thorium, etc.)")
-            _prompt_tml_catalog_mods
-            ;;
-        "Sem mods (instalar tModLoader vazio)")
-            TERRARIA_TMODLOADER_MODS=""
-            print_step "tModLoader será instalado sem mods. Você pode adicioná-los depois em Mods/"
-            ;;
-        "Workshop IDs manuais (CSV)")
-            local manual_ids
-            tui_input manual_ids "Workshop IDs (CSV, ex.: 2824688072,2909886416)" "${TERRARIA_TMODLOADER_MODS:-}"
-            TERRARIA_TMODLOADER_MODS="$manual_ids"
-            ;;
-        *)
-            print_warning "Opção inválida; sem mods."
-            TERRARIA_TMODLOADER_MODS=""
-            ;;
-    esac
+    while true; do
+        TUI_BACK=1
+        tui_choose source "Como instalar mods do tModLoader?" "Catálogo curado (Calamity, Thorium, etc.)" \
+            "Catálogo curado (Calamity, Thorium, etc.)" \
+            "Sem mods (instalar tModLoader vazio)" \
+            "Workshop IDs manuais (CSV)"
+        TUI_BACK=0
+        case "$source" in
+            "__BACK__")
+                TUI_PAGE_BACK=1
+                return 0
+                ;;
+            "Catálogo curado (Calamity, Thorium, etc.)")
+                _prompt_tml_catalog_mods || continue
+                ;;
+            "Sem mods (instalar tModLoader vazio)")
+                TERRARIA_TMODLOADER_MODS=""
+                print_step "tModLoader será instalado sem mods. Você pode adicioná-los depois em Mods/"
+                ;;
+            "Workshop IDs manuais (CSV)")
+                local manual_ids
+                tui_input manual_ids "Workshop IDs (CSV, ex.: 2824688072,2909886416)" "${TERRARIA_TMODLOADER_MODS:-}"
+                TERRARIA_TMODLOADER_MODS="$manual_ids"
+                ;;
+            *)
+                print_warning "Opção inválida; sem mods."
+                TERRARIA_TMODLOADER_MODS=""
+                ;;
+        esac
+        break
+    done
 }
 
 _prompt_tml_catalog_mods() {
@@ -1487,14 +1595,24 @@ EOF
 }
 
 show_install_summary() {
-    echo ""
+    tui_clear
+    tui_stage "ETAPA 4/5 · RESUMO E REVISÃO"
     echo "=================================================="
     echo "  Resumo da instalacao:"
     echo "=================================================="
     printf '  %-22s %s\n' "Stack:" "$SERVER_TYPE"
-    printf '  %-22s %s\n' "Diretorio:" "${MINECRAFT_SERVER_DIR:-${TERRARIA_SERVER_DIR}}"
-    printf '  %-22s %s\n' "Porta:" "${MINECRAFT_PORT:-${TERRARIA_PORT}}"
-    printf '  %-22s %s\n' "Usuario do jogo:" "${MINECRAFT_USER:-${TERRARIA_USER}}"
+    # Diretorio/porta/usuario por stack: o default de MINECRAFT_SERVER_DIR está
+    # sempre setado, então ":-" nunca caía no valor do Terraria — o resumo
+    # mostrava paths do Minecraft mesmo instalando Terraria.
+    if [ "$SERVER_TYPE" = "minecraft" ]; then
+        printf '  %-22s %s\n' "Diretorio:" "$MINECRAFT_SERVER_DIR"
+        printf '  %-22s %s\n' "Porta:" "$MINECRAFT_PORT"
+        printf '  %-22s %s\n' "Usuario do jogo:" "$MINECRAFT_USER"
+    else
+        printf '  %-22s %s\n' "Diretorio:" "$TERRARIA_SERVER_DIR"
+        printf '  %-22s %s\n' "Porta:" "$TERRARIA_PORT"
+        printf '  %-22s %s\n' "Usuario do jogo:" "$TERRARIA_USER"
+    fi
     printf '  %-22s %s\n' "Tier de hardware:" "${FORCE_HARDWARE_TIER:-auto}"
     printf '  %-22s %s\n' "Tailscale:" "${INSTALL_TAILSCALE:-pergunta}"
     printf '  %-22s %s\n' "Tuning de sistema:" "${APPLY_SYSTEM_TUNING:-true}"
@@ -1550,7 +1668,16 @@ deploy_crias_tui() {
 }
 
 main() {
+    # "← Voltar" dentro de uma página de opções (loader, versão, fonte do
+    # modpack, tModLoader) sinaliza via esta flag: a página aborta preservando
+    # as escolhas já feitas e o fluxo volta ao resumo (hub de revisão).
+    TUI_PAGE_BACK=0
+
+    # Limpa a tela ANTES do banner: o TUI aparece numa tela limpa (pedido do
+    # usuário). Inócuo sem stdout TTY (CI) e pulado em NON_INTERACTIVE.
+    tui_clear
     print_header
+    tui_stage "ETAPA 1/5 · ESCOLHA DO SERVIDOR"
     # Config already loaded at top-level.
 
     # ERR trap for diagnostics in both modes.
@@ -1571,11 +1698,15 @@ main() {
     prompt_global_options
 
     if [ "$SERVER_TYPE" = "minecraft" ]; then
+        TUI_PAGE_BACK=0
         prompt_minecraft_options
     else
+        TUI_PAGE_BACK=0
         prompt_terraria_options
     fi
 
+    # Hub de revisão: resumo + menu. "Mudar stack" agora força o re-prompt
+    # (antes o early-return de select_server_type engolia a troca).
     while ! show_install_summary; do
         local review_choice
         local stack_label="Minecraft"
@@ -1587,21 +1718,37 @@ main() {
             "Confirmar"
         case "$review_choice" in
             "Confirmar") break ;;
-            "Opções globais") prompt_global_options ;;
-            "Minecraft") prompt_minecraft_options ;;
-            "Terraria") prompt_terraria_options ;;
-            "Mudar stack")
-                select_server_type
+            "Opções globais")
+                TUI_PAGE_BACK=0
                 prompt_global_options
+                ;;
+            "$stack_label")
+                TUI_PAGE_BACK=0
                 if [ "$SERVER_TYPE" = "minecraft" ]; then
                     prompt_minecraft_options
                 else
                     prompt_terraria_options
                 fi
                 ;;
+            "Mudar stack")
+                # --force re-exibe a escolha (com "← Voltar" para cancelar a
+                # troca e manter o stack atual).
+                if select_server_type --force; then
+                    print_step "Stack alterado para: $SERVER_TYPE"
+                    TUI_PAGE_BACK=0
+                    prompt_global_options
+                    if [ "$SERVER_TYPE" = "minecraft" ]; then
+                        prompt_minecraft_options
+                    else
+                        prompt_terraria_options
+                    fi
+                fi
+                ;;
         esac
     done
 
+    tui_clear
+    tui_stage "ETAPA 5/5 · INSTALAÇÃO"
     install_tailscale_if_enabled
     # Policy gate: ensure EULA acceptance for non-interactive Minecraft installs
     if [ "$SERVER_TYPE" = "minecraft" ] && is_true "${NON_INTERACTIVE:-false}"; then

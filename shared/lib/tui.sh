@@ -60,6 +60,54 @@ TUI_THEME_COLOR="${TUI_THEME_COLOR:-212}"
 TUI_THEME_BORDER="${TUI_THEME_BORDER:-normal}"
 
 # ---------------------------------------------------------------------------
+# Navegação e ajuda nos menus (setados pelos callers, sempre resetar depois):
+#   TUI_BACK=1        injeta "← Voltar" no menu/filtro; selecionar devolve
+#                     "__BACK__" na vari de saída (choose) ou no stdout (filter).
+#   TUI_HELP=1        injeta "? Ajuda" no menu; selecionar mostra
+#                     tui_help "$TUI_HELP_TOPIC" e re-exibe o mesmo menu.
+#   TUI_HELP_TOPIC    tópico da ajuda exibida quando TUI_HELP=1.
+# A ajuda como OPÇÃO de menu (não automática) é decisão de UX da v1.2.1: antes
+# os boxes de tui_help apareciam incondicionalmente no meio do fluxo.
+# ---------------------------------------------------------------------------
+
+# Gate para prompts cuja LISTA vem por pipe (tui_filter). O gum renderiza o TUI
+# em stderr e o bubbletea abre /dev/tty para o teclado quando o stdin não é
+# terminal (fallback automático do tea.Program) — logo o critério correto é o
+# stderr ser TTY, NÃO o stdin: checar [ -t 0 ] aqui fazia o tui_filter cair no
+# fallback read-based, que lia EOF do pipe e "cancelava" toda seleção dinâmica
+# de versão/modpack sem nunca mostrar o menu (bug reportado na v1.2.0).
+_tui_gum_interactive() {
+    command -v gum >/dev/null 2>&1 && [ -t 2 ]
+}
+
+# Limpa a tela antes de uma nova etapa do installer (o TUI aparece numa tela
+# limpa; pedido do usuário na v1.2.1). Sem efeito sem stdout TTY — CI/logs não
+# podem receber escapes de clear — nem em NON_INTERACTIVE.
+tui_clear() {
+    case "${NON_INTERACTIVE:-false}" in
+        1|true|TRUE|yes|YES|on|ON) return 0 ;;
+    esac
+    if [ -t 1 ]; then
+        clear 2>/dev/null || printf '\033[2J\033[H'
+    fi
+}
+
+# Título de etapa do wizard (o installer tem 5 etapas; sem isso o usuário não
+# sabia em que passo estava). Sempre imprime algo — em fallback os títulos
+# também aparecem, o que melhora logs de CI. Usa escapes literais (não as vars
+# de common.sh) para funcionar mesmo quando tui.sh é carregado sozinho.
+tui_stage() {
+    local title="$1"
+    if tui_available; then
+        gum style --bold --foreground "$TUI_THEME_COLOR" -- "$title"
+        gum style --foreground "$TUI_THEME_COLOR" -- "────────────────────────────────────────"
+    else
+        printf '\033[1;36m%s\033[0m\n' "$title"
+        printf '\033[0;36m%s\033[0m\n' "────────────────────────────────────────"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Mini-wiki: help contextual por tópico, acessível via tui_help <topic>.
 # Conteúdo resumido dos docs relevantes. Callers chamam antes de prompts
 # complexos (ex.: antes do prompt de tier, chama tui_help "hardware-tier").
@@ -170,6 +218,10 @@ _tui_engine() {
 # Retorna 0 sempre (EOF, input invalido, ou cancel no gum usam o default;
 # para não travar fluxos que esperam um valor). Em caso de input invalido,
 # emite print_warning antes de usar o default.
+# Extras opcionais (ver bloco "Navegação e ajuda" acima):
+#   TUI_BACK=1  -> "← Voltar" vira a 1a opção; escolher devolve "__BACK__".
+#   TUI_HELP=1 + TUI_HELP_TOPIC -> "? Ajuda" vira a última opção; escolher
+#                  mostra a ajuda e RE-EXIBE este mesmo menu.
 # ---------------------------------------------------------------------------
 tui_choose() {
     local var_out="$1"
@@ -182,6 +234,11 @@ tui_choose() {
     if [ "${TUI_BACK:-0}" = "1" ]; then
         back_marker="← Voltar"
         options=("$back_marker" "${options[@]}")
+    fi
+    local help_marker=""
+    if [ "${TUI_HELP:-0}" = "1" ] && [ -n "${TUI_HELP_TOPIC:-}" ]; then
+        help_marker="? Ajuda"
+        options+=("$help_marker")
     fi
 
     if tui_available; then
@@ -201,6 +258,11 @@ tui_choose() {
                 --height="${#options[@]}" \
                 "${selected_args[@]}" \
                 "${options[@]}"); then
+            if [ -n "$help_marker" ] && [ "$choice" = "$help_marker" ]; then
+                tui_help "$TUI_HELP_TOPIC"
+                tui_choose "$var_out" "$prompt" "$default" "$@"
+                return 0
+            fi
             if [ -n "$back_marker" ] && [ "$choice" = "$back_marker" ]; then
                 printf -v "$var_out" '%s' "__BACK__"
             else
@@ -241,17 +303,28 @@ tui_choose() {
     fi
     # Se digitou número, resolve via índice; valida que está na faixa.
     if [[ "$answer" =~ ^[0-9]+$ ]] && [ "$answer" -ge 1 ] && [ "$answer" -le "${#options[@]}" ]; then
-            if [ -n "$back_marker" ] && [ "${options[$((answer - 1))]}" = "$back_marker" ]; then
+            local picked="${options[$((answer - 1))]}"
+            if [ -n "$help_marker" ] && [ "$picked" = "$help_marker" ]; then
+                tui_help "$TUI_HELP_TOPIC"
+                tui_choose "$var_out" "$prompt" "$default" "$@"
+                return 0
+            fi
+            if [ -n "$back_marker" ] && [ "$picked" = "$back_marker" ]; then
                 printf -v "$var_out" '%s' "__BACK__"
                 return 0
             fi
-        printf -v "$var_out" '%s' "${options[$((answer - 1))]}"
+        printf -v "$var_out" '%s' "$picked"
         return 0
     fi
     # Se digitou texto, valida que corresponde a uma das opções (match exato).
     local opt
     for opt in "${options[@]}"; do
         if [ "$opt" = "$answer" ]; then
+                if [ -n "$help_marker" ] && [ "$opt" = "$help_marker" ]; then
+                    tui_help "$TUI_HELP_TOPIC"
+                    tui_choose "$var_out" "$prompt" "$default" "$@"
+                    return 0
+                fi
                 if [ -n "$back_marker" ] && [ "$opt" = "$back_marker" ]; then
                     printf -v "$var_out" '%s' "__BACK__"
                     return 0
@@ -271,7 +344,14 @@ tui_choose() {
 # Recebe linhas no stdin (uma por linha). Printa a escolhida no stdout.
 # Uso: choice=$(tui_filter "prompt" < <(printf '%s\n' "${items[@]}"))
 # Retorna 0 em sucesso (printa escolha no stdout), 1 se cancelado/sem seleção.
-# Em fallback, mostra menu numerado sem fuzzy.
+# Com TUI_BACK=1, a lista ganha "← Voltar" como última linha; selecioná-la
+# printa "__BACK__" e retorna 0 (o caller decide para onde voltar).
+# Em fallback, mostra menu numerado sem fuzzy ("0" = voltar quando ativo).
+#
+# NOTA sobre o gate do gum: a lista chega por PIPE, então o stdin NUNCA é TTY
+# aqui — o critério de interatividade é o _tui_gum_interactive (stderr TTY),
+# não o tui_available. O teclado do gum filter vem do /dev/tty (bubbletea abre
+# automaticamente quando o stdin não é terminal).
 # ---------------------------------------------------------------------------
 tui_filter() {
     local prompt="$1"
@@ -283,19 +363,40 @@ tui_filter() {
         return 1
     fi
 
-    if tui_available; then
+    local back_marker=""
+    if [ "${TUI_BACK:-0}" = "1" ]; then
+        back_marker="← Voltar"
+    fi
+
+    if _tui_gum_interactive; then
         # gum filter: busca fuzzy interativa. --header mostra o prompt.
-        # --height auto. Printa selecionado no stdout.
+        # Printa selecionado no stdout. A lista entra por stdin (pipe) e o
+        # TUI renderiza em stderr; teclado lido de /dev/tty.
+        # "← Voltar" entra como ÚLTIMA linha: o cursor do filtro começa na
+        # primeira (a versão mais recente), então Enter confirma a escolha
+        # óbvia; para voltar, o usuário digita "voltar" (fuzzy) ou navega.
+        local list="$lines"
+        if [ -n "$back_marker" ]; then
+            list="${lines}
+${back_marker}"
+        fi
         local choice
-        if choice=$(printf '%s\n' "$lines" | gum filter --header="$prompt") && [ -n "$choice" ]; then
+        if choice=$(printf '%s\n' "$list" | gum filter --header="$prompt") && [ -n "$choice" ]; then
+            if [ -n "$back_marker" ] && [ "$choice" = "$back_marker" ]; then
+                printf '%s\n' "__BACK__"
+                return 0
+            fi
             printf '%s\n' "$choice"
             return 0
         fi
         return 1
     fi
 
-    # Fallback: menu numerado (sem fuzzy). Útil para listas pequenas.
-    print_prompt "$prompt"
+    # Fallback: menu numerado (sem fuzzy). O stdout está capturado pelo $() do
+    # caller (o menu sumiria) e o stdin é o pipe da lista, já consumido pela
+    # leitura acima — então menu e leitura vão para /dev/tty. Sem terminal de
+    # controle (CI/pipe) a abertura falha e a seleção é tratada como cancelada,
+    # preservando o comportamento testado (retorno não-zero em EOF).
     # Mapa para resolver índice->linha (preserva linhas com espaços).
     local -a arr=()
     local line
@@ -307,14 +408,22 @@ tui_filter() {
         return 1
     fi
 
-    local i=1
-    for line in "${arr[@]}"; do
-        printf '  %s) %s\n' "$i" "$line"
-        i=$((i + 1))
-    done
-    local answer
-    if ! read -r -p "$(printf '%b' "${CYAN}  ➜ numero: ${NC}")" answer; then
-        return 1
+    local answer=""
+    {
+        print_prompt "$prompt"
+        local i=1
+        for line in "${arr[@]}"; do
+            printf '  %s) %s\n' "$i" "$line"
+            i=$((i + 1))
+        done
+        if [ -n "$back_marker" ]; then
+            printf '  0) %s\n' "$back_marker"
+        fi
+        read -r -p "$(printf '%b' "${CYAN}  ➜ numero: ${NC}")" answer || answer=""
+    } < /dev/tty > /dev/tty 2>&1 || true
+    if [ -n "$back_marker" ] && [ "$answer" = "0" ]; then
+        printf '%s\n' "__BACK__"
+        return 0
     fi
     if [[ "$answer" =~ ^[0-9]+$ ]] && [ "$answer" -ge 1 ] && [ "$answer" -le "${#arr[@]}" ]; then
         printf '%s\n' "${arr[$((answer - 1))]}"

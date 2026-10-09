@@ -19,6 +19,10 @@ source "$ROOT_DIR/shared/lib/minecraft-tuning.sh"
 # shellcheck source=/dev/null
 source "$ROOT_DIR/shared/lib/downloads.sh"
 # shellcheck source=/dev/null
+# tui.sh para prompts consistentes com o wizard do install.sh raiz (gum com
+# fallback read-based); carregar aqui também cobre execução standalone.
+source "$ROOT_DIR/shared/lib/tui.sh"
+# shellcheck source=/dev/null
 source "$ROOT_DIR/shared/lib/stack-installer.sh"
 
 # ---------------------------------------------------------------------------
@@ -115,7 +119,7 @@ validate_minecraft_inputs() {
         if is_true "${NON_INTERACTIVE:-false}"; then
             print_warning "Mantendo loader informado por estar em modo non-interactive."
         else
-            if ask_confirm "Trocar loader para fabric para maximizar compatibilidade do modpack?" "Y"; then
+            if tui_confirm "Trocar loader para fabric para maximizar compatibilidade do modpack?" "Y"; then
                 MINECRAFT_LOADER="fabric"
             fi
         fi
@@ -135,7 +139,7 @@ validate_minecraft_eula() {
     echo "Para mais informacoes sobre a EULA da Mojang, visite:"
     echo "https://account.mojang.com/documents/minecraft_eula"
     echo ""
-    if ! ask_confirm "Aceitar EULA da Mojang?" "N"; then
+    if ! tui_confirm "Aceitar EULA da Mojang?" "N"; then
         print_error "EULA nao aceita. Instalacao abortada."
         exit 1
     fi

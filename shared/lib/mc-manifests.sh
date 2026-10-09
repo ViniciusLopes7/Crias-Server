@@ -90,16 +90,19 @@ mc_fetch_forge_metadata() {
 mc_fetch_modrinth_search_modpacks() {
     local query="$1"
     local limit="${2:-10}"
-    local facets_json loaders_json
-    facets_json=$(jq -c -n '[["project_type:modpack"]]')
+    # jq indisponível deve degradar (lista vazia -> callers caem no fallback
+    # manual), não derrubar o installer via set -e.
+    command -v jq >/dev/null 2>&1 || return 1
+    local facets_json
+    facets_json=$(jq -c -n '[["project_type:modpack"]]' 2>/dev/null) || return 1
     # URL-encode o facets para a query string.
     local facets_enc
-    facets_enc=$(printf '%s' "$facets_json" | jq -sR @uri | tr -d '"')
+    facets_enc=$(printf '%s' "$facets_json" | jq -sR @uri | tr -d '"' 2>/dev/null) || return 1
     local url="https://api.modrinth.com/v2/search?facets=${facets_enc}&limit=${limit}"
     if [ -n "$query" ]; then
         # URL-encode o query livre.
         local query_enc
-        query_enc=$(printf '%s' "$query" | jq -sR @uri | tr -d '"')
+        query_enc=$(printf '%s' "$query" | jq -sR @uri | tr -d '"' 2>/dev/null) || return 1
         url="${url}&query=${query_enc}"
     else
         url="${url}&index=downloads"
@@ -116,16 +119,19 @@ mc_fetch_modrinth_project_versions() {
     local game_version="$3"
     local url="https://api.modrinth.com/v2/project/${slug}/version"
     local params=""
+    # Mesma defesa do jq: sem ele, retorna vazio (callers tratam) em vez de
+    # estourar command-not-found sob set -e.
+    command -v jq >/dev/null 2>&1 || return 1
     if [ -n "$loader" ]; then
         local loaders_json loaders_enc
-        loaders_json=$(jq -c -n --arg l "$loader" '[$l]')
-        loaders_enc=$(printf '%s' "$loaders_json" | jq -sR @uri | tr -d '"')
+        loaders_json=$(jq -c -n --arg l "$loader" '[$l]' 2>/dev/null) || return 1
+        loaders_enc=$(printf '%s' "$loaders_json" | jq -sR @uri | tr -d '"' 2>/dev/null) || return 1
         params="loaders=${loaders_enc}"
     fi
     if [ -n "$game_version" ]; then
         local gv_json gv_enc
-        gv_json=$(jq -c -n --arg v "$game_version" '[$v]')
-        gv_enc=$(printf '%s' "$gv_json" | jq -sR @uri | tr -d '"')
+        gv_json=$(jq -c -n --arg v "$game_version" '[$v]' 2>/dev/null) || return 1
+        gv_enc=$(printf '%s' "$gv_json" | jq -sR @uri | tr -d '"' 2>/dev/null) || return 1
         if [ -n "$params" ]; then
             params="${params}&game_versions=${gv_enc}"
         else
