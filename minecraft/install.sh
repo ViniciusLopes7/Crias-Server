@@ -42,6 +42,8 @@ MINECRAFT_MOTD="${MINECRAFT_MOTD:-§6§l🏰 REINO DOS CRIAS 🏰\\n§eAdrenalin
 # CSV of Modrinth slugs as "file_name:slug,file_name:slug,...".
 # E.g.: "chunky:chunky,essential-commands:essential-commands"
 MINECRAFT_QOL_MODS="${MINECRAFT_QOL_MODS:-chunky:chunky,essential-commands:essential-commands,universal-graves:universal-graves,tabtps:tabtps,styled-chat:styled-chat,polymer:polymer,placeholder-api:placeholder-api}"
+# Individual user mods (CSV of Modrinth slugs) applied on top of modpack/QoL.
+MINECRAFT_EXTRA_MODS="${MINECRAFT_EXTRA_MODS:-}"
 # Modpack source: "adrenaline" (default) or "modrinth" (generic).
 MINECRAFT_MODPACK_SOURCE="${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
 MINECRAFT_MODPACK_SLUG="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
@@ -247,6 +249,52 @@ stack_install_qol_mods() {
     install_minecraft_qol_mods
 }
 
+# Mods individuais do usuário (MINECRAFT_EXTRA_MODS, CSV de slugs Modrinth),
+# aplicados POR CIMA do modpack: o QoL acima pula quando mods/ já tem arquivos
+# (os do modpack), então extras têm fluxo próprio sem esse gate, não restringem
+# loader (a filtragem loader+versão é server-side na API) e pulam arquivos já
+# baixados (idempotente em re-runs).
+stack_install_extra_mods() {
+    if [ -z "${MINECRAFT_EXTRA_MODS:-}" ]; then
+        return 0
+    fi
+
+    if [ "$MINECRAFT_LOADER" = "vanilla" ]; then
+        print_warning "Mods extras pulados: loader vanilla nao carrega .jar de mods."
+        return 0
+    fi
+
+    if is_true "$DRY_RUN"; then
+        print_step "[DRY_RUN] Pulando instalacao dos mods extras do Minecraft."
+        return 0
+    fi
+
+    print_step "Instalando mods extras..."
+    mkdir -p "$MINECRAFT_SERVER_DIR/mods"
+
+    local entry slug
+    local IFS=','
+    set -f
+    for entry in $MINECRAFT_EXTRA_MODS; do
+        slug="${entry#"${entry%%[![:space:]]*}"}"
+        slug="${slug%"${slug##*[![:space:]]}"}"
+        [ -z "$slug" ] && continue
+
+        if [[ "$slug" == *..* ]] || [[ "$slug" == */* ]]; then
+            print_error "Mod extra rejeitado (possível path traversal): '$slug'"
+            continue
+        fi
+
+        if [ -f "$MINECRAFT_SERVER_DIR/mods/${slug}.jar" ]; then
+            print_step "Mod extra ja presente: ${slug}.jar (pulando)."
+            continue
+        fi
+
+        download_modrinth_mod "$slug" "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" "$MINECRAFT_SERVER_DIR/mods" "$slug" || true
+    done
+    set +f
+}
+
 # Legacy name kept for tests/quick-script-tests.sh compatibility.
 install_minecraft_qol_mods() {
     if ! is_true "$MINECRAFT_INSTALL_QOL_MODS"; then
@@ -286,10 +334,14 @@ install_minecraft_qol_mods() {
         fi
 
         # Validate file_name and slug against path traversal.
+        # Sem check de NUL: variáveis bash não carregam NUL (descartado no
+        # assignment) e o padrão *$'\0'* expande para ** (casa com TUDO) —
+        # rejeitava qualquer mod. Bug mascarado: com modpack o QoL pula todo
+        # (mods/ não-vazio), então ninguém via em produção.
         local _bad_part=""
-        if [[ "$file_name" == *..* ]] || [[ "$file_name" == */* ]] || [[ "$file_name" == *$'\0'* ]]; then
+        if [[ "$file_name" == *..* ]] || [[ "$file_name" == */* ]]; then
             _bad_part="file_name='$file_name'"
-        elif [[ "$slug" == *..* ]] || [[ "$slug" == */* ]] || [[ "$slug" == *$'\0'* ]]; then
+        elif [[ "$slug" == *..* ]] || [[ "$slug" == */* ]]; then
             _bad_part="slug='$slug'"
         fi
         if [ -n "$_bad_part" ]; then

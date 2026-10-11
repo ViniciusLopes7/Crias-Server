@@ -10,8 +10,10 @@
 #   - tui_checklist atribui defaults em EOF.
 #   - tui_filter retorna nao-zero em EOF (lista cancelada).
 #
-# NAO testa o caminho gum (precisa de TTY interativo + gum instalado); esse
-# caminho e exercitado manualmente em live ISO.
+# NAO testa o caminho gum REAL (precisa de TTY interativo + gum instalado);
+# esse caminho e validado manualmente em live ISO/PTY. O caminho gum em SI e
+# exercitado com um FAKE gum deterministico (secao 8), que cobre a logica de
+# atribuicao printf -v sem depender de TTY.
 
 set -euo pipefail
 
@@ -188,6 +190,82 @@ if [ "$result" = "gamma" ]; then
 else
     fail "tui_choose texto match" "gamma" "$result"
 fi
+
+# --- 7. Checklist fallback com opções multi-palavra (catálogo tModLoader) ---
+echo "- tui_checklist fallback com opções multi-palavra (toggle + confirmar):"
+# O catálogo real do tModLoader tem nomes com espaço ("Calamity Mod"); o toggle
+# numerado precisa marcar/desmarcar corretamente e o resultado sair na ordem
+# das opções (aqui: só "Calamity Mod", marcada via input '1' e confirmada com '0').
+result=""
+result=$(printf '1\n0\n' | { tui_checklist csv "Selecione mods" "" "Calamity Mod" "Thorium Mod" >&2; echo "$csv"; } 2>/dev/null || true)
+if [ "$result" = "Calamity Mod" ]; then
+    pass "tui_checklist multi-palavra (toggle 1 + confirmar 0) -> 'Calamity Mod'"
+else
+    fail "tui_checklist multi-palavra" "Calamity Mod" "$result"
+fi
+
+# --- 8. Caminho gum (fake gum): shadowing de variável-alvo do caller ---
+# Regressão v1.2.1: `local selected_csv` interno do tui_checklist sombreava a
+# var-alvo do caller; o printf -v escrevia na cópia interna (morta no return) e
+# o caller via "unbound variable" na linha seguinte (install.sh:620). Força-se
+# o caminho gum com um fake gum determinístico; as out-vars usam de propósito
+# os nomes que colidiam com as internas antigas (selected_csv/choice/value).
+echo "- tui_* caminho gum (fake gum) com out-vars que colidiam com internas:"
+FAKE_GUM_DIR="$(mktemp -d)"
+cat > "$FAKE_GUM_DIR/gum" <<'GUMEOF'
+#!/bin/bash
+# Fake gum: printa seleções fixas no stdout (exit 0).
+case "$1" in
+    choose)
+        if [ "$2" = "--no-limit" ]; then
+            printf 'Calamity Mod\nThorium Mod\n'
+        else
+            printf 'beta\n'
+        fi
+        ;;
+    input)
+        printf 'valor-digitado\n'
+        ;;
+    *)
+        printf '\n'
+        ;;
+esac
+exit 0
+GUMEOF
+chmod +x "$FAKE_GUM_DIR/gum"
+
+_TUI_AVAILABLE_ORIG="$(declare -f tui_available)"
+tui_available() { return 0; }
+PATH="$FAKE_GUM_DIR:$PATH"
+
+selected_csv=""
+tui_checklist selected_csv "Selecione os mods" "" "Calamity Mod" "Thorium Mod" "Magic Storage" >/dev/null 2>&1
+if [ "${selected_csv:-UNSET}" = "Calamity Mod,Thorium Mod" ]; then
+    pass "tui_checklist (gum) atribui out-var 'selected_csv' (ex-shadowing)"
+else
+    fail "tui_checklist (gum) selected_csv" "Calamity Mod,Thorium Mod" "${selected_csv:-UNSET}"
+fi
+
+choice=""
+tui_choose choice "Escolha" "alpha" "alpha" "beta" "gamma" >/dev/null 2>&1
+if [ "${choice:-UNSET}" = "beta" ]; then
+    pass "tui_choose (gum) atribui out-var 'choice' (ex-interna)"
+else
+    fail "tui_choose (gum) choice" "beta" "${choice:-UNSET}"
+fi
+
+value=""
+tui_input value "Digite algo" "meu-default" >/dev/null 2>&1
+if [ "${value:-UNSET}" = "valor-digitado" ]; then
+    pass "tui_input (gum) atribui out-var 'value' (ex-interna)"
+else
+    fail "tui_input (gum) value" "valor-digitado" "${value:-UNSET}"
+fi
+
+# Restaura engine real e PATH.
+eval "$_TUI_AVAILABLE_ORIG"
+PATH="${PATH#"$FAKE_GUM_DIR:"}"
+rm -rf "$FAKE_GUM_DIR"
 
 echo ""
 echo "[tui-fallback-test] PASS=$PASS FAIL=$FAIL"

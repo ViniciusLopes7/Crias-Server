@@ -11,6 +11,12 @@
 #   - Todas as funções usam a sintaxe `printf -v` para atribuir a variáveis
 #     nomeadas pelo caller (igual ao ask_value), OU retornam strings no stdout
 #     para captura via $(...).
+#   - ATENÇÃO shadowing: funções que atribuem por NOME (printf -v "$var_out"
+#     — tui_choose/tui_input/tui_checklist) têm TODAS as internas com prefixo
+#     _tui_. Um `local` interno com o mesmo nome da var-alvo do caller faz o
+#     printf -v escrever na cópia interna (que morre no return) e o caller vê
+#     "unbound variable" sob set -u (bug real do tui_checklist x
+#     selected_csv, v1.2.1). Nunca declarar local não-prefixado nessas funções.
 #   - Funções tui_* são "high-level": recebem listas/defaults e produzem seleção.
 #   - Funções _tui_gum_* são wrappers internos que chamam gum; se gum ausente
 #     ou falhar (exit != 0), caem para o fallback read-based.
@@ -224,49 +230,49 @@ _tui_engine() {
 #                  mostra a ajuda e RE-EXIBE este mesmo menu.
 # ---------------------------------------------------------------------------
 tui_choose() {
-    local var_out="$1"
-    local prompt="$2"
-    local default="$3"
+    local _tui_var_out="$1"
+    local _tui_prompt="$2"
+    local _tui_default="$3"
     shift 3
-    local options=("$@")
+    local _tui_options=("$@")
 
-    local back_marker=""
+    local _tui_back_marker=""
     if [ "${TUI_BACK:-0}" = "1" ]; then
-        back_marker="← Voltar"
-        options=("$back_marker" "${options[@]}")
+        _tui_back_marker="← Voltar"
+        _tui_options=("$_tui_back_marker" "${_tui_options[@]}")
     fi
-    local help_marker=""
+    local _tui_help_marker=""
     if [ "${TUI_HELP:-0}" = "1" ] && [ -n "${TUI_HELP_TOPIC:-}" ]; then
-        help_marker="? Ajuda"
-        options+=("$help_marker")
+        _tui_help_marker="? Ajuda"
+        _tui_options+=("$_tui_help_marker")
     fi
 
     if tui_available; then
-        local choice
-        local selected_args=()
-        local opt
-        for opt in "${options[@]}"; do
-            if [ "$opt" = "$default" ]; then
-                selected_args=(--selected="$default")
+        local _tui_choice
+        local _tui_selected_args=()
+        local _tui_opt
+        for _tui_opt in "${_tui_options[@]}"; do
+            if [ "$_tui_opt" = "$_tui_default" ]; then
+                _tui_selected_args=(--selected="$_tui_default")
                 break
             fi
         done
         # gum choose printa a opção escolhida no stdout; exit 0=ok, 130=cancel.
         # TUI é renderizado em stderr (tea.WithOutput) — não suprimir.
-        if choice=$(gum choose \
-                --header="$prompt" \
-                --height="${#options[@]}" \
-                "${selected_args[@]}" \
-                "${options[@]}"); then
-            if [ -n "$help_marker" ] && [ "$choice" = "$help_marker" ]; then
+        if _tui_choice=$(gum choose \
+                --header="$_tui_prompt" \
+                --height="${#_tui_options[@]}" \
+                "${_tui_selected_args[@]}" \
+                "${_tui_options[@]}"); then
+            if [ -n "$_tui_help_marker" ] && [ "$_tui_choice" = "$_tui_help_marker" ]; then
                 tui_help "$TUI_HELP_TOPIC"
-                tui_choose "$var_out" "$prompt" "$default" "$@"
+                tui_choose "$_tui_var_out" "$_tui_prompt" "$_tui_default" "$@"
                 return 0
             fi
-            if [ -n "$back_marker" ] && [ "$choice" = "$back_marker" ]; then
-                printf -v "$var_out" '%s' "__BACK__"
+            if [ -n "$_tui_back_marker" ] && [ "$_tui_choice" = "$_tui_back_marker" ]; then
+                printf -v "$_tui_var_out" '%s' "__BACK__"
             else
-                printf -v "$var_out" '%s' "$choice"
+                printf -v "$_tui_var_out" '%s' "$_tui_choice"
             fi
             return 0
         fi
@@ -274,68 +280,68 @@ tui_choose() {
         # manter paridade com ask_value (que usa default em EOF). Caller pode
         # checar retorno se quiser distinguir. Aqui retornamos 0 com default
         # para não travar fluxos que esperam um valor.
-        printf -v "$var_out" '%s' "$default"
+        printf -v "$_tui_var_out" '%s' "$_tui_default"
         return 0
     fi
 
     # Fallback read-based: enumera opções numeradas.
-    print_prompt "$prompt"
-    local i=1
-    local opt
-    for opt in "${options[@]}"; do
+    print_prompt "$_tui_prompt"
+    local _tui_i=1
+    local _tui_opt
+    for _tui_opt in "${_tui_options[@]}"; do
         # Marca o default com [*].
-        if [ "$opt" = "$default" ]; then
-            printf '  %s[*] %s\n' "$i" "$opt"
+        if [ "$_tui_opt" = "$_tui_default" ]; then
+            printf '  %s[*] %s\n' "$_tui_i" "$_tui_opt"
         else
-            printf '  %s) %s\n' "$i" "$opt"
+            printf '  %s) %s\n' "$_tui_i" "$_tui_opt"
         fi
-        i=$((i + 1))
+        _tui_i=$((_tui_i + 1))
     done
-    local answer
-    if ! read -r -p "$(printf '%b' "${CYAN}  ➜ [${default}]: ${NC}")" answer; then
+    local _tui_answer
+    if ! read -r -p "$(printf '%b' "${CYAN}  ➜ [${_tui_default}]: ${NC}")" _tui_answer; then
         # EOF/SIGINT: usa default (consistente com ask_value).
-        printf -v "$var_out" '%s' "$default"
+        printf -v "$_tui_var_out" '%s' "$_tui_default"
         return 0
     fi
-    if [ -z "$answer" ]; then
-        printf -v "$var_out" '%s' "$default"
+    if [ -z "$_tui_answer" ]; then
+        printf -v "$_tui_var_out" '%s' "$_tui_default"
         return 0
     fi
     # Se digitou número, resolve via índice; valida que está na faixa.
-    if [[ "$answer" =~ ^[0-9]+$ ]] && [ "$answer" -ge 1 ] && [ "$answer" -le "${#options[@]}" ]; then
-            local picked="${options[$((answer - 1))]}"
-            if [ -n "$help_marker" ] && [ "$picked" = "$help_marker" ]; then
+    if [[ "$_tui_answer" =~ ^[0-9]+$ ]] && [ "$_tui_answer" -ge 1 ] && [ "$_tui_answer" -le "${#_tui_options[@]}" ]; then
+            local _tui_picked="${_tui_options[$((_tui_answer - 1))]}"
+            if [ -n "$_tui_help_marker" ] && [ "$_tui_picked" = "$_tui_help_marker" ]; then
                 tui_help "$TUI_HELP_TOPIC"
-                tui_choose "$var_out" "$prompt" "$default" "$@"
+                tui_choose "$_tui_var_out" "$_tui_prompt" "$_tui_default" "$@"
                 return 0
             fi
-            if [ -n "$back_marker" ] && [ "$picked" = "$back_marker" ]; then
-                printf -v "$var_out" '%s' "__BACK__"
+            if [ -n "$_tui_back_marker" ] && [ "$_tui_picked" = "$_tui_back_marker" ]; then
+                printf -v "$_tui_var_out" '%s' "__BACK__"
                 return 0
             fi
-        printf -v "$var_out" '%s' "$picked"
+        printf -v "$_tui_var_out" '%s' "$_tui_picked"
         return 0
     fi
     # Se digitou texto, valida que corresponde a uma das opções (match exato).
-    local opt
-    for opt in "${options[@]}"; do
-        if [ "$opt" = "$answer" ]; then
-                if [ -n "$help_marker" ] && [ "$opt" = "$help_marker" ]; then
+    local _tui_opt
+    for _tui_opt in "${_tui_options[@]}"; do
+        if [ "$_tui_opt" = "$_tui_answer" ]; then
+                if [ -n "$_tui_help_marker" ] && [ "$_tui_opt" = "$_tui_help_marker" ]; then
                     tui_help "$TUI_HELP_TOPIC"
-                    tui_choose "$var_out" "$prompt" "$default" "$@"
+                    tui_choose "$_tui_var_out" "$_tui_prompt" "$_tui_default" "$@"
                     return 0
                 fi
-                if [ -n "$back_marker" ] && [ "$opt" = "$back_marker" ]; then
-                    printf -v "$var_out" '%s' "__BACK__"
+                if [ -n "$_tui_back_marker" ] && [ "$_tui_opt" = "$_tui_back_marker" ]; then
+                    printf -v "$_tui_var_out" '%s' "__BACK__"
                     return 0
                 fi
-            printf -v "$var_out" '%s' "$answer"
+            printf -v "$_tui_var_out" '%s' "$_tui_answer"
             return 0
         fi
     done
     # Input invalido (numero fora da faixa ou texto nao-listado): usa default.
-    print_warning "Opcao invalida: '$answer'. Usando default: '$default'"
-    printf -v "$var_out" '%s' "$default"
+    print_warning "Opcao invalida: '$_tui_answer'. Usando default: '$_tui_default'"
+    printf -v "$_tui_var_out" '%s' "$_tui_default"
     return 0
 }
 
@@ -486,28 +492,28 @@ tui_confirm() {
 # Retorna 0 sempre (EOF usa default, paridade com ask_value).
 # ---------------------------------------------------------------------------
 tui_input() {
-    local var_out="$1"
-    local prompt="$2"
-    local default="$3"
+    local _tui_var_out="$1"
+    local _tui_prompt="$2"
+    local _tui_default="$3"
 
     if tui_available; then
         # gum input: --placeholder, --value (pré-preenchido), --prompt.
         # --value já vem como default editável; --char-limit=0 = sem limite.
-        local value
-        if value=$(gum input --header="$prompt" --value="$default" --char-limit=0) && [ -n "$value" ]; then
-            printf -v "$var_out" '%s' "$value"
+        local _tui_value
+        if _tui_value=$(gum input --header="$_tui_prompt" --value="$_tui_default" --char-limit=0) && [ -n "$_tui_value" ]; then
+            printf -v "$_tui_var_out" '%s' "$_tui_value"
             return 0
         fi
         # Cancelado ou vazio: usa default.
-        printf -v "$var_out" '%s' "$default"
+        printf -v "$_tui_var_out" '%s' "$_tui_default"
         return 0
     fi
 
     # Fallback: ask_value (common.sh). ask_value não atribui em EOF (read falha),
     # então pré-setamos a var com default e deixamos ask_value sobrescrever
     # apenas se o usuário digitar algo.
-    printf -v "$var_out" '%s' "$default"
-    ask_value "$prompt" "$default" "$var_out" || true
+    printf -v "$_tui_var_out" '%s' "$_tui_default"
+    ask_value "$_tui_prompt" "$_tui_default" "$_tui_var_out" || true
 }
 
 # ---------------------------------------------------------------------------
@@ -518,101 +524,105 @@ tui_input() {
 # Retorna 0 em sucesso.
 # ---------------------------------------------------------------------------
 tui_checklist() {
-    local var_out="$1"
-    local prompt="$2"
-    local default_csv="$3"
+    local _tui_var_out="$1"
+    local _tui_prompt="$2"
+    local _tui_default_csv="$3"
     shift 3
-    local options=("$@")
+    local _tui_options=("$@")
 
     # Valida default_csv contra options (defesa contra injection).
-    local -A default_set=()
-    local d
+    local -A _tui_default_set=()
+    local _tui_d
     local IFS=','
-    for d in $default_csv; do
+    for _tui_d in $_tui_default_csv; do
         # trim whitespace
-        d="${d#"${d%%[![:space:]]*}"}"
-        d="${d%"${d##*[![:space:]]}"}"
-        [ -n "$d" ] && default_set["$d"]=1
+        _tui_d="${_tui_d#"${_tui_d%%[![:space:]]*}"}"
+        _tui_d="${_tui_d%"${_tui_d##*[![:space:]]}"}"
+        [ -n "$_tui_d" ] && _tui_default_set["$_tui_d"]=1
     done
     unset IFS
 
     if tui_available; then
         # gum choose --no-limit permite multi-seleção. Pré-seleciona via --selected
         # (CSV). Printa cada selecionado em uma linha.
-        local selected_csv="$default_csv"
-        local raw
-        if raw=$(gum choose --no-limit --header="$prompt" --selected="$default_csv" \
-                --height=$(( ${#options[@]} + 2 )) \
-                "${options[@]}"); then
+        # Tecla de toggle do gum 2.x é "x" (espaço NÃO alterna — provado em
+        # PTY; o header precisa instruir com a tecla certa, o rodapé do gum
+        # confirma: "x toggle • ... • ctrl+a select all").
+        local _tui_header="$_tui_prompt (x para marcar, Enter para confirmar)"
+        local _tui_selected_csv="$_tui_default_csv"
+        local _tui_raw
+        if _tui_raw=$(gum choose --no-limit --header="$_tui_header" --selected="$_tui_default_csv" \
+                --height=$(( ${#_tui_options[@]} + 2 )) \
+                "${_tui_options[@]}"); then
             # gum printa uma opção por linha; junta em CSV.
-            selected_csv=""
-            local first=1
-            local sel
-            while IFS= read -r sel; do
-                [ -z "$sel" ] && continue
-                if [ "$first" -eq 1 ]; then
-                    selected_csv="$sel"
-                    first=0
+            _tui_selected_csv=""
+            local _tui_first=1
+            local _tui_sel
+            while IFS= read -r _tui_sel; do
+                [ -z "$_tui_sel" ] && continue
+                if [ "$_tui_first" -eq 1 ]; then
+                    _tui_selected_csv="$_tui_sel"
+                    _tui_first=0
                 else
-                    selected_csv="$selected_csv,$sel"
+                    _tui_selected_csv="${_tui_selected_csv},${_tui_sel}"
                 fi
-            done <<< "$raw"
-            printf -v "$var_out" '%s' "$selected_csv"
+            done <<< "$_tui_raw"
+            printf -v "$_tui_var_out" '%s' "$_tui_selected_csv"
             return 0
         fi
-        printf -v "$var_out" '%s' "$default_csv"
+        printf -v "$_tui_var_out" '%s' "$_tui_default_csv"
         return 0
     fi
 
     # Fallback: toggle por número até Enter vazio.
-    print_prompt "$prompt"
-    local -A chosen=()
-    local opt
-    for opt in "${!default_set[@]}"; do
-        chosen["$opt"]=1
+    print_prompt "$_tui_prompt"
+    local -A _tui_chosen=()
+    local _tui_opt
+    for _tui_opt in "${!_tui_default_set[@]}"; do
+        _tui_chosen["$_tui_opt"]=1
     done
     while true; do
-        local i=1
-        for opt in "${options[@]}"; do
-            local mark=" "
-            if [ -n "${chosen[$opt]:-}" ]; then
-                mark="[x]"
+        local _tui_i=1
+        for _tui_opt in "${_tui_options[@]}"; do
+            local _tui_mark=" "
+            if [ -n "${_tui_chosen[$_tui_opt]:-}" ]; then
+                _tui_mark="[x]"
             else
-                mark="[ ]"
+                _tui_mark="[ ]"
             fi
-            printf '  %s) %s %s\n' "$i" "$mark" "$opt"
-            i=$((i + 1))
+            printf '  %s) %s %s\n' "$_tui_i" "$_tui_mark" "$_tui_opt"
+            _tui_i=$((_tui_i + 1))
         done
         printf '  0) confirmar\n'
-        local answer
-        if ! read -r -p "$(printf '%b' "${CYAN}  ➜ toggle (0=ok): ${NC}")" answer; then
+        local _tui_answer
+        if ! read -r -p "$(printf '%b' "${CYAN}  ➜ toggle (0=ok): ${NC}")" _tui_answer; then
             break
         fi
-        if [ "$answer" = "0" ] || [ -z "$answer" ]; then
+        if [ "$_tui_answer" = "0" ] || [ -z "$_tui_answer" ]; then
             break
         fi
-        if [[ "$answer" =~ ^[0-9]+$ ]] && [ "$answer" -ge 1 ] && [ "$answer" -le "${#options[@]}" ]; then
-            opt="${options[$((answer - 1))]}"
-            if [ -n "${chosen[$opt]:-}" ]; then
-                unset 'chosen[$opt]'
+        if [[ "$_tui_answer" =~ ^[0-9]+$ ]] && [ "$_tui_answer" -ge 1 ] && [ "$_tui_answer" -le "${#_tui_options[@]}" ]; then
+            _tui_opt="${_tui_options[$((_tui_answer - 1))]}"
+            if [ -n "${_tui_chosen[$_tui_opt]:-}" ]; then
+                unset '_tui_chosen[$_tui_opt]'
             else
-                chosen["$opt"]=1
+                _tui_chosen["$_tui_opt"]=1
             fi
         fi
     done
-    local result=""
-    local first=1
-    for opt in "${options[@]}"; do
-        if [ -n "${chosen[$opt]:-}" ]; then
-            if [ "$first" -eq 1 ]; then
-                result="$opt"
-                first=0
+    local _tui_result=""
+    local _tui_first=1
+    for _tui_opt in "${_tui_options[@]}"; do
+        if [ -n "${_tui_chosen[$_tui_opt]:-}" ]; then
+            if [ "$_tui_first" -eq 1 ]; then
+                _tui_result="$_tui_opt"
+                _tui_first=0
             else
-                result="$result,$opt"
+                _tui_result="${_tui_result},${_tui_opt}"
             fi
         fi
     done
-    printf -v "$var_out" '%s' "$result"
+    printf -v "$_tui_var_out" '%s' "$_tui_result"
     return 0
 }
 

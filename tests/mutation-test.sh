@@ -216,18 +216,27 @@ run_mutation \
     "shared/lib/tui.sh" \
     "M10: tui_choose remove validacao de input contra lista (regressao)" \
     '    # Se digitou texto, valida que corresponde a uma das opções (match exato).
-    local opt
-    for opt in "${options[@]}"; do
-        if [ "$opt" = "$answer" ]; then
-            printf -v "$var_out" '"'"'%s'"'"' "$answer"
+    local _tui_opt
+    for _tui_opt in "${_tui_options[@]}"; do
+        if [ "$_tui_opt" = "$_tui_answer" ]; then
+                if [ -n "$_tui_help_marker" ] && [ "$_tui_opt" = "$_tui_help_marker" ]; then
+                    tui_help "$TUI_HELP_TOPIC"
+                    tui_choose "$_tui_var_out" "$_tui_prompt" "$_tui_default" "$@"
+                    return 0
+                fi
+                if [ -n "$_tui_back_marker" ] && [ "$_tui_opt" = "$_tui_back_marker" ]; then
+                    printf -v "$_tui_var_out" '"'"'%s'"'"' "__BACK__"
+                    return 0
+                fi
+            printf -v "$_tui_var_out" '"'"'%s'"'"' "$_tui_answer"
             return 0
         fi
     done
     # Input invalido (numero fora da faixa ou texto nao-listado): usa default.
-    print_warning "Opcao invalida: '"'"'$answer'"'"'. Usando default: '"'"'$default'"'"'"
-    printf -v "$var_out" '"'"'%s'"'"' "$default"' \
+    print_warning "Opcao invalida: '"'"'$_tui_answer'"'"'. Usando default: '"'"'$_tui_default'"'"'"
+    printf -v "$_tui_var_out" '"'"'%s'"'"' "$_tui_default"' \
     '    # MUTATED: atribui input sem validar (regressao).
-    printf -v "$var_out" '"'"'%s'"'"' "$answer"' \
+    printf -v "$_tui_var_out" '"'"'%s'"'"' "$_tui_answer"' \
     "bash tests/tui-fallback-test.sh" \
     0
 
@@ -249,15 +258,15 @@ run_mutation \
     0
 
 # M12: tui_input remove pre-set do default.
-# NOTA: o ask_value (common.sh) ATRIBUI o default em EOF (via if [ -z "$answer" ]),
+# NOTA: o ask_value (common.sh) ATRIBUI o default em EOF (via if [ -z "$_av_answer" ]),
 # entao o pre-set do tui_input e REDUNDANTE (defesa em profundidade). Esta mutacao
 # nao muda comportamento observavel — marcada como esperada sobreviver.
 run_mutation \
     "shared/lib/tui.sh" \
     "M12: tui_input remove printf -v default pre-set (redundante)" \
-    '    printf -v "$var_out" '"'"'%s'"'"' "$default"
-    ask_value "$prompt" "$default" "$var_out" || true' \
-    '    ask_value "$prompt" "$default" "$var_out" || true' \
+    '    printf -v "$_tui_var_out" '"'"'%s'"'"' "$_tui_default"
+    ask_value "$_tui_prompt" "$_tui_default" "$_tui_var_out" || true' \
+    '    ask_value "$_tui_prompt" "$_tui_default" "$_tui_var_out" || true' \
     "bash tests/tui-fallback-test.sh" \
     1
 

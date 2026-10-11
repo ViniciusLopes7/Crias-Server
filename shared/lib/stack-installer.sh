@@ -13,6 +13,7 @@
 #   stack_install_extra_deps()   { ... }   # optional
 #   stack_install_logrotate()    { ... }   # optional
 #   stack_install_qol_mods()     { ... }   # optional (Minecraft only)
+#   stack_install_extra_mods()  { ... }   # optional (Minecraft only)
 #
 #   # Variables the caller MUST define before calling:
 #   STACK_NAME              # "minecraft" | "terraria"
@@ -318,6 +319,12 @@ run_stack_install() {
     # 4. Mods QoL opcionais (apenas Minecraft define)
     if declare -F stack_install_qol_mods >/dev/null 2>&1; then
         stack_install_qol_mods
+    fi
+
+    # 4b. Mods individuais do usuário por cima do modpack/QoL (Minecraft).
+    # Hook separado do QoL: extras não pulam quando mods/ já tem arquivos.
+    if declare -F stack_install_extra_mods >/dev/null 2>&1; then
+        stack_install_extra_mods
     fi
 
     # 5. Tuning de runtime (específico do stack)

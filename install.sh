@@ -61,6 +61,9 @@ MINECRAFT_ADRENALINE_VERSION="${MINECRAFT_ADRENALINE_VERSION:-}"
 MINECRAFT_INSTALL_QOL_MODS="${MINECRAFT_INSTALL_QOL_MODS:-true}"
 # QoL mods CSV list.
 MINECRAFT_QOL_MODS="${MINECRAFT_QOL_MODS:-chunky:chunky,essential-commands:essential-commands,universal-graves:universal-graves,tabtps:tabtps,styled-chat:styled-chat,polymer:polymer,placeholder-api:placeholder-api}"
+# Mods individuais do usuário (CSV de slugs do Modrinth), instalados POR CIMA
+# do modpack/QoL. Vazio = nenhum.
+MINECRAFT_EXTRA_MODS="${MINECRAFT_EXTRA_MODS:-}"
 # Modpack source.
 MINECRAFT_MODPACK_SOURCE="${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
 MINECRAFT_MODPACK_SLUG="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
@@ -219,6 +222,15 @@ prompt_minecraft_options() {
             MINECRAFT_INSTALL_QOL_MODS="true"
         else
             MINECRAFT_INSTALL_QOL_MODS="false"
+        fi
+
+        # Mods individuais por CIMA do modpack: o QoL acima pula quando mods/
+        # já contém os arquivos do modpack, então extras têm fluxo próprio no
+        # installer (não pulam). CSV de slugs do Modrinth.
+        if tui_confirm "Adicionar mods individuais (slugs do Modrinth)?" "N"; then
+            tui_input MINECRAFT_EXTRA_MODS "Slugs dos mods (CSV, ex.: sodium,lithium,ferrite-core)" "${MINECRAFT_EXTRA_MODS:-}"
+        else
+            MINECRAFT_EXTRA_MODS=""
         fi
     fi
 }
@@ -609,8 +621,10 @@ _prompt_tml_catalog_mods() {
     fi
 
     # Multi-seleção do catálogo (checklist TUI).
-    local selected_csv
-    tui_checklist selected_csv "Selecione os mods (espaço para toggle, Enter para confirmar)" "" \
+    # Init "": local sem valor fica UNSET (quirk do bash) e o set -u matava
+    # aqui se a lib deixasse de atribuir por qualquer motivo.
+    local selected_csv=""
+    tui_checklist selected_csv "Selecione os mods do catálogo" "" \
         "Calamity Mod" \
         "Calamity Mod Music" \
         "Thorium Mod" \
@@ -875,6 +889,7 @@ write_stack_env_file() {
             printf 'MINECRAFT_INSTALL_QOL_MODS=%q\n' "$MINECRAFT_INSTALL_QOL_MODS"
             printf 'ACCEPT_EULA=%q\n' "${ACCEPT_EULA:-false}"
             printf 'MINECRAFT_QOL_MODS=%q\n' "${MINECRAFT_QOL_MODS:-}"
+            printf 'MINECRAFT_EXTRA_MODS=%q\n' "${MINECRAFT_EXTRA_MODS:-}"
             printf 'MINECRAFT_MODPACK_SOURCE=%q\n' "${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
             printf 'MINECRAFT_MODPACK_SLUG=%q\n' "${MINECRAFT_MODPACK_SLUG:-adrenaline}"
             printf 'MRPACK_INSTALL_VERSION=%q\n' "${MRPACK_INSTALL_VERSION:-v0.21.0-beta}"
@@ -1627,6 +1642,7 @@ show_install_summary() {
         printf '  %-22s %s\n' "Online-mode:" "$MINECRAFT_ONLINE_MODE"
         printf '  %-22s %s\n' "MOTD:" "$MINECRAFT_MOTD"
         printf '  %-22s %s\n' "Mods QoL:" "$MINECRAFT_INSTALL_QOL_MODS"
+        printf '  %-22s %s\n' "Mods extras:" "${MINECRAFT_EXTRA_MODS:-nenhum}"
     else
         printf '  %-22s %s\n' "Mundo:" "$TERRARIA_WORLD_NAME"
         printf '  %-22s %s\n' "tModLoader:" "${TERRARIA_USE_TMODLOADER:-false}"

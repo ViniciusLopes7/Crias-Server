@@ -67,7 +67,9 @@ validate_setup_cron_inputs() {
         fi
         # Absolute paths: / followed by [a-zA-Z0-9/_.-]; reject newlines,
         # spaces, shell metachars, and chars that break systemd units.
-        if [[ "$val" == *$'\n'* ]] || [[ "$val" == *$'\0'* ]] || \
+        # (Sem check de NUL: variáveis bash não carregam NUL e o padrão
+        # *$'\0'* expande para ** — casa com TUDO, rejeitando qualquer valor.)
+        if [[ "$val" == *$'\n'* ]] || \
            [[ "$val" == *' '* ]] || [[ "$val" == *';'* ]] || \
            [[ "$val" == *'|'* ]] || [[ "$val" == *'`'* ]] || \
            [[ "$val" == *'$'* ]]; then
@@ -278,7 +280,9 @@ setup_cron_run() {
 
             # Validate CUSTOM_LINE against systemd directive injection.
             # Only [Timer] section directives accepted.
-            if [[ "$CUSTOM_LINE" == *$'\n'* ]] || [[ "$CUSTOM_LINE" == *$'\0'* ]] || \
+            # (Sem check de NUL: idem validate_setup_cron_inputs — *$'\0'*
+            # expande para ** e casa com TUDO.)
+            if [[ "$CUSTOM_LINE" == *$'\n'* ]] || \
                [[ "$CUSTOM_LINE" == *';'* ]] || [[ "$CUSTOM_LINE" == *'|'* ]] || \
                [[ "$CUSTOM_LINE" == *'`'* ]] || [[ "$CUSTOM_LINE" == *'$'* ]]; then
                 echo -e "${RED}Erro:${NC} CUSTOM_LINE contem caracteres proibidos (newline, null, ;, |, etc)."

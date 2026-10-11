@@ -165,6 +165,7 @@ assert_grep '^MINECRAFT_ONLINE_MODE="true"' "$ROOT_DIR/config.env"
 
 # 15. config.env tem novas variáveis
 assert_grep '^MINECRAFT_QOL_MODS=' "$ROOT_DIR/config.env"
+assert_grep '^MINECRAFT_EXTRA_MODS=' "$ROOT_DIR/config.env"
 assert_grep '^MINECRAFT_MODPACK_SOURCE=' "$ROOT_DIR/config.env"
 assert_grep '^MRPACK_INSTALL_VERSION=' "$ROOT_DIR/config.env"
 assert_grep '^HW_LOW_TIER_MAX_RAM_MB=' "$ROOT_DIR/config.env"
@@ -172,6 +173,7 @@ assert_grep '^INSTALL_AGENT=' "$ROOT_DIR/config.env"
 
 # 16. config-parser.sh tem novas variáveis no OVERRIDABLE_VARS
 assert_grep 'MINECRAFT_QOL_MODS' "$ROOT_DIR/shared/lib/config-parser.sh"
+assert_grep 'MINECRAFT_EXTRA_MODS' "$ROOT_DIR/shared/lib/config-parser.sh"
 assert_grep 'MINECRAFT_MODPACK_SOURCE' "$ROOT_DIR/shared/lib/config-parser.sh"
 assert_grep 'MRPACK_INSTALL_VERSION' "$ROOT_DIR/shared/lib/config-parser.sh"
 assert_grep 'HW_LOW_TIER_MAX_RAM_MB' "$ROOT_DIR/shared/lib/config-parser.sh"

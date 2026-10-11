@@ -249,19 +249,21 @@ ask_confirm() {
 
 # Prompt for a value with default. Uses printf -v to assign to a named variable.
 ask_value() {
-    local prompt="$1"
-    local default_value="$2"
-    local var_name="$3"
-    local answer
+    # Internas com prefixo _av_: printf -v por nome sombreia a var-alvo do
+    # caller se uma interna tiver o mesmo nome (ver convenção em tui.sh).
+    local _av_prompt="$1"
+    local _av_default="$2"
+    local _av_var_name="$3"
+    local _av_answer
 
     # Highlight the question.
-    print_prompt "$prompt"
+    print_prompt "$_av_prompt"
 
-    read -r -p "$(printf '%b' "${CYAN}  ➜ [${default_value}]: ${NC}")" answer
-    if [ -z "$answer" ]; then
-        printf -v "$var_name" '%s' "$default_value"
+    read -r -p "$(printf '%b' "${CYAN}  ➜ [${_av_default}]: ${NC}")" _av_answer
+    if [ -z "$_av_answer" ]; then
+        printf -v "$_av_var_name" '%s' "$_av_default"
     else
-        printf -v "$var_name" '%s' "$answer"
+        printf -v "$_av_var_name" '%s' "$_av_answer"
     fi
 }
 
