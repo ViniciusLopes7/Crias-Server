@@ -28,7 +28,7 @@
 # User-Agent para todas as chamadas a APIs públicas.
 # Modrinth exige UA não-genérico (bloqueia curl/python-requests puros).
 # ---------------------------------------------------------------------------
-MODRINTH_USER_AGENT="crias-server-installer/1.2.0 (https://github.com/ViniciusLopes7/Crias-Server)"
+MODRINTH_USER_AGENT="crias-server-installer/1.3.0 (https://github.com/ViniciusLopes7/Crias-Server)"
 # Timeouts conservadores para não travar o installer em rede lenta.
 MC_API_CONNECT_TIMEOUT="${MC_API_CONNECT_TIMEOUT:-10}"
 MC_API_MAX_TIME="${MC_API_MAX_TIME:-30}"

@@ -322,6 +322,106 @@ EOF
     fi
 }
 
+# v1.3.x: a versao do modpack escolhida no wizard (MINECRAFT_ADRENALINE_VERSION,
+# nome legacy) precisa chegar ao mrpack-install como argumento posicional em
+# TODAS as fontes que instalam modpack — bug historico: source=modrinth
+# ignorava a versao e instalava sempre a mais recente.
+run_modpack_version_passthrough_contract() {
+    local bin_dir="$TMP_TEST_DIR/modpack-stub-bin"
+    local args_log="$TMP_TEST_DIR/mrpack-args.log"
+    local server_dir="$TMP_TEST_DIR/mc-modpack-server"
+
+    mkdir -p "$bin_dir" "$server_dir"
+
+    # Stub de mrpack-install: registra os argumentos recebidos (um por linha).
+    cat > "$bin_dir/mrpack-install" << EOF
+#!/bin/bash
+printf '%s\n' "\$@" >> "$args_log"
+exit 0
+EOF
+    chmod +x "$bin_dir/mrpack-install"
+
+    # Stub do timeout: executa o comando direto (stub ja registra os args).
+    cat > "$bin_dir/timeout" << 'EOF'
+#!/bin/bash
+# Uso: timeout 300 <cmd> <args...> — ignora a duracao e executa.
+shift
+exec "$@"
+EOF
+    chmod +x "$bin_dir/timeout"
+
+    (
+        export PATH="$bin_dir:$PATH"
+        export DRY_RUN="false"
+        export MINECRAFT_SERVER_DIR="$server_dir"
+        export MINECRAFT_INSTALL_QOL_MODS="false"
+        export MINECRAFT_EXTRA_MODS=""
+        export MINECRAFT_LOADER="fabric"
+        export MINECRAFT_VERSION="26.3"
+
+        # shellcheck source=/dev/null
+        source "$ROOT_DIR/shared/lib/common.sh" >/dev/null 2>&1 || true
+        # shellcheck source=/dev/null
+        source "$ROOT_DIR/minecraft/install.sh" >/dev/null 2>&1
+
+        # stack_download_and_install chama install_mrpack_install (pacman) —
+        # stubamos para isolar o teste do contrato de argumentos.
+        install_mrpack_install() { :; }
+
+        # Caso 1: source=modrinth COM versao -> versao como 2o argumento posicional.
+        : > "$args_log"
+        MINECRAFT_MODPACK_SOURCE="modrinth"
+        MINECRAFT_MODPACK_SLUG="fabulously-optimized"
+        MINECRAFT_ADRENALINE_VERSION="v6.2.0"
+        stack_download_and_install
+        if ! grep -qFx 'fabulously-optimized' "$args_log" \
+            || ! grep -qFx 'v6.2.0' "$args_log" \
+            || ! grep -qFx -- '--server-dir' "$args_log"; then
+            echo "[install-contracts] source=modrinth COM versao: argumentos errados:" >&2
+            cat "$args_log" >&2
+            exit 1
+        fi
+
+        # Caso 2: source=modrinth SEM versao -> so o slug (mais recente).
+        : > "$args_log"
+        MINECRAFT_MODPACK_SOURCE="modrinth"
+        MINECRAFT_MODPACK_SLUG="adrenaline"
+        MINECRAFT_ADRENALINE_VERSION=""
+        stack_download_and_install
+        if grep -qFx 'adrenaline' "$args_log" && [ "$(grep -cFx 'adrenaline' "$args_log")" -ne 1 ]; then
+            echo "[install-contracts] source=modrinth SEM versao: argumentos inesperados:" >&2
+            cat "$args_log" >&2
+            exit 1
+        fi
+        if ! grep -qFx 'adrenaline' "$args_log"; then
+            echo "[install-contracts] source=modrinth SEM versao: slug ausente:" >&2
+            cat "$args_log" >&2
+            exit 1
+        fi
+
+        # Caso 3: source=adrenaline COM versao (comportamento pre-existente preservado).
+        : > "$args_log"
+        MINECRAFT_MODPACK_SOURCE="adrenaline"
+        MINECRAFT_ADRENALINE_VERSION="1.6.1"
+        stack_download_and_install
+        if ! grep -qFx 'adrenaline' "$args_log" || ! grep -qFx '1.6.1' "$args_log"; then
+            echo "[install-contracts] source=adrenaline COM versao: argumentos errados:" >&2
+            cat "$args_log" >&2
+            exit 1
+        fi
+
+        # Caso 4: source=vanilla -> loader + versao MC (sem slug de modpack).
+        : > "$args_log"
+        MINECRAFT_MODPACK_SOURCE="vanilla"
+        stack_download_and_install
+        if ! grep -qFx 'fabric' "$args_log" || ! grep -qFx '26.3' "$args_log"; then
+            echo "[install-contracts] source=vanilla: argumentos errados:" >&2
+            cat "$args_log" >&2
+            exit 1
+        fi
+    )
+}
+
 echo "[install-contracts] Validando falha rapida para configuracoes invalidas..."
 run_missing_server_type_contract
 run_invalid_server_type_contract
@@ -341,5 +441,8 @@ run_invalid_terraria_port_contract
 
 echo "[install-contracts] Validando rejeicao do loader paper (v1.2.0)..."
 run_paper_loader_rejected_contract
+
+echo "[install-contracts] Validando repasse da versao do modpack ao mrpack-install..."
+run_modpack_version_passthrough_contract
 
 echo "[install-contracts] OK"

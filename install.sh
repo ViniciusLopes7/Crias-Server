@@ -54,7 +54,7 @@ MINECRAFT_SERVER_DIR="${MINECRAFT_SERVER_DIR:-/opt/minecraft-server}"
 MINECRAFT_PORT="${MINECRAFT_PORT:-25565}"
 MINECRAFT_ONLINE_MODE="${MINECRAFT_ONLINE_MODE:-true}"
 MINECRAFT_MOTD="${MINECRAFT_MOTD:-§6§l🏰 REINO DOS CRIAS 🏰\\n§eAdrenaline + QoL §7| §aA resenha nunca morre...§r}"
-MINECRAFT_VERSION="${MINECRAFT_VERSION:-1.21.11}"
+MINECRAFT_VERSION="${MINECRAFT_VERSION:-26.3}"
 MINECRAFT_LOADER="${MINECRAFT_LOADER:-fabric}"
 MINECRAFT_INSTALL_MODPACK="${MINECRAFT_INSTALL_MODPACK:-true}"
 MINECRAFT_ADRENALINE_VERSION="${MINECRAFT_ADRENALINE_VERSION:-}"
@@ -67,7 +67,7 @@ MINECRAFT_EXTRA_MODS="${MINECRAFT_EXTRA_MODS:-}"
 # Modpack source.
 MINECRAFT_MODPACK_SOURCE="${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
 MINECRAFT_MODPACK_SLUG="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
-MRPACK_INSTALL_VERSION="${MRPACK_INSTALL_VERSION:-v0.21.0-beta}"
+MRPACK_INSTALL_VERSION="${MRPACK_INSTALL_VERSION:-v0.23.0}"
 ACCEPT_EULA="${ACCEPT_EULA:-false}"
 
 TERRARIA_USER="${TERRARIA_USER:-terraria}"
@@ -75,7 +75,7 @@ TERRARIA_SERVER_DIR="${TERRARIA_SERVER_DIR:-/opt/terraria-server}"
 TERRARIA_PORT="${TERRARIA_PORT:-7777}"
 TERRARIA_WORLD_NAME="${TERRARIA_WORLD_NAME:-world}"
 TERRARIA_MOTD="${TERRARIA_MOTD:-Servidor Terraria gerenciado por Crias-Server}"
-TERRARIA_DOWNLOAD_URL="${TERRARIA_DOWNLOAD_URL:-https://terraria.org/api/download/pc-dedicated-server/terraria-server-1456.zip}"
+TERRARIA_DOWNLOAD_URL="${TERRARIA_DOWNLOAD_URL:-https://terraria.org/api/download/pc-dedicated-server/terraria-server-1458.zip}"
 
 # Optional remote control agent install.
 INSTALL_AGENT="${INSTALL_AGENT:-}"
@@ -84,8 +84,8 @@ INSTALL_AGENT="${INSTALL_AGENT:-}"
 # Se true, instala openssh no host, habilita sshd, cria usuario 'crias' com sudo.
 INSTALL_SSH="${INSTALL_SSH:-}"
 
-# tModLoader para Terraria (WIP — v1.2.0). Nao implementado completamente.
-# Reservado para futura instalacao de mods no Terraria.
+# tModLoader para Terraria (implementado em v1.2.1). Quando true, substitui
+# o servidor vanilla pelo tModLoader (mesma porta/diretorio/service unit).
 TERRARIA_USE_TMODLOADER="${TERRARIA_USE_TMODLOADER:-false}"
 TERRARIA_TMODLOADER_VERSION="${TERRARIA_TMODLOADER_VERSION:-}"
 TERRARIA_TMODLOADER_MODS="${TERRARIA_TMODLOADER_MODS:-}"
@@ -551,7 +551,7 @@ prompt_tmodloader_options() {
         print_warning "Falha ao buscar versões dinâmicas do tModLoader."
         print_warning "Usando versão default: ${TERRARIA_TMODLOADER_VERSION:-latest}"
         if [ -z "$TERRARIA_TMODLOADER_VERSION" ]; then
-            tui_input TERRARIA_TMODLOADER_VERSION "Versão do tModLoader (tag, ex.: v2026.06.3.6)" "latest"
+            tui_input TERRARIA_TMODLOADER_VERSION "Versão do tModLoader (tag, ex.: v2026.09.3.1)" "latest"
         fi
     else
         local selected
@@ -580,8 +580,11 @@ prompt_tmodloader_mods() {
     local source
     while true; do
         TUI_BACK=1
-        tui_choose source "Como instalar mods do tModLoader?" "Catálogo curado (Calamity, Thorium, etc.)" \
-            "Catálogo curado (Calamity, Thorium, etc.)" \
+        # Rótulo SEM vírgulas: ele é o default do tui_choose e o gum trata
+        # --selected como CSV — vírgula no rótulo anulava a pré-seleção e o
+        # cursor caía no "← Voltar" (Enter às cegas voltava sem querer).
+        tui_choose source "Como instalar mods do tModLoader?" "Catálogo curado de mods" \
+            "Catálogo curado de mods" \
             "Sem mods (instalar tModLoader vazio)" \
             "Workshop IDs manuais (CSV)"
         TUI_BACK=0
@@ -590,7 +593,7 @@ prompt_tmodloader_mods() {
                 TUI_PAGE_BACK=1
                 return 0
                 ;;
-            "Catálogo curado (Calamity, Thorium, etc.)")
+            "Catálogo curado de mods")
                 _prompt_tml_catalog_mods || continue
                 ;;
             "Sem mods (instalar tModLoader vazio)")
@@ -599,7 +602,16 @@ prompt_tmodloader_mods() {
                 ;;
             "Workshop IDs manuais (CSV)")
                 local manual_ids
-                tui_input manual_ids "Workshop IDs (CSV, ex.: 2824688072,2909886416)" "${TERRARIA_TMODLOADER_MODS:-}"
+                # Valida formato numérico CSV (Workshop IDs são dígitos). Lixo
+                # aqui só falharia depois, silenciosamente, no steamcmd.
+                while true; do
+                    tui_input manual_ids "Workshop IDs (CSV, ex.: 2824688072,2909886416)" "${TERRARIA_TMODLOADER_MODS:-}"
+                    manual_ids=$(printf '%s' "$manual_ids" | tr -d '[:space:]')
+                    if [ -z "$manual_ids" ] || [[ "$manual_ids" =~ ^[0-9]+(,[0-9]+)*$ ]]; then
+                        break
+                    fi
+                    print_error "Formato inválido. Use apenas números separados por vírgula (ex.: 2824688072,2909886416)."
+                done
                 TERRARIA_TMODLOADER_MODS="$manual_ids"
                 ;;
             *)
@@ -624,6 +636,10 @@ _prompt_tml_catalog_mods() {
     # Init "": local sem valor fica UNSET (quirk do bash) e o set -u matava
     # aqui se a lib deixasse de atribuir por qualquer motivo.
     local selected_csv=""
+    # NOTA: rótulos de menu usados como default do tui_choose/tui_checklist
+    # NÃO podem conter vírgulas — o gum interpreta --selected como CSV e um
+    # rótulo com vírgula nunca casa a pré-seleção (cursor fica no 1º item,
+    # que com TUI_BACK=1 é "← Voltar": Enter às cegas volta sem querer).
     tui_checklist selected_csv "Selecione os mods do catálogo" "" \
         "Calamity Mod" \
         "Calamity Mod Music" \
@@ -892,7 +908,8 @@ write_stack_env_file() {
             printf 'MINECRAFT_EXTRA_MODS=%q\n' "${MINECRAFT_EXTRA_MODS:-}"
             printf 'MINECRAFT_MODPACK_SOURCE=%q\n' "${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
             printf 'MINECRAFT_MODPACK_SLUG=%q\n' "${MINECRAFT_MODPACK_SLUG:-adrenaline}"
-            printf 'MRPACK_INSTALL_VERSION=%q\n' "${MRPACK_INSTALL_VERSION:-v0.21.0-beta}"
+            printf 'MINECRAFT_SERVER_ICON_URL=%q\n' "${MINECRAFT_SERVER_ICON_URL:-}"
+            printf 'MRPACK_INSTALL_VERSION=%q\n' "${MRPACK_INSTALL_VERSION:-v0.23.0}"
         else
             printf 'TERRARIA_USER=%q\n' "$TERRARIA_USER"
             printf 'TERRARIA_SERVER_DIR=%q\n' "$TERRARIA_SERVER_DIR"
@@ -1638,7 +1655,16 @@ show_install_summary() {
     if [ "$SERVER_TYPE" = "minecraft" ]; then
         printf '  %-22s %s\n' "Loader:" "$MINECRAFT_LOADER"
         printf '  %-22s %s\n' "Versao MC:" "$MINECRAFT_VERSION"
-        printf '  %-22s %s\n' "Modpack:" "${MINECRAFT_MODPACK_SOURCE:-adrenaline} (${MINECRAFT_MODPACK_SLUG:-adrenaline})"
+        if [ "${MINECRAFT_MODPACK_SOURCE:-adrenaline}" = "vanilla" ]; then
+            printf '  %-22s %s\n' "Modpack:" "nenhum (vanilla, so loader)"
+        else
+            printf '  %-22s %s\n' "Modpack:" "${MINECRAFT_MODPACK_SOURCE:-adrenaline} (${MINECRAFT_MODPACK_SLUG:-adrenaline})"
+            if [ -n "${MINECRAFT_ADRENALINE_VERSION:-}" ]; then
+                printf '  %-22s %s\n' "Versao do modpack:" "$MINECRAFT_ADRENALINE_VERSION"
+            else
+                printf '  %-22s %s\n' "Versao do modpack:" "mais recente"
+            fi
+        fi
         printf '  %-22s %s\n' "Online-mode:" "$MINECRAFT_ONLINE_MODE"
         printf '  %-22s %s\n' "MOTD:" "$MINECRAFT_MOTD"
         printf '  %-22s %s\n' "Mods QoL:" "$MINECRAFT_INSTALL_QOL_MODS"

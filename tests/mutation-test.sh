@@ -160,14 +160,18 @@ run_mutation \
     "bash tests/mc-manifests-test.sh" \
     0
 
-# M4: remove fallback versions[0]
+# M4: neutraliza o fallback do passo 4 (versions[0]).
+# NOTA: o pattern NÃO pode incluir a linha do printf com '%s\n' — o python do
+# run_mutation converte \n literal (2 chars) em newline real, corrompendo o
+# casamento (bug histórico: M4 ficava sempre SKIP "pattern nao casou").
+# Casamos apenas o comentário da linha anterior e injetamos return 0 antes do
+# printf, que fica como código morto. A mutação só é morta graças ao caso
+# "2.0.0 -> passo 4" do mc-manifests-test.sh.
 run_mutation \
     "shared/lib/mc-manifests.sh" \
     "M4: suggest remove fallback versions[0]" \
-    '    # 4. Fallback: primeira da lista (mais recente).
-    printf '"'"'%s\n'"'"' "${versions[0]}"' \
-    '    # 4. Fallback MUTATED (return 0 = nada).
-    return 0' \
+    '    # 4. Fallback: primeira da lista (mais recente).' \
+    '    # 4. Fallback MUTADO: return 0 imediato (printf abaixo fica morto).\n    return 0\n    # dead code:' \
     "bash tests/mc-manifests-test.sh" \
     0
 

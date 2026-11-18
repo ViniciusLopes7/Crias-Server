@@ -29,9 +29,9 @@ TERRARIA_SERVER_DIR="${TERRARIA_SERVER_DIR:-/opt/terraria-server}"
 TERRARIA_PORT="${TERRARIA_PORT:-7777}"
 TERRARIA_WORLD_NAME="${TERRARIA_WORLD_NAME:-world}"
 TERRARIA_MOTD="${TERRARIA_MOTD:-Servidor Terraria gerenciado por Crias-Server}"
-TERRARIA_DOWNLOAD_URL="${TERRARIA_DOWNLOAD_URL:-https://terraria.org/api/download/pc-dedicated-server/terraria-server-1456.zip}"
-# tModLoader (WIP — v1.2.0). Nao implementado completamente; mantido como
-# flag reservado para futura instalacao de mods no Terraria.
+TERRARIA_DOWNLOAD_URL="${TERRARIA_DOWNLOAD_URL:-https://terraria.org/api/download/pc-dedicated-server/terraria-server-1458.zip}"
+# tModLoader (implementado em v1.2.1): quando true, substitui o servidor
+# vanilla pelo tModLoader (mesma porta/diretorio/service unit).
 TERRARIA_USE_TMODLOADER="${TERRARIA_USE_TMODLOADER:-false}"
 # Versão do tModLoader (tag do GitHub, ex.: v2026.06.3.6). Vazio = busca dinâmica.
 TERRARIA_TMODLOADER_VERSION="${TERRARIA_TMODLOADER_VERSION:-}"

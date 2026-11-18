@@ -154,7 +154,7 @@ backup inclui os dirs do tModLoader.
 ## Compatibilidade
 
 - **Terraria 1.4.4.9**: tModLoader atual suporta Terraria 1.4.4.x (mesma versão
-  do vanilla server `terraria-server-1456.zip`).
+  do vanilla server `terraria-server-1458.zip`).
 - **Wire-incompatível**: servidores tModLoader só podem jogar com outros clientes
   tModLoader da mesma versão. Clientes vanilla não conseguem conectar.
 - **Sem RCON**: tModLoader (como vanilla Terraria) não tem RCON nativo. O

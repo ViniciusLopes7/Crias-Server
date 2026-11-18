@@ -32,7 +32,7 @@ MINECRAFT_USER="${MINECRAFT_USER:-minecraft}"
 MINECRAFT_SERVER_DIR="${MINECRAFT_SERVER_DIR:-/opt/minecraft-server}"
 MINECRAFT_PORT="${MINECRAFT_PORT:-25565}"
 MINECRAFT_ONLINE_MODE="${MINECRAFT_ONLINE_MODE:-true}"
-MINECRAFT_VERSION="${MINECRAFT_VERSION:-1.21.11}"
+MINECRAFT_VERSION="${MINECRAFT_VERSION:-26.3}"
 MINECRAFT_LOADER="${MINECRAFT_LOADER:-fabric}"
 MINECRAFT_INSTALL_MODPACK="${MINECRAFT_INSTALL_MODPACK:-true}"
 MINECRAFT_ADRENALINE_VERSION="${MINECRAFT_ADRENALINE_VERSION:-}"
@@ -48,7 +48,7 @@ MINECRAFT_EXTRA_MODS="${MINECRAFT_EXTRA_MODS:-}"
 MINECRAFT_MODPACK_SOURCE="${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
 MINECRAFT_MODPACK_SLUG="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
 # mrpack-install version pin.
-MRPACK_INSTALL_VERSION="${MRPACK_INSTALL_VERSION:-v0.21.0-beta}"
+MRPACK_INSTALL_VERSION="${MRPACK_INSTALL_VERSION:-v0.23.0}"
 FORCE_HARDWARE_TIER="${FORCE_HARDWARE_TIER:-}"
 APPLY_SYSTEM_TUNING="${APPLY_SYSTEM_TUNING:-true}"
 DRY_RUN="${DRY_RUN:-false}"
@@ -116,7 +116,14 @@ validate_minecraft_inputs() {
         exit 1
     fi
 
-    if is_true "$MINECRAFT_INSTALL_MODPACK" && [ "$MINECRAFT_LOADER" != "fabric" ]; then
+    # O aviso de troca para fabric so faz sentido para o Adrenaline (otimizado
+    # para fabric). Modpacks genericos (source=modrinth) ja vieram do wizard
+    # com versao compativel com o loader escolhido (filtro server-side na API
+    # do Modrinth) — sugerir trocar o loader aqui com default Y quebraria a
+    # instalacao de modpacks forge/neoforge/quilt.
+    if is_true "$MINECRAFT_INSTALL_MODPACK" \
+        && [ "${MINECRAFT_MODPACK_SOURCE:-adrenaline}" = "adrenaline" ] \
+        && [ "$MINECRAFT_LOADER" != "fabric" ]; then
         print_warning "Adrenaline e otimizado para Fabric. Loader atual: $MINECRAFT_LOADER"
         if is_true "${NON_INTERACTIVE:-false}"; then
             print_warning "Mantendo loader informado por estar em modo non-interactive."
@@ -228,9 +235,17 @@ stack_download_and_install() {
             fi
             ;;
         modrinth)
-            # Generic modpack via Modrinth slug.
+            # Generic modpack via Modrinth slug. A versao selecionada no wizard
+            # (guardada em MINECRAFT_ADRENALINE_VERSION, nome legacy) e passada
+            # como argumento posicional — sem ela o mrpack-install instalaria a
+            # mais recente, ignorando a escolha do usuario (bug: a doc promete
+            # "mrpack-install <slug> [version]").
             local slug="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
-            timeout 300 mrpack-install "$slug" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
+            if [ -n "${MINECRAFT_ADRENALINE_VERSION:-}" ]; then
+                timeout 300 mrpack-install "$slug" "$MINECRAFT_ADRENALINE_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
+            else
+                timeout 300 mrpack-install "$slug" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
+            fi
             ;;
         vanilla)
             timeout 300 mrpack-install "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar

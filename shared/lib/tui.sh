@@ -251,8 +251,13 @@ tui_choose() {
         local _tui_choice
         local _tui_selected_args=()
         local _tui_opt
+        # --selected do gum é CSV: default contendo vírgula nunca casa a
+        # pré-seleção (o gum quebraria em itens separados). Nesses casos não
+        # passamos a flag — cursor no 1º item é melhor que comportamento
+        # imprevisível. Rótulos de default devem evitar vírgulas (ver
+        # prompt_tmodloader_mods no install.sh).
         for _tui_opt in "${_tui_options[@]}"; do
-            if [ "$_tui_opt" = "$_tui_default" ]; then
+            if [ "$_tui_opt" = "$_tui_default" ] && [[ "$_tui_default" != *,* ]]; then
                 _tui_selected_args=(--selected="$_tui_default")
                 break
             fi

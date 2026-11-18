@@ -5,35 +5,111 @@ Todos os mudanças notáveis do projeto Crias-Server serão documentadas neste a
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
-## [Unreleased] — F9-TUI-fix (gum stderr regression)
+## [Unreleased]
 
 ### Corrigido
 
-- **TUI invisível durante `curl | bash`** (bug crítico de UX): ao rodar o
-  instalador via `curl -fsSL https://.../crias-bootstrap.sh | sudo bash`, o
-  bootstrap completava (download, SHA256 verify, extração, chamada a
-  `install.sh`), mas o TUI (`gum choose`, `gum confirm`, `gum input`,
-  `gum filter`) nunca aparecia na tela. O script ficava aparentemente travado;
-  ao pressionar Ctrl+C, aparecia uma "mensagem de stack" — na verdade o ERR
-  trap do `install.sh` imprimindo `Funcao: select_server_type, Linha: 100,
-  Arquivo: install.sh`.
-  - **Causa-raiz**: todas as 8 chamadas interativas de `gum` em
-    `shared/lib/tui.sh` (mais 4 chamadas `tui_help` em `install.sh` e 6 em
-    `crias-tui.sh`) redirecionavam stderr para `/dev/null` com `2>/dev/null`.
-    O código-fonte do gum
-    (https://github.com/charmbracelet/gum/blob/main/choose/command.go#L150)
-    usa `tea.WithOutput(os.Stderr)` explicitamente — o TUI é renderizado em
-    **stderr**, deixando stdout livre para o valor escolhido (capturável via
-    `$(...)`). Redirecionar stderr para `/dev/null` mata o TUI.
-  - **Fix**: removido `2>/dev/null` de todas as chamadas `gum choose`,
-    `gum confirm`, `gum input`, `gum filter`, e `gum style` em
-    `shared/lib/tui.sh`, `install.sh` (chamadas `tui_help`), e `crias-tui.sh`.
-    Comentário de advertência adicionado em `tui.sh` documentando o porquê.
-  - **Teste de regressão**: `tests/static-audit.sh` agora escaneia todos os
-    `.sh` (exceto `tests/`, `docs/`, `.git/`) com regex multiline em perl:
-    `gum\s+(choose|confirm|input|filter)\b[^;)|&]*?2>\/dev\/null` → falha o
-    audit se alguém re-introduzir o padrão. Não cobre `gum style/spin` (não
-    usam bubbletea TUI, então `2>/dev/null` neles é inofensivo).
+- **F9-TUI-fix (TUI invisível durante `curl | bash`)**: o `exec </dev/tty
+  2>/dev/null` do `crias-bootstrap.sh` matava o stderr do shell inteiro
+  (herdado pelo `install.sh`), e o gum renderiza o TUI em stderr
+  (`tea.WithOutput(os.Stderr)`) → TUI invisível + espera de input às cegas.
+  Fix: subshell guard `if (exec </dev/tty) 2>/dev/null; then exec </dev/tty; fi`.
+  `tests/static-audit.sh` ganhou regex contra o padrão `gum ... 2>/dev/null`.
+- **Crash `tui.sh: line 142: TUI_THEME_BORDER: unbound variable`**: o commit
+  do F9-TUI-fix apagou acidentalmente as 2 definições de `TUI_THEME_*` no
+  mesmo hunk em que removia os `2>/dev/null`. Fix: definições restauradas
+  (env-overridable, fiéis ao CHANGELOG v1.2.0).
+- **Downloads grandes 100% silenciosos**: `_curl_with_retry` suprimia o
+  stderr inteiro. Fix: `curl_with_progress` — `gum spin` com título quando há
+  TTY no stderr; curl puro (stderr suprimido) em CI. Erros do curl agora
+  visíveis em falha.
+- **Crash `install.sh: line 620: selected_csv: unbound variable`** (seleção
+  de mods tModLoader): `local selected_csv="$default_csv"` DENTRO do
+  `tui_checklist` sombreava a var-alvo do caller — o `printf -v "$var_out"`
+  escrevia na cópia interna e o caller via "unbound" sob `set -u`. Fix por
+  classe: TODAS as internas de `tui_choose`/`tui_input`/`tui_checklist` (e
+  `ask_value`) com prefixo `_tui_`/`_av_`; teste fake-gum no
+  `tui-fallback-test.sh` falha se o shadowing voltar.
+- **Checklist ensinava tecla errada**: o gum 2.x alterna com `x` (não
+  ESPAÇO). O header do `tui_checklist` agora diz "(x para marcar, Enter para
+  confirmar)".
+- **Bug NUL em validações** (2 ocorrências): o padrão `[[ "$x" == *$'\0'* ]]`
+  expande para `**` e casa com TUDO — rejeitava QUALQUER valor. Afetava o
+  QoL do Minecraft (nenhum mod era instalado em vanilla+fabric; mascarado
+  pelo gate mods/-não-vazio) e o `setup-cron.sh` de backup (rejeitava
+  qualquer path válido). Braço NUL removido; `*..*`/`*/*` cobrem o traversal
+  real.
+- **"Mudar stack" do hub era no-op**: `select_server_type` fazia early-return
+  com `SERVER_TYPE` setado. Fix: `--force` re-exibe o prompt (com "← Voltar"
+  para cancelar).
+- **Seleção dinâmica "cancelava" sozinha sem TTY de stdin**: `tui_available`
+  checava `[ -t 0 ]`, mas o `tui_filter` SEMPRE recebe a lista por pipe →
+  fallback lia EOF. Fix: gate por `[ -t 2 ]` + fallback lê de `/dev/tty`.
+- **Códigos ANSI crus na tela**: variáveis de cor em `common.sh` eram
+  strings literais `"\033[...m"` usadas com `printf '%s'`. Fix: `$'...'`
+  com byte ESC real (53+ usos).
+- **Resumo mostrava paths do Minecraft ao instalar Terraria**: default de
+  `MINECRAFT_SERVER_DIR` sempre setado vencia o `:-`. Fix: resumo por stack.
+- **Versão do modpack personalizado era ignorada** (auditoria de modpacks):
+  o wizard guardava a versão escolhida (top-10/busca/slug) em
+  `MINECRAFT_ADRENALINE_VERSION`, mas o installer chamava
+  `mrpack-install <slug>` SEM a versão no `source=modrinth` — instalava
+  sempre a mais recente. Fix: versão passada como argumento posicional
+  (como a doc sempre prometeu).
+- **Prompt enganoso "trocar loader para fabric?" com default Y para modpacks
+  genéricos**: o aviso (herdado da era Adrenaline-only) sugeria trocar o
+  loader para fabric com default Y mesmo quando o usuário escolheu um
+  modpack forge/neoforge/quilt — confirmar quebraria a instalação. Fix: o
+  prompt só aparece para `MINECRAFT_MODPACK_SOURCE=adrenaline`; modpacks
+  genéricos já vêm filtrados por compatibilidade (server-side na API).
+- **Pré-seleção do gum anulada por rótulo com vírgulas**: `gum choose
+  --selected` interpreta CSV; o default "Catálogo curado (Calamity, Thorium,
+  etc.)" nunca casava e o cursor caía no "← Voltar" (Enter às cegas voltava
+  sem querer). Fix: rótulo renomeado sem vírgulas + `tui_choose` não passa
+  `--selected` quando o default contém vírgula (defesa para o futuro).
+- **Server icon configurado no wizard nunca era baixado**:
+  `MINECRAFT_SERVER_ICON_URL` não era exportado no stack env file →
+  `download_server_icon_if_set` via a var vazia. Fix: exportada no
+  `write_stack_env_file`.
+
+### Adicionado
+
+- **Mods individuais por cima do modpack** (`MINECRAFT_EXTRA_MODS`, CSV de
+  slugs Modrinth): wizard pergunta após o QoL, config.env, resumo e hook
+  `stack_install_extra_mods` no framework — NÃO pula quando `mods/` já tem
+  arquivos do modpack (esse é o ponto), idempotente por `${slug}.jar`,
+  `|| true` para um mod que falhar não derrubar o installer.
+- **Títulos de etapa + clear + navegação "← Voltar"** no wizard:
+  `tui_clear`/`tui_stage` nas 5 etapas; "← Voltar" funcional em
+  loader/versão/fonte do modpack/tModLoader (sai da etapa preservando
+  escolhas, volta ao hub); sub-flows top-10/busca/slug voltam ao menu de
+  fonte em vez de matar o script; ajuda como opção ("? Ajuda") em vez de
+  automática.
+- **Validação dos Workshop IDs manuais (tModLoader)**: CSV numérico com
+  re-prompt (antes, lixo só falhava depois, silenciosamente, no steamcmd).
+- **Caso de teste do passo 4 (fallback) do `mc_suggest_closest_version`**
+  (`2.0.0` → major ausente): fecha o gap M4 do mutation-test — a M4 também
+  tinha o pattern quebrado (o `\n` literal do `printf '%s\n'` virava newline
+  no python do `run_mutation` → "pattern nao casou" para sempre).
+
+### Mudado
+
+- **Pacotes atualizados** (auditoria 2026-11):
+  - `MRPACK_INSTALL_VERSION` `v0.21.0-beta` → `v0.23.0` (primeira stable;
+    downloads staged; `--server-file` para todo loader; servers
+    Forge/NeoForge; CLI `<pack> [versão]` inalterada; asset `.pkg.tar.zst`
+    no mesmo padrão de URL).
+  - `TERRARIA_DOWNLOAD_URL` `terraria-server-1456.zip` → `terraria-server-1458.zip`
+    (1459+ = 404 no terraria.org; auditado 2026-11).
+  - `MINECRAFT_VERSION` default `1.21.11` → `26.3` (release atual do
+    manifest Mojang; alinhado com o Adrenaline `26.5.1+mc26.3` e com os mods
+    QoL, que já publicam builds `26.3`; o default `1.21.11` instalava
+    modpack 26.3 + QoL 1.21.11 misturados em NON_INTERACTIVE).
+  - User-Agent das APIs `crias-server-installer/1.2.0` → `1.3.0`.
+- **Resumo da instalação**: mostra a versão do modpack (ou "mais recente") e
+  "nenhum (vanilla, so loader)" quando aplicável.
+- Comentários stale "tModLoader WIP — não implementado" corrigidos
+  (implementado desde v1.2.1).
 
 ## [1.3.0] — 2026-F1 (login fix + bootstrap)
 

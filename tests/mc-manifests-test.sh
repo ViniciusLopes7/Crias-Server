@@ -210,12 +210,21 @@ else
     fail "suggest same-minor 1.20" "1.20.6" "$r"
 fi
 
-# 1.18 (major ausente) -> fallback para mais recente 1.21.4.
+# 1.18 (mesma major "1.") -> passo 3 (mesma major) devolve 1.21.4.
 r=$(mc_suggest_closest_version "1.18.2" "$supported")
 if [ "$r" = "1.21.4" ]; then
-    pass "suggest fallback-latest 1.18.2 -> 1.21.4"
+    pass "suggest same-major 1.18.2 -> 1.21.4"
 else
-    fail "suggest fallback" "1.21.4" "$r"
+    fail "suggest same-major" "1.21.4" "$r"
+fi
+
+# 2.0 (major ausente na lista) -> passo 4 REAL: fallback para a mais recente
+# (versions[0] = 1.21.4). Este caso mata a mutacao M4 do mutation-test.sh.
+r=$(mc_suggest_closest_version "2.0.0" "$supported")
+if [ "$r" = "1.21.4" ]; then
+    pass "suggest fallback-latest 2.0.0 -> 1.21.4 (passo 4)"
+else
+    fail "suggest fallback passo 4" "1.21.4" "$r"
 fi
 
 # Lista vazia -> vazio.

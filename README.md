@@ -136,7 +136,7 @@ Todas as opções em `config.env` (comentado em PT-BR). Principais:
 | `SERVER_TYPE` | `""` | `minecraft` ou `terraria` (vazio = pergunta) |
 | `FORCE_HARDWARE_TIER` | `""` | `LOW`/`MID`/`HIGH` ou vazio para auto |
 | `MINECRAFT_LOADER` | `fabric` | `fabric`/`quilt`/`vanilla`/`forge`/`neoforge` |
-| `MINECRAFT_VERSION` | `1.21.11` | Vazio = busca dinâmica do manifest |
+| `MINECRAFT_VERSION` | `26.3` | Vazio = busca dinâmica do manifest |
 | `MINECRAFT_MOTD` | `§6§l🏰...` | MOTD com códigos § (ver gerador em tutorial.md) |
 | `MINECRAFT_SERVER_ICON_URL` | `""` | URL de PNG 64x64 para server-icon.png |
 | `SSH_USER` | `crias` | Nome do usuário SSH (com validação) |

@@ -58,7 +58,7 @@ retorna apenas as versões compatíveis.
 Endpoint usado:
 
 ```
-GET https://api.modrinth.com/v2/project/{slug}/version?loaders=["fabric"]&game_versions=["1.21.4"]
+GET https://api.modrinth.com/v2/project/{slug}/version?loaders=["fabric"]&game_versions=["26.3"]
 ```
 
 > **Importante**: o endpoint de game versions do Modrinth é
@@ -66,7 +66,7 @@ GET https://api.modrinth.com/v2/project/{slug}/version?loaders=["fabric"]&game_v
 > `/tag/game-version` (hífen) — este último retorna 404.
 
 Todas as chamadas incluem o header `User-Agent` identificado
-(`crias-server-installer/1.2.0`), conforme exigido pela documentação oficial
+(`crias-server-installer/1.3.0`), conforme exigido pela documentação oficial
 (UA genérico como `curl/8.x` é bloqueado).
 
 ## Sugestão de versão MC mais próxima
@@ -110,7 +110,7 @@ SERVER_TYPE="minecraft"
 NON_INTERACTIVE="true"
 ACCEPT_EULA="true"
 MINECRAFT_LOADER="fabric"          # fabric|quilt|vanilla|forge|neoforge
-MINECRAFT_VERSION="1.21.4"        # versão específica
+MINECRAFT_VERSION="26.3"            # versão específica
 MINECRAFT_MODPACK_SOURCE="modrinth"  # adrenaline|modrinth|vanilla
 MINECRAFT_MODPACK_SLUG="adrenaline"
 MINECRAFT_ADRENALINE_VERSION=""    # vazio = mais recente
