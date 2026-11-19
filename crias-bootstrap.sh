@@ -196,7 +196,7 @@ crias_extract_to() {
 
     # (CR-16) Deploy versionado + symlink atomico.
     local releases_root="${install_dir}.releases"
-    local new_dir
+    local new_dir legacy_dir=""
     mkdir -p "$releases_root"
     new_dir="$(mktemp -d "$releases_root/release.XXXXXXXX")"
 
@@ -212,8 +212,8 @@ crias_extract_to() {
 
     # Migracao: install_dir real (nao-symlink) legado vira uma release.
     if [ -d "$install_dir" ] && [ ! -L "$install_dir" ]; then
-        local legacy_dir="$releases_root/legacy-$stamp"
-        rm -rf "$legacy_dir"
+        legacy_dir="$(mktemp -d "$releases_root/legacy.XXXXXXXX")"
+        rmdir "$legacy_dir"
         if ! mv "$install_dir" "$legacy_dir"; then
             err "Falha ao arquivar a instalacao legada ($install_dir)."
             rm -rf "$new_dir"
@@ -228,7 +228,7 @@ crias_extract_to() {
     if ! ln -s "$new_dir" "$tmp_link"; then
         err "Falha ao criar symlink temporario."
         rm -rf "$new_dir"
-        _crias_restore_legacy "$install_dir" "$releases_root" "$stamp" || true
+        _crias_restore_legacy "$install_dir" "$legacy_dir" || true
         return 1
     fi
     if ! mv -T "$tmp_link" "$install_dir"; then
@@ -237,7 +237,7 @@ crias_extract_to() {
         rm -rf "$new_dir"
         # (AUDIT-A P3-9) A instalacao antiga foi arquivada em legacy-* acima;
         # devolve o diretorio real para nao deixar o host sem /opt/crias-server.
-        _crias_restore_legacy "$install_dir" "$releases_root" "$stamp" || true
+        _crias_restore_legacy "$install_dir" "$legacy_dir" || true
         return 1
     fi
 
@@ -247,12 +247,14 @@ crias_extract_to() {
     # pode perder a versao em uso na proxima atualizacao.
     local current_target
     current_target="$(readlink -f "$install_dir" 2>/dev/null || true)"
-    local old_release
+    local old_release kept=0
     while IFS= read -r old_release; do
         [ -z "$old_release" ] && continue
-        [ "$old_release" = "$current_target" ] && continue
+        [ "$(readlink -f "$old_release")" = "$current_target" ] && continue
+        kept=$((kept + 1))
+        [ "$kept" -le 2 ] && continue
         rm -rf -- "$old_release" 2>/dev/null || true
-    done < <(ls -1dt "$releases_root"/[0-9]* "$releases_root"/legacy-* 2>/dev/null | tail -n +4)
+    done < <(ls -1dt "$releases_root"/release.* "$releases_root"/[0-9]* "$releases_root"/legacy.* "$releases_root"/legacy-* 2>/dev/null || true)
 
     return 0
 }
@@ -260,8 +262,8 @@ crias_extract_to() {
 # (AUDIT-A P3-9) Restaura a instalacao legada arquivada quando a publicacao
 # do symlink falha — o host nao pode ficar sem $install_dir.
 _crias_restore_legacy() {
-    local install_dir="$1" releases_root="$2" stamp="$3"
-    local legacy_dir="$releases_root/legacy-$stamp"
+    local install_dir="$1" legacy_dir="$2"
+    [ -n "$legacy_dir" ] || return 1
     if [ -d "$legacy_dir" ] && [ ! -e "$install_dir" ]; then
         if mv "$legacy_dir" "$install_dir"; then
             ok "Instalacao legada restaurada em $install_dir"
