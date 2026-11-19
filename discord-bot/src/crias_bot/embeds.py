@@ -121,6 +121,19 @@ def agent_error(detail: str) -> discord.Embed:
     )
 
 
+def agent_offline() -> discord.Embed:
+    """Embed for AgentOfflineError — agent unreachable (CR-09).
+
+    Friendlier than :func:`agent_error`: tells the operator exactly what to
+    check while reassuring that the bot itself stays online.
+    """
+    return warning(
+        "Agent remoto offline",
+        "Agent remoto offline — verifique o serviço `crias-agent` no servidor.\n"
+        "O bot segue online e reconecta automaticamente quando o agente voltar.",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Command-specific embeds.
 # ---------------------------------------------------------------------------

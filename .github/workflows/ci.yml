@@ -192,6 +192,14 @@ jobs:
           bash tests/envsubst-test.sh
           bash tests/java-flags-test.sh
           bash tests/stack-rollback-test.sh
+          # (CR-23) backup-saveon-success antes rodava so no run-all.sh local —
+          # a CI podia ficar verde com regressao no save-on do backup.
+          bash tests/backup-saveon-success-test.sh
+          # Auditoria ampliada: contraprovas dos fixes EXP-35/49/50/57/62/05/33/34.
+          bash tests/validate-server-dir-test.sh
+          bash tests/backup-integrity-test.sh
+          bash tests/manager-safety-test.sh
+          bash tests/download-modrinth-test.sh
 
   test-shell-arch:
     name: Test Shell (Arch container)
@@ -207,7 +215,8 @@ jobs:
           # nao-verificados.
           pacman-key --init
           pacman-key --populate archlinux
-          pacman -Syu --noconfirm --needed git bash gettext jq
+          # zstd/tar: exigidos pelo backup-integrity-test (EXP-57).
+          pacman -Syu --noconfirm --needed git bash gettext jq zstd tar
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -447,14 +456,17 @@ jobs:
           echo "=== Validando artifacts obrigatorios ==="
           missing=0
 
-          # Agent binaries (se build-agent rodou)
+          # (CR-12) Artifacts obrigatorios sao BLOQUEANTES: antes a ausencia
+          # do binario do agente ou do crias-bot.zip era apenas WARN (missing
+          # continuava 0) e a release publicava incompleta com CI verde.
           if ! ls artifacts/crias-agent-*-amd64 >/dev/null 2>&1; then
-            echo "WARN: nenhum crias-agent-*-amd64 encontrado"
+            echo "ERROR: nenhum crias-agent-*-amd64 encontrado — release incompleta" >&2
+            missing=1
           fi
 
-          # Bot zip (se build-bot rodou)
           if [ ! -f artifacts/crias-bot.zip ]; then
-            echo "WARN: crias-bot.zip nao encontrado"
+            echo "ERROR: crias-bot.zip nao encontrado — release incompleta" >&2
+            missing=1
           fi
 
           # Checksum re-verification dos artifacts que tem .sha256
@@ -490,6 +502,7 @@ jobs:
           git archive --format=tar HEAD | tar -xf - -C release-assets/_pkg/full
           cp -a release-assets/_pkg/full/. release-assets/_pkg/slim/
           rm -rf release-assets/_pkg/slim/docs
+          rm -rf release-assets/_pkg/slim/tests
           rm -rf release-assets/_pkg/slim/.github/workflows
           (cd release-assets/_pkg/full && zip -qr ../../crias-server-full.zip .)
           (cd release-assets/_pkg/slim && zip -qr ../../crias-server-slim.zip .)

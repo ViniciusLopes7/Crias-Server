@@ -218,18 +218,27 @@ prompt_minecraft_options() {
             return 0
         fi
 
-        if tui_confirm "Instalar mods QoL adicionais?" "Y"; then
-            MINECRAFT_INSTALL_QOL_MODS="true"
-        else
-            MINECRAFT_INSTALL_QOL_MODS="false"
-        fi
+        # (AUDIT-B N6) So pergunta de mods quando eles serao aplicados:
+        # INSTALL_MODPACK=false = base limpa (CR-18) e as respostas seriam
+        # descartadas pelo installer do stack.
+        if is_true "${MINECRAFT_INSTALL_MODPACK:-true}"; then
+            if tui_confirm "Instalar mods QoL adicionais?" "Y"; then
+                MINECRAFT_INSTALL_QOL_MODS="true"
+            else
+                MINECRAFT_INSTALL_QOL_MODS="false"
+            fi
 
-        # Mods individuais por CIMA do modpack: o QoL acima pula quando mods/
-        # já contém os arquivos do modpack, então extras têm fluxo próprio no
-        # installer (não pulam). CSV de slugs do Modrinth.
-        if tui_confirm "Adicionar mods individuais (slugs do Modrinth)?" "N"; then
-            tui_input MINECRAFT_EXTRA_MODS "Slugs dos mods (CSV, ex.: sodium,lithium,ferrite-core)" "${MINECRAFT_EXTRA_MODS:-}"
+            # Mods individuais por CIMA do modpack: o QoL acima pula quando mods/
+            # já contém os arquivos do modpack, então extras têm fluxo próprio no
+            # installer (não pulam). CSV de slugs do Modrinth.
+            if tui_confirm "Adicionar mods individuais (slugs do Modrinth)?" "N"; then
+                tui_input MINECRAFT_EXTRA_MODS "Slugs dos mods (CSV, ex.: sodium,lithium,ferrite-core)" "${MINECRAFT_EXTRA_MODS:-}"
+            else
+                MINECRAFT_EXTRA_MODS=""
+            fi
         else
+            print_step "Servidor base limpo: mods QoL/extras desativados (CR-18)."
+            MINECRAFT_INSTALL_QOL_MODS="false"
             MINECRAFT_EXTRA_MODS=""
         fi
     fi
@@ -322,7 +331,16 @@ prompt_minecraft_modpack_dynamic() {
                 ;;
             "Vanilla (so loader, sem modpack)")
                 MINECRAFT_MODPACK_SOURCE="vanilla"
-                MINECRAFT_INSTALL_MODPACK="false"
+                # (AUDIT-B N6) Pergunta explicita em vez de descartar
+                # silenciosamente as respostas de QoL/extras: com
+                # INSTALL_MODPACK=false o installer do stack desliga mods
+                # (CR-18) — as perguntas a seguir seriam ignoradas.
+                if tui_confirm "Servidor base LIMPO (sem mods QoL/extras)?" "Y"; then
+                    MINECRAFT_INSTALL_MODPACK="false"
+                else
+                    # Loader+base COM mods opcionais (fonte vanilla).
+                    MINECRAFT_INSTALL_MODPACK="true"
+                fi
                 return 0
                 ;;
             "Slug Modrinth manual")
@@ -771,106 +789,142 @@ EOF
     fi
 }
 
-stack_alias_script() {
-    local stack_type="$1"
+# ---------------------------------------------------------------------------
+# (EXP-33) Aliases globais: o /etc/profile.d/crias-server.sh agora recebe os
+# aliases ESTATICOS inline (root:root, 0644) e NUNCA mais faz `source` de
+# comandos.sh dentro do diretorio do jogo — esse arquivo era gravavel pelo
+# usuario do jogo (chown -R) e todo shell de login administrativo que
+# carregasse o perfil executaria codigo nao confiavel como root.
+# ---------------------------------------------------------------------------
+CRIAS_PROFILE_BLOCK_BEGIN="# BEGIN CRIAS-SERVER ALIASES (gerenciado pelo installer; edicoes dentro do bloco serao perdidas)"
+CRIAS_PROFILE_BLOCK_END="# END CRIAS-SERVER ALIASES"
 
-    if [ "$stack_type" = "minecraft" ]; then
-        echo "$MINECRAFT_SERVER_DIR/comandos.sh"
+# Conteudo do bloco de aliases por stack (EXP-34: managers agora vivem em
+# /usr/local/libexec/crias, fora da arvore gravavel pelo jogo).
+stack_profile_alias_lines() {
+    if [ "$SERVER_TYPE" = "minecraft" ]; then
+        cat << EOF
+alias mcstart='sudo systemctl start minecraft'
+alias mcstop='sudo systemctl stop minecraft'
+alias mcrestart='sudo systemctl restart minecraft'
+alias mcstatus='sudo /usr/local/libexec/crias/mc-manager.sh status'
+alias mclogs='sudo journalctl -u minecraft -f'
+alias mcconsole='sudo /usr/local/libexec/crias/mc-manager.sh console'
+alias mcbackup='sudo /usr/local/libexec/crias/mc-manager.sh backup'
+alias mcsetupcron='sudo /usr/local/libexec/crias/mc-manager.sh setup-cron'
+alias mcdir='cd $MINECRAFT_SERVER_DIR'
+alias mcprops='sudo nano $MINECRAFT_SERVER_DIR/server.properties'
+alias mchw='sudo /usr/local/libexec/crias/mc-manager.sh hardware-report'
+alias mcreconfig='sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware'
+EOF
     else
-        echo "$TERRARIA_SERVER_DIR/comandos.sh"
+        cat << EOF
+alias ttstart='sudo systemctl start terraria'
+alias ttstop='sudo systemctl stop terraria'
+alias ttrestart='sudo systemctl restart terraria'
+alias ttstatus='sudo /usr/local/libexec/crias/tt-manager.sh status'
+alias ttlogs='sudo journalctl -u terraria -f'
+alias ttconsole='sudo /usr/local/libexec/crias/tt-manager.sh console'
+alias ttbackup='sudo /usr/local/libexec/crias/tt-manager.sh backup'
+alias ttsetupcron='sudo /usr/local/libexec/crias/tt-manager.sh setup-cron'
+alias ttdir='cd $TERRARIA_SERVER_DIR'
+alias tthw='sudo /usr/local/libexec/crias/tt-manager.sh hardware-report'
+alias ttreconfig='sudo /usr/local/libexec/crias/tt-manager.sh reconfigure-hardware'
+EOF
     fi
 }
 
-ensure_alias_autoload_entry() {
-    local alias_script="$1"
-    local profiled_path
-    local source_line
+# Remove linhas legadas de `source comandos.sh` do game dir (EXP-33):
+# instalacoes antigas escreviam `[ -f ... ] && . ...` apontando para dentro
+# do diretorio do jogo, gravavel pelo usuario do jogo.
+strip_legacy_alias_source_lines() {
+    local profiled_path="$1"
+    local tmp_file
 
+    [ -f "$profiled_path" ] || return 0
+
+    tmp_file="$(mktemp_crias_file)"
+    grep -Ev '^\[ -f "[^"]+" \] && \. "[^"]+"$' "$profiled_path" > "$tmp_file" || true
+    cat "$tmp_file" > "$profiled_path"
+    rm -f "$tmp_file"
+    chmod 0644 "$profiled_path"
+}
+
+ensure_alias_autoload_entry() {
     if is_true "$DRY_RUN"; then
         print_step "[DRY_RUN] Pulando configuracao automatica de aliases globais."
         return 0
     fi
 
-    profiled_path="/etc/profile.d/crias-server.sh"
-    source_line="[ -f \"$alias_script\" ] && . \"$alias_script\""
+    local profiled_path="/etc/profile.d/crias-server.sh"
+    local alias_lines
+    alias_lines="$(stack_profile_alias_lines)"
+
+    mkdir -p /etc/profile.d
 
     if [ -f "$profiled_path" ]; then
-        cleanup_stale_alias_autoload_entries "$profiled_path"
+        # (EXP-33) Migracao: remove linhas legadas de source do game dir.
+        strip_legacy_alias_source_lines "$profiled_path"
 
-        if grep -Fqx "$source_line" "$profiled_path"; then
-            print_step "Aliases globais ja configurados em $profiled_path"
-            return 0
+        # Substitui o bloco gerenciado se existir E estiver fechado (BEGIN
+        # sem END = arquivo corrompido: reconstruir acrescentando bloco novo
+        # em vez de descartar silenciosamente o resto do arquivo).
+        if grep -Fqx "$CRIAS_PROFILE_BLOCK_BEGIN" "$profiled_path" 2>/dev/null \
+            && grep -Fqx "$CRIAS_PROFILE_BLOCK_END" "$profiled_path" 2>/dev/null; then
+            local tmp_file
+            tmp_file="$(mktemp_crias_file)"
+            awk -v begin="$CRIAS_PROFILE_BLOCK_BEGIN" -v end="$CRIAS_PROFILE_BLOCK_END" \
+                -v aliases="$alias_lines" '
+                $0 == begin { print; print aliases; inblock = 1; next }
+                $0 == end { inblock = 0; print; next }
+                !inblock { print }
+            ' "$profiled_path" > "$tmp_file"
+            cat "$tmp_file" > "$profiled_path"
+            rm -f "$tmp_file"
+        else
+            printf '%s\n' "$CRIAS_PROFILE_BLOCK_BEGIN" >> "$profiled_path"
+            printf '%s\n' "$alias_lines" >> "$profiled_path"
+            printf '%s\n' "$CRIAS_PROFILE_BLOCK_END" >> "$profiled_path"
         fi
-
-        # Append an idempotent source_line while preserving operator customizations.
-        printf '# Generated by Crias-Server installer - do not edit manually\n' >> "$profiled_path"
-        printf '%s\n' "$source_line" >> "$profiled_path"
     else
-        # Create new file with header and source_line
-        cat > "$profiled_path" << EOF
-# Generated by Crias-Server installer - do not edit manually
-$source_line
-EOF
-        chmod 0644 "$profiled_path"
+        {
+            printf '%s\n' "$CRIAS_PROFILE_BLOCK_BEGIN"
+            printf '%s\n' "$alias_lines"
+            printf '%s\n' "$CRIAS_PROFILE_BLOCK_END"
+        } > "$profiled_path"
     fi
 
-    print_success "Aliases configurados automaticamente em $profiled_path"
+    # (EXP-33) Perfil carregado por shells de login: precisa ser root:root 0644.
+    chown root:root "$profiled_path"
+    chmod 0644 "$profiled_path"
+
+    print_success "Aliases configurados em $profiled_path (estaticos, root:root 0644)"
     print_step "Abra um novo shell de login ou faca logout/login para carregar os atalhos."
     print_step "Opcional: carregue agora com: source $profiled_path"
 }
 
-cleanup_stale_alias_autoload_entries() {
-    local profiled_path="$1"
-    local tmp_file
-    local line
-    local alias_path
-
-    if [ ! -f "$profiled_path" ]; then
-        return 0
-    fi
-
-    tmp_file="$(mktemp_crias_file)"
-
-    while IFS= read -r line || [ -n "$line" ]; do
-        if [[ "$line" =~ ^\[\ -f\ \"([^\"]+)\"\ \]\ \&\&\ \.\ \"([^\"]+)\"$ ]]; then
-            alias_path="${BASH_REMATCH[1]}"
-            if [ ! -f "$alias_path" ]; then
-                continue
-            fi
-        fi
-        printf '%s\n' "$line" >> "$tmp_file"
-    done < "$profiled_path"
-
-    # Atomic mv.
-    mv -f "$tmp_file" "$profiled_path"
-    chmod 0644 "$profiled_path"
-}
-
+# (EXP-33) Remocao do bloco gerenciado (desativacao de stack): mantem qualquer
+# outra coisa que o operador tenha posto no perfil.
 remove_alias_autoload_entry() {
-    local alias_script="$1"
-    local profiled_path
-    local tmp_file
-
     if is_true "$DRY_RUN"; then
         return 0
     fi
 
-    profiled_path="/etc/profile.d/crias-server.sh"
+    local profiled_path="/etc/profile.d/crias-server.sh"
 
-    if [ ! -f "$profiled_path" ]; then
-        return 0
-    fi
+    [ -f "$profiled_path" ] || return 0
 
+    strip_legacy_alias_source_lines "$profiled_path"
+
+    local tmp_file
     tmp_file="$(mktemp_crias_file)"
-
-    # Remove lines that exactly match the generated source line or the generated header comment.
-    local source_line
-    source_line="[ -f \"$alias_script\" ] && . \"$alias_script\""
-
-    grep -Fv "$source_line" "$profiled_path" | grep -Fv '# Generated by Crias-Server installer - do not edit manually' > "$tmp_file" || true
-
-    # Atomic mv.
-    mv -f "$tmp_file" "$profiled_path"
+    awk -v begin="$CRIAS_PROFILE_BLOCK_BEGIN" -v end="$CRIAS_PROFILE_BLOCK_END" '
+        $0 == begin { inblock = 1 }
+        $0 == end { inblock = 0; next }
+        !inblock { print }
+    ' "$profiled_path" > "$tmp_file" || true
+    cat "$tmp_file" > "$profiled_path"
+    rm -f "$tmp_file"
     chmod 0644 "$profiled_path"
 }
 
@@ -892,6 +946,14 @@ write_stack_env_file() {
         printf 'BACKUP_REMOTE_PATH=%q\n' "${BACKUP_REMOTE_PATH:-}"
         printf 'BACKUP_NOTIFY_WEBHOOK=%q\n' "${BACKUP_NOTIFY_WEBHOOK:-}"
         printf 'BACKUP_INCLUDE_MODS=%q\n' "${BACKUP_INCLUDE_MODS:-true}"
+        # (CR-13) Retencao/nivel de compressao do config.env agora alcancam o
+        # runtime.env: antes as libs de tuning recalculavam pelo tier e
+        # ignoravam a personalizacao. Vazio = automatico por tier.
+        printf 'BACKUP_RETENTION_DAYS=%q\n' "${BACKUP_RETENTION_DAYS:-}"
+        printf 'BACKUP_ZSTD_LEVEL=%q\n' "${BACKUP_ZSTD_LEVEL:-}"
+        # (CR-06) Backup consistente exigido: sem RCON/mcrcon o backup ABORTA
+        # (default false = best-effort com avisos claros, como antes).
+        printf 'BACKUP_REQUIRE_CONSISTENT=%q\n' "${BACKUP_REQUIRE_CONSISTENT:-false}"
         # Hardware tier thresholds.
         printf 'HW_LOW_TIER_MAX_RAM_MB=%q\n' "${HW_LOW_TIER_MAX_RAM_MB:-3072}"
         printf 'HW_LOW_TIER_MAX_CPU_CORES=%q\n' "${HW_LOW_TIER_MAX_CPU_CORES:-2}"
@@ -916,6 +978,8 @@ write_stack_env_file() {
             printf 'MINECRAFT_MODPACK_SLUG=%q\n' "${MINECRAFT_MODPACK_SLUG:-adrenaline}"
             printf 'MINECRAFT_SERVER_ICON_URL=%q\n' "${MINECRAFT_SERVER_ICON_URL:-}"
             printf 'MRPACK_INSTALL_VERSION=%q\n' "${MRPACK_INSTALL_VERSION:-v0.23.0}"
+            # (CR-17) Modo strict: mods pendentes falham a instalacao.
+            printf 'MINECRAFT_MODS_STRICT=%q\n' "${MINECRAFT_MODS_STRICT:-false}"
         else
             printf 'TERRARIA_USER=%q\n' "$TERRARIA_USER"
             printf 'TERRARIA_SERVER_DIR=%q\n' "$TERRARIA_SERVER_DIR"
@@ -926,6 +990,11 @@ write_stack_env_file() {
             printf 'TERRARIA_USE_TMODLOADER=%q\n' "$TERRARIA_USE_TMODLOADER"
             printf 'TERRARIA_TMODLOADER_VERSION=%q\n' "$TERRARIA_TMODLOADER_VERSION"
             printf 'TERRARIA_TMODLOADER_MODS=%q\n' "$TERRARIA_TMODLOADER_MODS"
+            # (CR-17) Modo strict tML: workshop IDs pendentes falham a instalacao.
+            printf 'TERRARIA_MODS_STRICT=%q\n' "${TERRARIA_MODS_STRICT:-false}"
+            # (AUDIT-B N8 / CR-26) Timeout do steamcmd: sem isto o valor do
+            # config.env nunca chegava ao stack installer (sempre default 3600).
+            printf 'TML_STEAMCMD_TIMEOUT=%q\n' "${TML_STEAMCMD_TIMEOUT:-3600}"
         fi
     } > "$env_file"; then
         rm -f "$env_file"
@@ -937,20 +1006,12 @@ write_stack_env_file() {
 }
 
 configure_alias_autoload_for_selected_stack() {
-    local alias_script
-
     if is_true "$DRY_RUN"; then
         print_step "[DRY_RUN] Pulando configuracao automatica de aliases globais."
         return 0
     fi
 
-    alias_script="$(stack_alias_script "$SERVER_TYPE")"
-    if [ ! -f "$alias_script" ]; then
-        print_warning "Arquivo de aliases nao encontrado para autoload: $alias_script"
-        return 0
-    fi
-
-    ensure_alias_autoload_entry "$alias_script"
+    ensure_alias_autoload_entry
 }
 
 run_selected_stack_installer() {
@@ -1069,7 +1130,8 @@ cleanup_stack_by_type() {
         fi
     fi
 
-    remove_alias_autoload_entry "$stack_dir/comandos.sh"
+    # (EXP-33) Remove o bloco de aliases gerenciado (sem args: bloco estatico).
+    remove_alias_autoload_entry
 
     print_success "Stack $stack_type desativado sem remover dados."
 }
@@ -1247,20 +1309,43 @@ install_ssh_if_enabled() {
         fi
     fi
 
-    # 4. Configura sshd: drop-in para PermitRootLogin no + PasswordAuthentication yes.
+    # 4. (EXP-65) Configura sshd: drop-in com PermitRootLogin no. A politica
+    # de senha do host e PRESERVADA: se o administrador desativou
+    # PasswordAuthentication (key-only), o instalador NAO reativa — antes o
+    # drop-in forcava `yes` globalmente e reabria superficie de bruteforce.
     local sshd_dropin_dir="/etc/ssh/sshd_config.d"
     local sshd_dropin="$sshd_dropin_dir/10-crias.conf"
+    local password_auth="yes"
+    if command -v sshd >/dev/null 2>&1; then
+        local effective_pa
+        effective_pa="$(sshd -T 2>/dev/null | awk '$1=="passwordauthentication"{print tolower($2); exit}')"
+        if [ "$effective_pa" = "no" ]; then
+            password_auth="no"
+            print_warning "Host esta com PasswordAuthentication no; politica key-only preservada (EXP-65)."
+            print_warning "Configure a chave publica do usuario em /home/$ssh_user/.ssh/authorized_keys."
+        fi
+    fi
     mkdir -p "$sshd_dropin_dir"
-    cat > "$sshd_dropin" << 'EOF'
+    cat > "$sshd_dropin" << EOF
 # /etc/ssh/sshd_config.d/10-crias.conf
 # Generated by Crias-Server installer - do not edit manually
-# Hardening: root login proibido; apenas autenticacao por senha (usuario crias).
+# Hardening: root login proibido. Politica de senha preservada do host (EXP-65).
 PermitRootLogin no
-PasswordAuthentication yes
+PasswordAuthentication $password_auth
 PubkeyAuthentication yes
 EOF
     chmod 0644 "$sshd_dropin"
-    print_step "Drop-in sshd_config criado em $sshd_dropin (PermitRootLogin no)"
+    print_step "Drop-in sshd_config criado em $sshd_dropin (PermitRootLogin no; PasswordAuthentication $password_auth)"
+
+    # (EXP-65) Valida a configuracao ANTES do restart: um drop-in invalido
+    # derrubaria o acesso remoto do host.
+    if command -v sshd >/dev/null 2>&1; then
+        if ! sshd -t >/dev/null 2>&1; then
+            print_error "sshd -t rejeitou a configuracao; removendo o drop-in e mantendo sshd intacto."
+            rm -f "$sshd_dropin"
+            return 1
+        fi
+    fi
 
     # 5. Habilita e (re)inicia sshd.
     if ! systemctl enable sshd >/dev/null 2>&1; then
@@ -1318,7 +1403,7 @@ install_monitor_tools_if_enabled() {
         manager_name="tt-manager.sh"
         stack_prefix="terraria"
     fi
-    print_step "Subcomando disponível: sudo /opt/${stack_prefix}-server/${manager_name} monitor [cpu|disk|net]"
+    print_step "Subcomando disponível: sudo /usr/local/libexec/crias/${manager_name} monitor [cpu|disk|net]"
     return 0
 }
 
@@ -1397,6 +1482,14 @@ install_crias_agent_if_enabled() {
     mkdir -p /opt/crias-agent /etc/crias /var/log/crias-agent
     chown -R crias-agent:crias-agent /opt/crias-agent /var/log/crias-agent
 
+    # (CR-14) Leitura do journal: o agente consulta `journalctl -u <jogo>`
+    # sem sudo para o /mc console. Em hosts onde o journal nao e
+    # world-readable, o grupo systemd-journal concede leitura (implicacao:
+    # leitura do journal global do host — tradeoff documentado em
+    # docs/security.md; alternativa mais restrita exigiria helper dedicado).
+    usermod -aG systemd-journal crias-agent 2>/dev/null || \
+        print_warning "Nao foi possivel adicionar crias-agent ao grupo systemd-journal; /mc console pode nao ver logs."
+
     # Validate inputs before generating config/sudoers.
     if ! [[ "$stack_user" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
         print_error "stack_user inválido para sudoers: $stack_user (use apenas [a-z0-9_-])"
@@ -1415,8 +1508,15 @@ install_crias_agent_if_enabled() {
     local agent_url
     local api_url="https://api.github.com/repos/ViniciusLopes7/Crias-Server/releases?per_page=10"
     local curl_auth_headers=()
+    local _auth_hdr_file=""
     if [ -n "${GITHUB_TOKEN:-}" ]; then
-        curl_auth_headers=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+        # (EXP-64) Token NUNCA no argv do curl: linhas de comando de processos
+        # sao observaveis via /proc/<pid>/cmdline em hosts com procfs aberto.
+        # curl -H @arquivo le headers de um arquivo privado 0600.
+        _auth_hdr_file="$(mktemp_crias_file)"
+        chmod 600 "$_auth_hdr_file"
+        printf 'Authorization: Bearer %s\n' "$GITHUB_TOKEN" > "$_auth_hdr_file"
+        curl_auth_headers=(-H "@${_auth_hdr_file}")
     fi
 
     local api_response
@@ -1428,6 +1528,12 @@ install_crias_agent_if_enabled() {
 
     agent_url=$(printf '%s' "$api_response" \
         | jq -r '[.[] | .assets[] | select(.name=="crias-agent-linux-amd64") | .browser_download_url] | .[0] // empty' 2>/dev/null || true)
+
+    # (EXP-64) Remove o arquivo de header assim que a consulta termina.
+    if [ -n "$_auth_hdr_file" ]; then
+        rm -f "$_auth_hdr_file"
+        _auth_hdr_file=""
+    fi
 
     if [ -z "$agent_url" ]; then
         print_error "Não foi possível encontrar o asset crias-agent-linux-amd64 em nenhuma release do GitHub."
@@ -1473,12 +1579,30 @@ install_crias_agent_if_enabled() {
 
     install -m 755 -o root -g root "$agent_local" /opt/crias-agent/crias-agent
 
-    # 4. Gera token aleatório (32 bytes hex = 64 chars).
-    local agent_token
-    agent_token="$(generate_token 32)"
-    if [ -z "$agent_token" ] || [ "${#agent_token}" -ne 64 ]; then
-        print_error "Falha ao gerar token aleatorio para o agente."
-        return 1
+    # 4. (EXP-44) Token: REUTILIZA o token existente por padrao. Rotacionar a
+    # cada reinstalacao invalidava silenciosamente o bot ja configurado no
+    # Railway (o token externo ficava antigo e os comandos paravam ate
+    # reconfiguracao manual). Rotacao explicita: AGENT_ROTATE_TOKEN=true.
+    local agent_token=""
+    local agent_token_reused=false
+    if [ -f /etc/crias/agent.yaml ] && ! is_true "${AGENT_ROTATE_TOKEN:-false}"; then
+        agent_token="$(awk -F'"' '/^[[:space:]]*auth_token:/ { print $2; exit }' /etc/crias/agent.yaml 2>/dev/null || true)"
+        if [ -n "$agent_token" ] && [ "${#agent_token}" -eq 64 ]; then
+            agent_token_reused=true
+            print_step "Token existente reutilizado (AGENT_ROTATE_TOKEN=true para rotacionar)."
+        else
+            agent_token=""
+        fi
+    fi
+    if [ -z "$agent_token" ]; then
+        if is_true "${AGENT_ROTATE_TOKEN:-false}"; then
+            print_step "Rotacao de token solicitada (AGENT_ROTATE_TOKEN=true)."
+        fi
+        agent_token="$(generate_token 32)"
+        if [ -z "$agent_token" ] || [ "${#agent_token}" -ne 64 ]; then
+            print_error "Falha ao gerar token aleatorio para o agente."
+            return 1
+        fi
     fi
 
     # 5. Lê RCON config (apenas Minecraft tem server.properties).
@@ -1498,6 +1622,49 @@ install_crias_agent_if_enabled() {
             rcon_port="$(config_read_value "$props_file" "rcon.port")"
             rcon_port="${rcon_port:-25575}"
             rcon_password="$(config_read_value "$props_file" "rcon.password")"
+        fi
+
+        # (EXP-43) RCON desabilitado + agente escolhido: /mc say, lista de
+        # jogadores, auto-shutdown e backup consistente DEPENDEM do RCON.
+        # Oferece ativacao agora (senha forte gerada) em vez de instalar um
+        # agente parcialmente funcional em silencio. Opt-out continua valido:
+        # responder N mantem o RCON desligado.
+        if [ "$rcon_enabled" != "true" ] && [ -f "$props_file" ]; then
+            local enable_rcon=false
+            if ! is_true "${NON_INTERACTIVE:-false}"; then
+                if tui_confirm "Ativar RCON agora? (necessario para /mc say, jogadores, auto-shutdown e backup consistente)" "Y"; then
+                    enable_rcon=true
+                fi
+            else
+                print_warning "NON_INTERACTIVE: RCON continua desativado; funcoes dependentes ficaram limitadas."
+                print_warning "Ative manualmente (enable-rcon=true + rcon.password em $props_file) e reinstale o agente."
+            fi
+
+            if [ "$enable_rcon" = "true" ]; then
+                # Merge seguro de chaves (preserva todo o restante do arquivo).
+                local mc_tuning_lib="${SCRIPT_DIR}/shared/lib/minecraft-tuning.sh"
+                if [ -f "$mc_tuning_lib" ] && ! declare -F set_minecraft_properties >/dev/null 2>&1; then
+                    # shellcheck source=/dev/null
+                    source "$mc_tuning_lib"
+                fi
+                if declare -F set_minecraft_properties >/dev/null 2>&1; then
+                    local new_rcon_pass
+                    new_rcon_pass="$(generate_token 16)"
+                    if [ -n "$new_rcon_pass" ] \
+                        && set_minecraft_properties "$props_file" \
+                            "enable-rcon=true" \
+                            "rcon.port=${rcon_port}" \
+                            "rcon.password=${new_rcon_pass}"; then
+                        rcon_enabled="true"
+                        rcon_password="$new_rcon_pass"
+                        print_success "RCON ativado em $props_file (o agente conecta via 127.0.0.1:${rcon_port})."
+                    else
+                        print_error "Falha ao ativar RCON via merge de properties; agente seguira com RCON desativado."
+                    fi
+                else
+                    print_warning "Lib minecraft-tuning.sh indisponivel; RCON nao ativado automaticamente."
+                fi
+            fi
         fi
     fi
 
@@ -1544,7 +1711,7 @@ agent:
 server:
   stack: "$stack_type_for_agent"
   service_name: "$service_name"
-  manager_script: "$stack_dir/$manager_script_name"
+  manager_script: "/usr/local/libexec/crias/$manager_script_name"
   server_dir: "$stack_dir"
   server_port: "$stack_port"
   hardware_tier: "$agent_hardware_tier"
@@ -1574,8 +1741,10 @@ EOF
     cat > "$sudoers_tmp" << EOF
 # /etc/sudoers.d/crias-agent
 # Generated by Crias-Server installer - do not edit manually
+# (EXP-34) O manager vive em /usr/local/libexec/crias (root:root); nunca no
+# diretorio do jogo, gravavel pelo usuario do jogo.
 crias-agent ALL=(root) NOPASSWD: /usr/bin/systemctl start $service_name, /usr/bin/systemctl stop $service_name, /usr/bin/systemctl restart $service_name, /usr/bin/systemctl status $service_name, /usr/bin/systemctl is-active $service_name
-crias-agent ALL=($stack_user) NOPASSWD: $stack_dir/backup-cron.sh, $stack_dir/$manager_script_name start, $stack_dir/$manager_script_name stop, $stack_dir/$manager_script_name restart, $stack_dir/$manager_script_name status, $stack_dir/$manager_script_name backup, $stack_dir/$manager_script_name health, $stack_dir/$manager_script_name hardware-report
+crias-agent ALL=($stack_user) NOPASSWD: $stack_dir/backup-cron.sh, /usr/local/libexec/crias/$manager_script_name start, /usr/local/libexec/crias/$manager_script_name stop, /usr/local/libexec/crias/$manager_script_name restart, /usr/local/libexec/crias/$manager_script_name status, /usr/local/libexec/crias/$manager_script_name backup, /usr/local/libexec/crias/$manager_script_name health, /usr/local/libexec/crias/$manager_script_name hardware-report
 EOF
 
     # Validate sudoers before install.
@@ -1634,8 +1803,12 @@ RemoveIPC=yes
 LockPersonality=yes
 # Go binary is AOT-compiled: MemoryDenyWriteExecute is safe.
 MemoryDenyWriteExecute=yes
-CapabilityBoundingSet=
-AmbientCapabilities=
+# (CR-02) SEM CapabilityBoundingSet=/AmbientCapabilities= vazios: um bounding
+# set vazio sobrevive ao exec e tambem aos binarios setuid — o /usr/bin/sudo
+# do agente nao conseguiria recuperar privilegios e TODO controle remoto
+# (start/stop/restart via systemctl) falharia em silencio. A fronteira de
+# privilegio real e o sudoers allowlist (apenas systemctl no servico do jogo
+# + comandos do manager); o restante do hardening acima permanece.
 SystemCallFilter=@system-service
 SystemCallArchitectures=native
 UMask=0027
@@ -1643,19 +1816,48 @@ UMask=0027
 [Install]
 WantedBy=multi-user.target
 EOF
-    # Optionally validate with systemd-analyze.
+    # (CR-25) Validacao BLOQUEANTE com nome .service valido (CR-01: o
+    # systemd-analyze verify rejeita temporarios sem extensao de unidade).
+    local agent_unit_target="/etc/systemd/system/crias-agent.service"
+    local agent_unit_tmp
+    agent_unit_tmp="$(mktemp --tmpdir=/etc/systemd/system --suffix=.service crias-agent-unit.XXXXXX)" || {
+        print_error "Falha ao criar temporario da unit do agente."
+        rm -f "$unit_tmp"
+        return 1
+    }
+    cat "$unit_tmp" > "$agent_unit_tmp"
+    rm -f "$unit_tmp"
     if command -v systemd-analyze >/dev/null 2>&1; then
-        if ! systemd-analyze verify "$unit_tmp" >/dev/null 2>&1; then
-            print_warning "systemd-analyze verify reportou problemas no unit file; verifique $unit_tmp"
-            # Don't abort on benign warnings.
+        local agent_verify_out
+        if ! agent_verify_out="$(systemd-analyze verify "$agent_unit_tmp" 2>&1)"; then
+            print_error "systemd-analyze verify rejeitou a unit do crias-agent:"
+            printf '%s\n' "$agent_verify_out" >&2
+            rm -f "$agent_unit_tmp"
+            return 1
         fi
     fi
-    install -m 0644 -o root -g root "$unit_tmp" /etc/systemd/system/crias-agent.service
-    rm -f "$unit_tmp"
+    chown root:root "$agent_unit_tmp"
+    chmod 0644 "$agent_unit_tmp"
+    if ! mv -T -- "$agent_unit_tmp" "$agent_unit_target"; then
+        print_error "Falha ao publicar a unit do crias-agent."
+        rm -f "$agent_unit_tmp"
+        return 1
+    fi
 
     systemctl daemon-reload
-    systemctl enable crias-agent >/dev/null 2>&1 || true
-    systemctl restart crias-agent >/dev/null 2>&1 || print_warning "crias-agent nao iniciou imediatamente; verifique /var/log/crias-agent/"
+    # (CR-25) enable bloqueante: antes `|| true` mascarava falhas e o
+    # instalador dizia "instalado" com o servico desabilitado.
+    if ! systemctl enable crias-agent >/dev/null 2>&1; then
+        print_error "Falha ao habilitar crias-agent (systemctl enable)."
+        return 1
+    fi
+    if ! systemctl restart crias-agent >/dev/null 2>&1; then
+        print_error "crias-agent nao iniciou apos a instalacao; verifique:"
+        print_error "  journalctl -u crias-agent -n 50"
+        print_error "  /var/log/crias-agent/"
+        print_error "Estado: instalacao PARCIAL (binario/config/sudoers OK; servico inativo)."
+        return 1
+    fi
 
     # 9. Final instructions (token not printed).
     print_success "crias-agent instalado em /opt/crias-agent/crias-agent"

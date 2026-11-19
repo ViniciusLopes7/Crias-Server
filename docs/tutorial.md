@@ -151,8 +151,8 @@ FORCE_HARDWARE_TIER="HIGH"   # LOW, MID, HIGH ou vazio para auto
 
 **Recalibrar após mudança de hardware:**
 ```bash
-sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware
-sudo /opt/terraria-server/tt-manager.sh reconfigure-hardware HIGH  # forçar tier
+sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware
+sudo /usr/local/libexec/crias/tt-manager.sh reconfigure-hardware HIGH  # forçar tier
 ```
 
 Veja [hardware-tuning.md](hardware-tuning.md) para detalhes.
@@ -164,8 +164,8 @@ Veja [hardware-tuning.md](hardware-tuning.md) para detalhes.
 ### Backup imediato
 
 ```bash
-mcbackup   # alias para: sudo /opt/minecraft-server/mc-manager.sh backup
-ttbackup   # alias para: sudo /opt/terraria-server/tt-manager.sh backup
+mcbackup   # alias para: sudo /usr/local/libexec/crias/mc-manager.sh backup
+ttbackup   # alias para: sudo /usr/local/libexec/crias/tt-manager.sh backup
 ```
 
 ### Configurar timer systemd
@@ -258,13 +258,13 @@ Veja [discord-agent/README.md](../discord-agent/README.md) e [discord-bot/README
 ```bash
 sudo systemctl status minecraft
 sudo journalctl -u minecraft -n 50 --no-pager
-sudo /opt/minecraft-server/mc-manager.sh health
+sudo /usr/local/libexec/crias/mc-manager.sh health
 ```
 
 ### OutOfMemoryError (Minecraft)
 
 ```bash
-sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware LOW
+sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware LOW
 sudo systemctl restart minecraft
 ```
 

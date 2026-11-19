@@ -7,6 +7,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -36,7 +37,7 @@ func (s *Server) StartAutoShutdownMonitor(ctx context.Context) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	var emptySince time.Time
+	state := &autoShutdownState{}
 
 	for {
 		select {
@@ -47,33 +48,29 @@ func (s *Server) StartAutoShutdownMonitor(ctx context.Context) {
 			// by a prior auto-shutdown). Resetting emptySince avoids a stale countdown
 			// resuming the moment the service is started again.
 			if !s.isServiceActive(ctx, s.cfg.Server.ServiceName) {
-				emptySince = time.Time{}
+				state.emptySince = time.Time{}
 				continue
 			}
 
 			playerCount, err := s.getCurrentPlayerCount(ctx)
-			if err != nil {
-				// RCON error: can't confirm emptiness, so don't advance the countdown.
-				// Emit a HealthWarning so operators see the RCON failure.
+			switch advanceAutoShutdown(state, emptyMinutes, time.Now(), playerCount, err) {
+			case autoShutdownUnknown:
+				// EXP-45: the player count is UNKNOWN (RCON failure or unparseable
+				// "list" response) — it must NOT be treated as 0 players. Skip this
+				// cycle entirely (the countdown state is left untouched) and warn.
+				log.Printf("auto-shutdown: contagem de players desconhecida, pulando ciclo: %v", err)
 				s.bus.Publish(events.Event{
 					EventType:   "HealthWarning",
 					ServiceName: s.cfg.Server.ServiceName,
 					Stack:       s.cfg.Server.Stack,
 					Metadata: map[string]string{
-						"reason": "auto_shutdown_rcon_error",
+						"reason": "auto_shutdown_player_count_unknown",
 						"error":  err.Error(),
 					},
 				})
-				continue
-			}
-			if playerCount > 0 {
-				emptySince = time.Time{} // reset
-				continue
-			}
-
-			// Server is empty.
-			if emptySince.IsZero() {
-				emptySince = time.Now()
+			case autoShutdownReset:
+				// Players online — the countdown was reset inside advanceAutoShutdown.
+			case autoShutdownBegin:
 				s.bus.Publish(events.Event{
 					EventType:   "HealthWarning",
 					ServiceName: s.cfg.Server.ServiceName,
@@ -84,19 +81,17 @@ func (s *Server) StartAutoShutdownMonitor(ctx context.Context) {
 						"shutdown_in_min": strconv.Itoa(emptyMinutes),
 					},
 				})
-				continue
-			}
-
-			elapsed := time.Since(emptySince)
-			if elapsed >= time.Duration(emptyMinutes)*time.Minute {
-				// Trigger shutdown.
+			case autoShutdownIdle:
+				// Empty, countdown still running — nothing to do.
+			case autoShutdownStop:
+				// Empty window elapsed — trigger shutdown.
 				s.bus.Publish(events.Event{
 					EventType:   "HealthWarning",
 					ServiceName: s.cfg.Server.ServiceName,
 					Stack:       s.cfg.Server.Stack,
 					Metadata: map[string]string{
 						"reason":        "auto_shutdown_triggered",
-						"empty_seconds": strconv.Itoa(int(elapsed.Seconds())),
+						"empty_seconds": strconv.Itoa(int(time.Since(state.triggeredAt).Seconds())),
 					},
 				})
 
@@ -127,16 +122,71 @@ func (s *Server) StartAutoShutdownMonitor(ctx context.Context) {
 						},
 					})
 				}
-
-				emptySince = time.Time{} // reset after attempt (even on failure, to avoid retry loop)
+				// emptySince was already reset inside advanceAutoShutdown —
+				// even on stop failure, to avoid a retry loop.
 			}
 		}
 	}
 }
 
+// autoShutdownState carries the empty-countdown across evaluation cycles.
+type autoShutdownState struct {
+	// emptySince is when the server was first CONFIRMED empty; zero = not counting.
+	emptySince time.Time
+	// triggeredAt is set when the stop decision fires (before the state is
+	// reset), so the event can report the real elapsed window.
+	triggeredAt time.Time
+}
+
+// autoShutdownDecision is the outcome of one evaluation cycle.
+type autoShutdownDecision int
+
+const (
+	// autoShutdownUnknown: the player count could not be determined — skip the
+	// cycle without touching the countdown (EXP-45).
+	autoShutdownUnknown autoShutdownDecision = iota
+	// autoShutdownReset: players online — countdown reset.
+	autoShutdownReset
+	// autoShutdownBegin: server just became empty — countdown started.
+	autoShutdownBegin
+	// autoShutdownIdle: empty, countdown still running.
+	autoShutdownIdle
+	// autoShutdownStop: empty window elapsed — stop the server.
+	autoShutdownStop
+)
+
+// advanceAutoShutdown advances the empty-countdown state machine by one
+// observation. It is a pure function (apart from mutating st) so the gating
+// logic is unit-testable without RCON/systemctl (EXP-45).
+func advanceAutoShutdown(st *autoShutdownState, emptyMinutes int, now time.Time, count int, countErr error) autoShutdownDecision {
+	if countErr != nil {
+		// Count UNKNOWN (RCON/parse error): never treat as 0 players. Skip the
+		// cycle — leave emptySince untouched (a later confirmed-empty cycle
+		// still requires count == 0 before stopping).
+		return autoShutdownUnknown
+	}
+	if count > 0 {
+		st.emptySince = time.Time{} // reset
+		return autoShutdownReset
+	}
+
+	// Server is confirmed empty.
+	if st.emptySince.IsZero() {
+		st.emptySince = now
+		return autoShutdownBegin
+	}
+	if now.Sub(st.emptySince) >= time.Duration(emptyMinutes)*time.Minute {
+		st.triggeredAt = st.emptySince
+		st.emptySince = time.Time{}
+		return autoShutdownStop
+	}
+	return autoShutdownIdle
+}
+
 // getCurrentPlayerCount returns the RCON player count. An error indicates the
-// count could not be determined (RCON failure or RCON disabled); callers must
-// NOT treat (0, err) as "empty" — see StartAutoShutdownMonitor.
+// count could not be determined (RCON failure, RCON disabled or unparseable
+// "list" response); callers must NOT treat (0, err) as "empty" — see
+// StartAutoShutdownMonitor and advanceAutoShutdown.
 func (s *Server) getCurrentPlayerCount(ctx context.Context) (int, error) {
 	if s.rcon == nil {
 		return 0, fmt.Errorf("rcon client não inicializado")

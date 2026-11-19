@@ -7,6 +7,225 @@ e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido — Auditoria pré-entrega + contraverificação (2026-11-19, rodada 2)
+
+Auditoria pré-entrega obrigatória (dois revisores independentes sobre o diff
+completo) encontrou **3 P1, 5 P2 e vários P3** — todos corrigidos nesta
+rodada, com contraprovas adicionadas à suíte (34 testes Bash no total):
+
+- **P1 (A)**: `setup-cron.sh` (mc/tt) não resolvia as libs no
+  `/usr/local/libexec/crias/lib` — o comando `setup-cron` quebrava em toda
+  instalação nova. Corrigido com resolução libexec → .shared → repo.
+- **P1 (A)**: snapshot de extras aninhados (`config/serverconfig.txt`) não
+  criava o diretório-pai no snapshot — **toda reinstalação do Terraria
+  abortava** no fail-closed. Corrigido (`mkdir -p` do dirname).
+- **P1 (B)**: a validação EXP-51 com regex **citada** em `[[ =~ ]]` casava
+  literal e rejeitava **qualquer level-name customizado** — backups 100%
+  quebrados para mundos com nome próprio. Regex des-citado + `.`/`..` no
+  case do engine + contraprova no backup-integrity-test (`reino` com
+  sucesso; `../escape`, `-checkpoint`, `..`, `.` rejeitados).
+- **P1 (B)**: `save-off` com falha de execução ignorava
+  `BACKUP_REQUIRE_CONSISTENT=true` (prossegia best-effort). Agora aborta em
+  modo strict.
+- **P1 (B)**: `envsubst-test.sh` referenciava `$MC_OUTPUT` inexistente —
+  quebraria o job `test-shell` da CI (o teste nunca havia rodado com
+  envsubst presente no sandbox). Corrigido; teste agora valida AMBAS as
+  units com systemd-analyze.
+- **P2 (A)**: rollback executava a limpeza legacy quando a PREPARAÇÃO do
+  snapshot falhava — apagava artefatos que a execução nem tinha tocado
+  (contradizia o CR-04). Agora: flag `STACK_SNAPSHOT_COMPLETE`; sem snapshot
+  completo o rollback é NO-OP.
+- **P2 (A)**: `crias-tui.sh` detectava stacks pelos managers no game dir
+  (removidos pelo EXP-34) — hub ficava cego. Detecta via units systemd +
+  manager no libexec.
+- **P2 (B)**: versão efetiva do modpack não alimentava JDK nem runtime.env
+  (pack 26.x + config 1.21.x ressuscitaria o EXP-36). `_reconcile_effective_java`
+  instala o JDK exigido e promove a versão do pack.
+- **P2 (B)**: `_resolve_modpack_effective_versions` rodava também para
+  `source=vanilla` e sobrescrevia a versão correta com a do slug default.
+  Agora só nos ramos adrenaline/modrinth.
+- **P2 (B)**: modpack Quilt recebia `--server-file server.jar` (conflito do
+  EXP-39 valia só para base). Server-file derivado do loader em todos os ramos.
+- **P2 (B)**: wizard perguntava QoL/extras após "vanilla puro" e descartava
+  as respostas (CR-18). "Vanilla (só loader)" agora pergunta base limpa vs
+  base+mods; perguntas de mods só quando serão aplicadas.
+- **P2 (B)**: `TML_STEAMCMD_TIMEOUT` do config.env não chegava ao stack
+  installer. Repassado no env file do stack.
+- **P3 (A/B)**: guarda root-safe resolve symlinks antes do stat (manager via
+  symlink de conveniência voltou a funcionar); `chown -R` do
+  reconfigure-hardware do MC valida SERVER_DIR; `SETUP_CRON_SCRIPT` entra na
+  guarda de ownership; extras do snapshot sob prefixo `extra/` (sem colisão
+  com nomes reservados); perfil com BEGIN sem END é reconstruído em vez de
+  descartar o resto; bootstrap restaura instalação legada se o swap do
+  symlink falha e nunca apaga a release apontada pelo symlink atual; trap do
+  backup compõe a limpeza de temporários; `.partial` órfãos de SIGKILL são
+  varridos no próximo backup; `write_file_or_dry_run` cria segredos já com
+  umask 077; `source` do common.sh sem `|| true`; hint de monitor e TODOS os
+  docs apontam para o manager no libexec; bloco de hardening do security.md
+  explicita a exceção do crias-agent (não "corrigir" de volta).
+- **Novo teste** `download-modrinth-test.sh` (contraprovas CR-10/EXP-48/52:
+  seleção primary, hash sha1/sha512/sha256 divergente rejeitado com remoção
+  do jar, sem fallback de versão).
+
+
+
+### Corrigido — Auditoria ampliada CR-01..CR-32 + EXP-33..EXP-65 (contraverificação 2026-11-19)
+
+Entrega única (Opção B) com os 65 achados da auditoria ampliada contra o
+commit `d57dd39`. 64 corrigidos; 1 falso-positivo documentado (CR-19 — a
+chamada de `download_server_icon_if_set` já existe na linha 567 de
+`minecraft/install.sh` no commit auditado; adicionada em `4370948`).
+
+**Segurança / fronteira root x jogo (P0)**
+
+- **EXP-33**: `/etc/profile.d/crias-server.sh` não faz mais `source` do
+  `comandos.sh` (gravável pelo usuário do jogo) — o perfil recebe aliases
+  ESTÁTICOS inline, root:root 0644, com bloco gerenciado idempotente e
+  migração das linhas legadas.
+- **EXP-34**: managers (`mc-manager.sh`/`tt-manager.sh`), `setup-cron.sh` e
+  as libs administrativas mudam para `/usr/local/libexec/crias` (root:root).
+  Managers recusam executar como root qualquer script gravável por não-root
+  (`manager_assert_root_safe`); o deploy remove as cópias legadas do game
+  dir; aliases/sudoers/agent.yaml apontam para o libexec.
+- **EXP-35**: `validate_server_dir` agora é allowlist — apenas subdiretórios
+  dedicados (`/opt/*`, `/srv/*`, `/var/opt/*`, `/home/*/*`, `/tmp/*/*`);
+  raízes amplas (`/home`, `/opt`, `/srv`, `/var`, `/tmp`, `/run`, `/mnt`,
+  `/media`) e áreas de sistema nunca são aceitas como alvo de `chown -R`.
+  Teste novo `validate-server-dir-test.sh` (26 casos + bypass por symlink).
+- **CR-02**: unit do agente sem `CapabilityBoundingSet=`/`AmbientCapabilities=`
+  vazios (sudo setuid volta a funcionar; sudoers permanece a fronteira).
+- **EXP-65**: drop-in do sshd preserva `PasswordAuthentication no` de hosts
+  key-only e valida com `sshd -t` antes do restart.
+
+**Startup Minecraft (P0)**
+
+- **CR-01/EXP-59**: unit gerada em `mktemp --suffix=.service` dentro de
+  `/etc/systemd/system` + publicação atômica por `mv -T` (o verify
+  bloqueante do systemd-analyze falhava SEMPRE com nome sem extensão).
+- **EXP-36**: Java exigido derivado da versão do jogo (26.x → `jdk25-openjdk`;
+  1.20.5–1.21.x → `jdk21`), com validação de major version no launcher
+  (`required_java_major`, snapshot `26w14a` incluso).
+- **EXP-37**: sem modpack usa a CLI correta do mrpack-install v0.23.0
+  (`mrpack-install server <loader> --minecraft-version <v>`); a forma antiga
+  tratava o loader como nome de modpack.
+- **EXP-38**: Forge 1.17+/NeoForge iniciam com `@user_jvm_args.txt`.
+- **EXP-39**: Quilt usa `--server-file mc.jar` (o launcher do Quilt ocupa
+  `server.jar`); `SERVER_JAR` persistido no runtime.env.
+- **EXP-41**: pacote pacman só é usado se a versão BATER com o pin;
+  verificação pós-instalação contra `MRPACK_INSTALL_VERSION`.
+- **EXP-42**: versão efetiva do jogo/loader resolvida da API do Modrinth
+  após instalar o pack — QoL/extras seguem a versão REAL do pack.
+
+**Backups**
+
+- **CR-04**: snapshot pre-instalação COMPLETO (unit, scripts, .shared,
+  server.properties/serverconfig.txt, server.jar, server/, steamapps/) com
+  manifesto restore/remove/leave; falha de snapshot aborta antes de
+  modificar; rollback nunca apaga o que não pode restaurar.
+- **CR-05**: `BACKUP_REQUIRED_DIRS` — mundo ausente é falha, não sucesso só
+  com configs. Testado em `backup-integrity-test.sh`.
+- **CR-06**: `BACKUP_REQUIRE_CONSISTENT=true` aborta backup sem RCON/mcrcon;
+  modo best-effort (default) agora avisa em texto claro.
+- **CR-07**: runtime.env carregado ANTES de montar o escopo
+  (`backup_load_runtime_env`) — `BACKUP_INCLUDE_MODS=false` funciona.
+- **CR-08**: runtime.env escrito com modo 0600 (webhook é credencial).
+- **CR-13**: `BACKUP_RETENTION_DAYS`/`BACKUP_ZSTD_LEVEL` do config.env
+  chegam ao runtime.env com precedência documentada (override > operador >
+  tier); config.env agora vaza (`""` = automático por tier).
+- **CR-15**: unit de backup com `ProtectHome=read-only` (chave SSH do rsync
+  volta a ser legível; home segue protegido contra escrita).
+- **CR-20**: `save-on` com falha mantém o lock ARMADO (EXIT trap tenta de
+  novo) + alerta persistente `.crias-saveoff-alert`.
+- **EXP-49**: tar grava em `.partial`, valida com `zstd -t` + `tar -tf` e
+  publica com `mv` — arquivo truncado nunca vira backup "válido".
+- **EXP-50**: nome com nanossegundos + sufixo; dois backups no mesmo segundo
+  não se sobrescrevem (contraprova no teste de integridade).
+- **EXP-51**: `level-name` validado (sem traversal/absoluto/opção) e tar com
+  `--`.
+- **EXP-54**: webhook com `--connect-timeout 10 --max-time 20`.
+- **EXP-62**: DRY_RUN não notifica sucesso (é simulação).
+
+**Mods / downloads / tuning**
+
+- **CR-10**: sem fallback sem filtro de versão no Modrinth.
+- **EXP-48**: hash sha1/sha512 da API verificado após download (+ sha256
+  fixado opcional via `MOD_*_SHA256`); jar truncado é removido.
+- **EXP-52**: seleção do arquivo `primary=true` com `.jar`.
+- **CR-03**: `serverconfig.txt` do Terraria por merge — senha e chaves do
+  operador preservadas no reconfigure-hardware (`.crias-bak` antes).
+- **CR-11**: workshop tML só conta como instalado com `.tmod` real presente.
+- **CR-26**: steamcmd com timeout configurável (`TML_STEAMCMD_TIMEOUT`,
+  default 3600s) + log com as últimas linhas em caso de falha.
+- **CR-17**: modo strict opcional (`MINECRAFT_MODS_STRICT`/
+  `TERRARIA_MODS_STRICT`) transforma pendências em falha da instalação;
+  default best-effort com resumo final.
+- **CR-18**: `MINECRAFT_INSTALL_MODPACK=false` = servidor base limpo (QoL e
+  extras desligados); para loader+mods sem pack, usar `source=vanilla`.
+- **EXP-60**: RAM efetiva considera o limite do cgroup (v2/v1) em containers.
+
+**Agente / bot (Go + Python)**
+
+- **CR-09**: comandos Discord falham rápido com mensagem amigável quando o
+  agente está offline (`ensure_connected` com timeout; retry infinito só na
+  tarefa de fundo).
+- **CR-14**: `crias-agent` no grupo `systemd-journal` (journalctl sem sudo).
+- **CR-25**: install do agente com verify bloqueante (`.service`), enable
+  bloqueante e estado PARCIAL explícito quando o restart falha.
+- **CR-27**: RCON Go com dial limitado e mutex não segurado durante I/O —
+  goroutine abandonada não trava chamadas seguintes.
+- **EXP-44**: token do agente reutilizado em reinstalações (rotação via
+  `AGENT_ROTATE_TOKEN=true`).
+- **EXP-45**: parser RCON `list` estrito — resposta malformada é ERRO e
+  bloqueia auto-shutdown (não conta como 0 jogadores).
+- **EXP-46**: rate limit agressivo apenas para auth INVÁLIDA; tráfego
+  autenticado usa limite generoso; mapa com teto e expiração.
+- **EXP-47**: deadline do StreamConsole configurável
+  (`features.console.stream_deadline_seconds`, default 300) + marcador
+  final; o bot reabre a stream com backoff e cobre o intervalo.
+- **EXP-53**: health exige a unit do jogo ativa (porta aberta de outro
+  processo não é mais "saudável").
+- **EXP-61**: logs no Discord com backticks neutralizados e
+  `allowed_mentions=none`.
+- **EXP-63**: cache de status invalidado após start/stop/restart.
+- **CR-22**: healthcheck do Docker verifica heartbeat do bot (arquivo com
+  idade máxima), não apenas imports.
+- **CR-30**: README do bot com procedimento de primeiro deploy do sync.
+
+**Distribuição / CI / testes**
+
+- **CR-12**: artifacts ausentes (agente/bot) são bloqueantes na release.
+- **CR-16**: bootstrap instala em `.releases/<timestamp>` com symlink
+  atômico — atualização interrompida nunca mistura versões; mantém as 3
+  últimas para rollback.
+- **CR-21**: trap EXIT composto — limpeza de temporários do common.sh
+  continua ativa após o run_stack_install.
+- **CR-23**: `backup-saveon-success-test.sh` entra no job test-shell da CI.
+- **CR-29**: `Makefile` com `test-all` (bash + go + python).
+- **EXP-40**: bootstrap exibe tag/commit da release antes de instalar
+  (main pode estar à frente da latest).
+- **EXP-55**: envsubst-test valida as units do Minecraft E do Terraria em
+  arquivos `.service` distintos.
+- **EXP-56**: java-flags-test cobre o mapeamento versão→Java (bug real
+  encontrado e corrigido: snapshot `26w14a` sem ponto).
+- **EXP-57/49/50/62**: novo `backup-integrity-test.sh` — tar+zstd reais,
+  restore byte a byte, colisão de nomes, falha de tar sem publicação, DRY_RUN
+  sem notificação.
+- **EXP-58**: ZIP slim não embute mais `tests/`.
+- **EXP-64**: `GITHUB_TOKEN` lido de arquivo privado via `curl -H @file`
+  (bootstrap e installer) — fora do argv dos processos.
+- **CR-31**: instruções da ISO legada movidas para `docs/legacy-iso.md`.
+
+### Segurança — notas operacionais da auditoria ampliada
+
+- Managers agora vivem em `/usr/local/libexec/crias` — aliases antigos que
+  apontavam para `/opt/<stack>-server/mc-manager.sh` são migrados
+  automaticamente pelo installer (o perfil global é regerado).
+- `docs/security.md` ganhou as seções "Fronteira root x usuário do jogo",
+  "Hardening do agente", "SSH no host instalado" e "Verificação adicional
+  da release" (limitação do checksum sem assinatura — CR-24).
+
+
+
 ### Corrigido — Auditoria externa CR-01..CR-28 (contra-verificação 2026-11-18)
 
 - **CR-01 (P0)**: JVM 21 recusava as flags G1 experimentais

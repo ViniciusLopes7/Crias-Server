@@ -105,17 +105,29 @@ download_file() {
 }
 
 # Download a Modrinth mod with retry. Wraps API query + file download.
-# Usage: download_modrinth_mod <slug> <loader> <game_version> <dest_dir> <file_name>
+# Usage: download_modrinth_mod <slug> <loader> <game_version> <dest_dir> <file_name> [expected_sha256_var]
 # Returns 0 on success, 1 on failure.
 #
 # Delega para mc_fetch_modrinth_project_versions (mc-manifests.sh) que usa
 # mc_curl_get (com User-Agent obrigatório) e jq -c -n para URL encoding correto.
+#
+# (CR-10) Nao existe mais fallback sem filtro de versao: a busca anterior
+# caia para "qualquer versao com o loader" e baixava mod incompativel com a
+# versao em execucao. Versao incompativel = pendencia relatada, nao download
+# as cegas.
+#
+# (EXP-52) Seleciona o arquivo marcado primary=true com extensao .jar (o
+# files[0] podia pegar arquivo secundario/cliente). (EXP-48) Verifica o hash
+# sha1/sha512 do arquivo contra o manifesto da API e o sha256 opcional
+# fixado pelo caller via MOD_*_SHA256 — download truncado/adulterado nao
+# vira mod "instalado".
 download_modrinth_mod() {
     local slug="$1"
     local loader="$2"
     local game_version="$3"
     local dest_dir="$4"
     local file_name="$5"
+    local expected_sha_var="${6:-}"
 
     if should_skip_network; then
         print_step "[DRY_RUN] Pulando download do mod $slug"
@@ -130,16 +142,31 @@ download_modrinth_mod() {
     fi
 
     # Busca versões compatíveis (server-side filter por loader + game_version).
-    local json mod_url
+    local json
     json=$(mc_fetch_modrinth_project_versions "$slug" "$loader" "$game_version") || true
 
     if [ -z "$json" ] || [ "$json" = "[]" ]; then
-        # Fallback: busca sem filtro de game_version (só loader).
-        json=$(mc_fetch_modrinth_project_versions "$slug" "$loader" "") || true
+        print_warning "Mod '$slug': nenhuma versao compativel com $loader $game_version (sem fallback de versao — CR-10)."
+        return 1
     fi
 
-    # Extrai URL do primeiro arquivo da primeira versão.
-    mod_url=$(printf '%s' "$json" | jq -r '.[0].files[0].url // empty' 2>/dev/null || true)
+    # (EXP-52) Arquivo primary=true com .jar; fallback: primeiro .jar da versao.
+    local file_json mod_url expected_sha1 expected_sha512
+    file_json=$(printf '%s' "$json" | jq -c '
+        .[0].files
+        | (map(select(.primary == true and (.filename | endswith(".jar")))) | .[0])
+          // (map(select(.filename | endswith(".jar"))) | .[0])
+        // empty
+    ' 2>/dev/null || true)
+
+    if [ -z "$file_json" ]; then
+        print_warning "Mod '$slug': nenhum arquivo .jar na versao retornada."
+        return 1
+    fi
+
+    mod_url=$(printf '%s' "$file_json" | jq -r '.url // empty' 2>/dev/null || true)
+    expected_sha1=$(printf '%s' "$file_json" | jq -r '.hashes.sha1 // empty' 2>/dev/null || true)
+    expected_sha512=$(printf '%s' "$file_json" | jq -r '.hashes.sha512 // empty' 2>/dev/null || true)
 
     if [ -z "$mod_url" ]; then
         print_warning "Nao foi possivel baixar o mod: $file_name"
@@ -152,6 +179,44 @@ download_modrinth_mod() {
         return 1
     fi
 
-    print_success "Mod instalado: ${file_name}.jar"
+    # (EXP-48) Verificacao de integridade do JAR baixado contra os hashes da
+    # API. Falha remove o arquivo — um jar truncado nao pode permanecer em
+    # mods/ como se fosse um mod instalado.
+    local dest_file="$dest_dir/${file_name}.jar"
+    if [ -n "$expected_sha1" ] && command -v sha1sum >/dev/null 2>&1; then
+        local actual_sha1
+        actual_sha1="$(sha1sum "$dest_file" 2>/dev/null | awk '{print $1}')"
+        if [ "$actual_sha1" != "$expected_sha1" ]; then
+            print_warning "Mod '$file_name': sha1 divergente (esperado ${expected_sha1:0:12}..., obtido ${actual_sha1:0:12}...); removendo."
+            rm -f "$dest_file"
+            return 1
+        fi
+    fi
+    if [ -n "$expected_sha512" ] && command -v sha512sum >/dev/null 2>&1; then
+        local actual_sha512
+        actual_sha512="$(sha512sum "$dest_file" 2>/dev/null | awk '{print $1}')"
+        if [ "$actual_sha512" != "$expected_sha512" ]; then
+            print_warning "Mod '$file_name': sha512 divergente; removendo."
+            rm -f "$dest_file"
+            return 1
+        fi
+    fi
+
+    # (EXP-48) Hash sha256 opcional fixado pelo caller (MOD_*_SHA256 no
+    # config.env) — pin forte do operador.
+    if [ -n "$expected_sha_var" ] && [ -n "${!expected_sha_var:-}" ]; then
+        local expected_sha256="${!expected_sha_var}"
+        local actual_sha256=""
+        if command -v sha256sum >/dev/null 2>&1; then
+            actual_sha256="$(sha256sum "$dest_file" 2>/dev/null | awk '{print $1}')"
+        fi
+        if [ -z "$actual_sha256" ] || [ "$actual_sha256" != "$expected_sha256" ]; then
+            print_warning "Mod '$file_name': sha256 fixado ($expected_sha_var) divergente; removendo."
+            rm -f "$dest_file"
+            return 1
+        fi
+    fi
+
+    print_success "Mod instalado: ${file_name}.jar (hash verificado)"
     return 0
 }

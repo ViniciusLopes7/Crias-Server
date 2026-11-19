@@ -118,7 +118,13 @@ Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
 ProtectSystem=strict
-ProtectHome=true
+# (CR-15) ProtectHome=read-only (antes: true): a sincronizacao remota por
+# rsync+SSH precisa LER a chave de ~/.ssh do usuario do backup — com
+# ProtectHome=true a chave ficava invisivel e o rsync falhava com
+# autenticacao. read-only mantem o home protegido contra escrita pelo
+# backup e ainda permite ler a chave. Alternativa mais restrita: chave
+# dedicada do servico fora do home + LoadCredential (ver docs/restore.md).
+ProtectHome=read-only
 PrivateTmp=true
 NoNewPrivileges=true
 ReadWritePaths=${SETUP_CRON_SERVER_DIR}

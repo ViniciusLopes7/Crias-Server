@@ -143,7 +143,11 @@ tml_workshop_item_installed() {
     local install_dir="$1"
     local workshop_id="$2"
     local item_dir="$install_dir/steamapps/workshop/content/${TML_STEAM_APP_ID}/$workshop_id"
-    [ -d "$item_dir" ] && [ -n "$(ls -A "$item_dir" 2>/dev/null || true)" ]
+    # (CR-11) Exige um .tmod REAL: o criterio antigo (diretorio nao-vazio)
+    # marcava como "instalado" qualquer resto de download parcial/log/manifesto
+    # e o enabled.json declarava mods que nao existiam.
+    [ -d "$item_dir" ] \
+        && [ -n "$(find "$item_dir" -maxdepth 2 -type f -name '*.tmod' -print -quit 2>/dev/null || true)" ]
 }
 
 # Verifica se steamcmd está instalado.
@@ -180,8 +184,21 @@ tml_download_mods() {
     unset IFS
     cmd_args+=("+quit")
 
-    # Executa steamcmd (pode demorar; sem timeout fixo para permitir downloads grandes).
-    steamcmd "${cmd_args[@]}" >/dev/null 2>&1
+    # (CR-26) Timeout configuravel (default 1h — downloads grandes continuam
+    # possiveis) + log capturado: antes o steamcmd podia pendurar o installer
+    # para sempre, sem progresso nem diagnostico.
+    local timeout_s="${TML_STEAMCMD_TIMEOUT:-3600}"
+    local steamcmd_log
+    steamcmd_log="$(mktemp_crias_file)"
+    if timeout "$timeout_s" steamcmd "${cmd_args[@]}" > "$steamcmd_log" 2>&1; then
+        rm -f "$steamcmd_log"
+        return 0
+    fi
+    local rc=$?
+    echo "[AVISO] steamcmd falhou (rc=$rc); ultimas linhas:" >&2
+    tail -n 30 "$steamcmd_log" >&2 || true
+    rm -f "$steamcmd_log"
+    return "$rc"
 }
 
 # ===========================================================================

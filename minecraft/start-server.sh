@@ -124,17 +124,23 @@ fi
 
 cd "$SERVER_DIR" || exit 1
 
-if ! command -v java >/dev/null 2>&1; then
-    echo "ERRO: Java nao encontrado. Instale jdk21-openjdk."
+# (EXP-36) Binario java configuravel (caminho absoluto pelo runtime.env se
+# o host tiver multiplos JDKs) e requisito minimo DERIVADO DA VERSAO DO JOGO:
+# MC 26.x exige Java 25 (anuncio oficial 26.1+); 1.20.5-1.21.x exige 21.
+JAVA_BIN="${JAVA_BIN:-java}"
+if ! command -v "$JAVA_BIN" >/dev/null 2>&1; then
+    echo "ERRO: Java nao encontrado ($JAVA_BIN). Instale o jdk-openjdk da versao exigida."
     exit 1
 fi
 
-JAVA_VERSION_RAW="$(java -version 2>&1 | head -n 1)"
+JAVA_VERSION_RAW="$("$JAVA_BIN" -version 2>&1 | head -n 1)"
 JAVA_VERSION_STRING="$(printf '%s\n' "$JAVA_VERSION_RAW" | awk -F'"' '{print $2}')"
 JAVA_MAJOR_VERSION="$(printf '%s\n' "$JAVA_VERSION_STRING" | awk -F. '{ if ($1 == 1) { print $2 } else { print $1 } }')"
 
-if ! [[ "$JAVA_MAJOR_VERSION" =~ ^[0-9]+$ ]] || [ "$JAVA_MAJOR_VERSION" -lt 21 ]; then
-    echo "ERRO: Java 21+ required. Detectado: ${JAVA_VERSION_STRING:-desconhecido}"
+REQUIRED_JAVA_MAJOR="$(required_java_major "${MINECRAFT_VERSION:-1.21}")"
+
+if ! [[ "$JAVA_MAJOR_VERSION" =~ ^[0-9]+$ ]] || [ "$JAVA_MAJOR_VERSION" -lt "$REQUIRED_JAVA_MAJOR" ]; then
+    echo "ERRO: Java ${REQUIRED_JAVA_MAJOR}+ exigido para Minecraft ${MINECRAFT_VERSION:-desconhecida}. Detectado: ${JAVA_VERSION_STRING:-desconhecido}"
     exit 1
 fi
 
@@ -148,11 +154,10 @@ if ! [[ "$SERVER_PORT" =~ ^[0-9]+$ ]]; then
     SERVER_PORT=25565
 fi
 
-if command -v ss >/dev/null 2>&1; then
-    if ss -H -tln | awk -v port=":$SERVER_PORT" '$4 ~ port { found=1 } END { exit found ? 0 : 1 }'; then
-        echo "ERRO: Porta $SERVER_PORT ja esta em uso. Ajuste server-port em $SERVER_PROPERTIES."
-        exit 1
-    fi
+# (CR-32) Igualdade exata de porta (2556 nao conflita mais com 25565).
+if port_is_listening "$SERVER_PORT"; then
+    echo "ERRO: Porta $SERVER_PORT ja esta em uso. Ajuste server-port em $SERVER_PROPERTIES."
+    exit 1
 fi
 
 echo "=========================================="
@@ -164,4 +169,15 @@ echo "Porta: $SERVER_PORT"
 echo "=========================================="
 
 # Run java with native array (preserves flags with spaces).
-exec java "${JAVA_OPTS[@]}" -jar "$SERVER_JAR" nogui
+# (EXP-38) Forge 1.17+ e NeoForge EXIGEM os JVM args gerados pelo instalador
+# (user_jvm_args.txt) — `java -jar server.jar` puro nao inicia esses loaders.
+# Os args do arquivo vem DEPOIS dos nossos: java usa a ultima ocorrencia,
+# entao um Xmx no @file (se o usuario o configurou) prevalece sobre o nosso.
+LAUNCH_ARGS=()
+if { [ "$MINECRAFT_LOADER" = "forge" ] || [ "$MINECRAFT_LOADER" = "neoforge" ]; } \
+    && [ -f "$SERVER_DIR/user_jvm_args.txt" ]; then
+    LAUNCH_ARGS+=("@user_jvm_args.txt")
+    echo "Loader $MINECRAFT_LOADER: usando @user_jvm_args.txt"
+fi
+
+exec "$JAVA_BIN" "${JAVA_OPTS[@]}" "${LAUNCH_ARGS[@]+"${LAUNCH_ARGS[@]}"}" -jar "$SERVER_JAR" nogui

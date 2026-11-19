@@ -26,6 +26,10 @@ printf '#!/bin/bash\necho original-manager\n' > "$server_dir/mc-manager.sh"
 printf 'common-lib-original\n' > "$server_dir/.shared/common.sh"
 printf 'dados do mundo\n' > "$server_dir/world/level.dat"
 printf 'jar do usuario\n' > "$server_dir/mods/meu-mod.jar"
+# (CR-04) Extras preexistentes que o installer sobrescreve e o rollback deve
+# RESTAURAR (o bug antigo os apagava mesmo em reinstalacao).
+printf 'eula=true  # aceito pelo operador em 2025\n' > "$server_dir/eula.txt"
+printf 'icone-original-png\n' > "$server_dir/server-icon.png"
 
 # Scripts "novos" que o installer tentaria implantar (conteudo diferente).
 new_scripts_dir="$tmp_dir/new-scripts"
@@ -43,6 +47,27 @@ exit 0
 EOF
     chmod +x "$stub_bin/$tool"
 done
+# (EXP-34) deploy_stack_admin_tools instala em /usr/local/libexec (root);
+# sem root no teste, os stubs simulam sucesso.
+cat > "$stub_bin/install" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "$stub_bin/install"
+cat > "$stub_bin/mkdir" <<'EOF'
+#!/usr/bin/env bash
+# mkdir real, exceto caminhos de sistema que exigem root (simulado).
+# /bin/mkdir absoluto: `command mkdir` resolveria para ESTE stub (recursao).
+for a in "$@"; do
+    case "$a" in
+        -*) continue ;;
+        /usr/local/*) continue ;;
+        *) /bin/mkdir "$a" 2>/dev/null || true ;;
+    esac
+done
+exit 0
+EOF
+chmod +x "$stub_bin/mkdir" 
 cat > "$stub_bin/id" <<'EOF'
 #!/usr/bin/env bash
 echo "0(root) root"
@@ -59,6 +84,8 @@ STACK_SERVICE_TEMPLATE="$ROOT_DIR/minecraft/minecraft.service" \
 bash -c '
     set -euo pipefail
     # shellcheck source=/dev/null
+    source "'"$ROOT_DIR"'/shared/lib/common.sh"
+    # shellcheck source=/dev/null
     source "'"$ROOT_DIR"'/shared/lib/stack-installer.sh"
 
     STACK_RUNTIME_SCRIPTS=(
@@ -74,11 +101,21 @@ bash -c '
     stack_download_and_install() {
         # Falha simulada no meio da instalacao (apos o deploy de scripts).
         deploy_stack_scripts
+        # (CR-04) Simula o installer sobrescrevendo os extras declarados:
+        # eula/icone pre-existentes e um server.jar NOVO (nao existia antes).
+        printf 'eula=true\n' > "'"$server_dir"'/eula.txt"
+        printf 'icone-NOVO\n' > "'"$server_dir"'/server-icon.png"
+        printf 'jar-baixado\n' > "'"$server_dir"'/server.jar"
         echo "falha injetada" >&2
         return 1
     }
-    stack_rollback_extra_files() {
-        return 0
+    # (CR-04) Extras declarados pelo stack: fotografa/restaura por manifesto.
+    stack_snapshot_extra_paths() {
+        cat << 'XEOF'
+'"$server_dir"'/server-icon.png
+'"$server_dir"'/eula.txt
+'"$server_dir"'/server.jar
+XEOF
     }
 
     run_stack_install
@@ -119,6 +156,24 @@ if ! grep -q 'dados do mundo' "$server_dir/world/level.dat" 2>/dev/null; then
 fi
 if ! grep -q 'jar do usuario' "$server_dir/mods/meu-mod.jar" 2>/dev/null; then
     echo "FAIL: mods do usuario foram apagados pelo rollback (CR-08)"
+    exit 1
+fi
+
+# CONTRATO 4b (CR-04): extras PRE-EXISTENTES restaurados com conteudo original.
+if ! grep -q 'aceito pelo operador em 2025' "$server_dir/eula.txt" 2>/dev/null; then
+    echo "FAIL: eula.txt pre-existente nao foi restaurado pelo rollback (CR-04)"
+    cat "$server_dir/eula.txt" >&2 || true
+    exit 1
+fi
+if ! grep -q 'icone-original-png' "$server_dir/server-icon.png" 2>/dev/null; then
+    echo "FAIL: server-icon.png pre-existente nao foi restaurado (CR-04)"
+    exit 1
+fi
+
+# CONTRATO 4c (CR-04): extra que NAO existia antes (server.jar criado pela
+# instalacao falha) e REMOVIDO — nao pode sobrar lixo de instalacao abortada.
+if [ -e "$server_dir/server.jar" ]; then
+    echo "FAIL: server.jar criado pela instalacao falha nao foi removido (CR-04)"
     exit 1
 fi
 

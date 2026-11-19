@@ -100,8 +100,15 @@ backup_post_hook() {
 # Executa backup em DRY_RUN
 backup_run > "$TMP_TEST_DIR/backup-output.log" 2>&1 || true
 
-if ! grep -q "Backup concluido com sucesso" "$TMP_TEST_DIR/backup-output.log"; then
-    echo "FAIL: backup_run em DRY_RUN não concluiu com sucesso"
+# (EXP-62) DRY_RUN e SIMULACAO: o log deve dizer "simulado" e NUNCA
+# "concluido com sucesso" (que notificaria sucesso operacional sem arquivo).
+if grep -q "Backup concluido com sucesso" "$TMP_TEST_DIR/backup-output.log"; then
+    echo "FAIL: backup_run em DRY_RUN reportou sucesso operacional (EXP-62)"
+    cat "$TMP_TEST_DIR/backup-output.log"
+    exit 1
+fi
+if ! grep -q "Backup simulado" "$TMP_TEST_DIR/backup-output.log"; then
+    echo "FAIL: backup_run em DRY_RUN nao registrou a simulacao"
     cat "$TMP_TEST_DIR/backup-output.log"
     exit 1
 fi

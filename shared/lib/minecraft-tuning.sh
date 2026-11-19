@@ -156,17 +156,48 @@ write_minecraft_runtime_env() {
             ;;
     esac
 
-    write_file_or_dry_run "Gerando runtime.env do Minecraft em $file_path" "$file_path" << EOF
+    # (CR-13) Precedencia documentada: override explicito do ambiente
+    # (config.env) > valor existente no runtime.env (edicao do operador) >
+    # auto-tuning por tier. Config.env agora vaza ("") quando o operador quer
+    # o auto-tuning.
+    local backup_retention="${BACKUP_RETENTION_DAYS:-$(env_file_read_value "$file_path" BACKUP_RETENTION_DAYS)}"
+    if [ -z "$backup_retention" ]; then
+        backup_retention="$MC_BACKUP_RETENTION_DAYS"
+    fi
+    local backup_zstd="${BACKUP_ZSTD_LEVEL:-$(env_file_read_value "$file_path" BACKUP_ZSTD_LEVEL)}"
+    if [ -z "$backup_zstd" ]; then
+        backup_zstd="$MC_BACKUP_ZSTD_LEVEL"
+    fi
+
+    # (CR-06) BACKUP_REQUIRE_CONSISTENT persiste no runtime.env (o
+    # backup-cron le de la).
+    local backup_require_consistent="${BACKUP_REQUIRE_CONSISTENT:-$(env_file_read_value "$file_path" BACKUP_REQUIRE_CONSISTENT)}"
+    backup_require_consistent="${backup_require_consistent:-false}"
+
+    # (EXP-36) MINECRAFT_VERSION para o start-server validar o Java exigido;
+    # (EXP-39) SERVER_JAR efetivo (quilt usa mc.jar — o launcher interno do
+    # Quilt ocupa server.jar). Preserva valor existente quando o ambiente
+    # nao define (reconfigure-hardware roda sem essas variaveis).
+    local mc_version="${MINECRAFT_VERSION:-$(env_file_read_value "$file_path" MINECRAFT_VERSION)}"
+    local server_jar="${MINECRAFT_SERVER_FILE:-$(env_file_read_value "$file_path" SERVER_JAR)}"
+    server_jar="${server_jar:-server.jar}"
+
+    # (CR-08) runtime.env carrega segredos (webhook): modo 0600 — criado com
+    # umask 022 virava 0644 legivel por qualquer usuario local.
+    write_file_or_dry_run "Gerando runtime.env do Minecraft em $file_path" "$file_path" 0600 << EOF
 MIN_RAM="$MC_MIN_RAM"
 MAX_RAM="$MC_MAX_RAM"
 GC_MAX_PAUSE="$MC_GC_MAX_PAUSE"
 G1_REGION_SIZE="$MC_G1_REGION_SIZE"
-BACKUP_RETENTION_DAYS="$MC_BACKUP_RETENTION_DAYS"
-BACKUP_ZSTD_LEVEL="$MC_BACKUP_ZSTD_LEVEL"
+BACKUP_RETENTION_DAYS="$backup_retention"
+BACKUP_ZSTD_LEVEL="$backup_zstd"
 MINECRAFT_LOADER="${MINECRAFT_LOADER:-fabric}"
+MINECRAFT_VERSION="$mc_version"
+SERVER_JAR="$server_jar"
 BACKUP_REMOTE_PATH="$backup_remote"
 BACKUP_NOTIFY_WEBHOOK="$backup_webhook"
 BACKUP_INCLUDE_MODS="$backup_include_mods"
+BACKUP_REQUIRE_CONSISTENT="$backup_require_consistent"
 EOF
 }
 
@@ -240,6 +271,39 @@ write_minecraft_server_properties() {
 
     rm -f "$tmp_new"
     chmod 0640 "$file_path"
+}
+
+# (EXP-43) Merge seletivo de chaves em server.properties: remove as chaves
+# alvo existentes, preserva TODO o resto (senha, whitelist, comentarios) e
+# acrescenta as novas no final. Backup .crias-bak antes de tocar.
+# Uso: set_minecraft_properties <arquivo> "key1=val1" ["key2=val2" ...]
+set_minecraft_properties() {
+    local file_path="$1"
+    shift
+
+    if [ ! -f "$file_path" ]; then
+        print_warning "set_minecraft_properties: $file_path nao existe."
+        return 1
+    fi
+
+    cp -a "$file_path" "${file_path}.crias-bak"
+
+    local keys_regex=""
+    local kv key
+    for kv in "$@"; do
+        key="${kv%%=*}"
+        keys_regex="${keys_regex:+$keys_regex|}${key}"
+    done
+
+    local tmp_file
+    tmp_file="$(mktemp_crias_file)"
+    awk -v re="^(${keys_regex})=" '$0 !~ re' "$file_path" > "$tmp_file"
+    for kv in "$@"; do
+        printf '%s\n' "$kv" >> "$tmp_file"
+    done
+    cat "$tmp_file" > "$file_path"
+    rm -f "$tmp_file"
+    return 0
 }
 
 write_minecraft_tuning_state() {

@@ -68,9 +68,16 @@ crias_api_url() {
 # Saída: "<zip_url> <sha_url>" (sha_url pode ser vazia se asset ausente).
 crias_fetch_release_urls() {
     local api_url curl_auth=()
+    local auth_hdr_file=""
     api_url="$(crias_api_url)"
     if [ -n "${GITHUB_TOKEN:-}" ]; then
-        curl_auth=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+        # (EXP-64) Token fora do argv do curl: linhas de comando sao
+        # observaveis via /proc/<pid>/cmdline em hosts com procfs aberto.
+        # -H @arquivo le o header de um arquivo privado 0600 (curl >= 7.55).
+        auth_hdr_file="$(mktemp -t crias-auth.XXXXXX)"
+        chmod 600 "$auth_hdr_file"
+        printf 'Authorization: Bearer %s\n' "$GITHUB_TOKEN" > "$auth_hdr_file"
+        curl_auth=(-H "@${auth_hdr_file}")
     fi
     local response
     response=$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
@@ -79,6 +86,16 @@ crias_fetch_release_urls() {
         -H "Accept: application/vnd.github+json" \
         -H "X-GitHub-Api-Version: 2022-11-28" \
         "$api_url" 2>/dev/null || true)
+    # (EXP-64) Remove o arquivo de header imediatamente apos o uso.
+    if [ -n "$auth_hdr_file" ]; then
+        rm -f "$auth_hdr_file"
+    fi
+
+    # (EXP-40) Transparencia da release: registrar tag e commit-alvo da
+    # release consultada — main pode estar a frente da latest, e o operador
+    # precisa saber O QUE esta instalando antes de rodar install.sh.
+    CRIAS_RELEASE_TAG_NAME="$(printf '%s' "$response" | jq -r '.tag_name // "desconhecida"' 2>/dev/null || echo desconhecida)"
+    CRIAS_RELEASE_TARGET="$(printf '%s' "$response" | jq -r '.target_commitish // "desconhecido"' 2>/dev/null || echo desconhecido)"
     if [ -z "$response" ]; then
         err "Falha ao consultar GitHub API: $api_url"
         return 1
@@ -137,7 +154,11 @@ crias_verify_sha256() {
     return 0
 }
 
-# Extrai o zip e copia para o install_dir.
+# Extrai o zip e instala de forma TRANSACIONAL (CR-16): a nova versao vai
+# para um diretorio versionado em <install_dir>.releases/<timestamp>; a
+# troca final e um symlink atomico. Uma atualizacao interrompida nunca
+# deixa /opt/crias-server com mistura de versoes — a versao antiga fica
+# intacta em .releases/ ate a limpeza (mantem as 3 mais recentes).
 # Suporta 2 formatos de zip:
 #   1. CI release zip: arquivos na raiz (install.sh, config.env, shared/, ...)
 #   2. GitHub auto zip: diretório top-level (Crias-Server-<tag>/) com arquivos dentro
@@ -172,16 +193,83 @@ crias_extract_to() {
         fi
     fi
 
-    mkdir -p "$install_dir"
-    if command -v rsync >/dev/null 2>&1; then
-        rsync -a "$src_dir/" "$install_dir/"
-    else
-        cp -a "$src_dir/." "$install_dir/"
+    # (CR-16) Deploy versionado + symlink atomico.
+    local releases_root="${install_dir}.releases"
+    local stamp
+    stamp="$(date +%Y%m%d-%H%M%S)"
+    local new_dir="$releases_root/$stamp"
+    mkdir -p "$releases_root"
+    rm -rf "$new_dir"
+
+    if ! cp -a "$src_dir/." "$new_dir/"; then
+        err "Falha ao copiar a nova versao para $new_dir."
+        rm -rf "$new_dir" "$extract_dir"
+        return 1
     fi
-    chmod 0755 "$install_dir/install.sh" 2>/dev/null || true
-    find "$install_dir" -name '*.sh' -type f -exec chmod 0755 {} +
     rm -rf "$extract_dir"
+
+    chmod 0755 "$new_dir/install.sh" 2>/dev/null || true
+    find "$new_dir" -name '*.sh' -type f -exec chmod 0755 {} +
+
+    # Migracao: install_dir real (nao-symlink) legado vira uma release.
+    if [ -d "$install_dir" ] && [ ! -L "$install_dir" ]; then
+        local legacy_dir="$releases_root/legacy-$stamp"
+        rm -rf "$legacy_dir"
+        if ! mv "$install_dir" "$legacy_dir"; then
+            err "Falha ao arquivar a instalacao legada ($install_dir)."
+            rm -rf "$new_dir"
+            return 1
+        fi
+        ok "Instalacao legada arquivada em $legacy_dir"
+    fi
+
+    # Symlink atomico: cria em temporario e renomeia por cima.
+    local tmp_link="$releases_root/.crias-link.$$"
+    rm -f "$tmp_link"
+    if ! ln -s "$new_dir" "$tmp_link"; then
+        err "Falha ao criar symlink temporario."
+        rm -rf "$new_dir"
+        _crias_restore_legacy "$install_dir" "$releases_root" "$stamp" || true
+        return 1
+    fi
+    if ! mv -T "$tmp_link" "$install_dir"; then
+        err "Falha ao publicar o symlink $install_dir."
+        rm -f "$tmp_link"
+        rm -rf "$new_dir"
+        # (AUDIT-A P3-9) A instalacao antiga foi arquivada em legacy-* acima;
+        # devolve o diretorio real para nao deixar o host sem /opt/crias-server.
+        _crias_restore_legacy "$install_dir" "$releases_root" "$stamp" || true
+        return 1
+    fi
+
+    # Limpeza: mantem as 3 versoes mais recentes em .releases (rollback).
+    # (AUDIT-A P3-10) O destino ATUAL do symlink nunca entra na lista de
+    # remocao — um rollback manual do symlink para uma release antiga nao
+    # pode perder a versao em uso na proxima atualizacao.
+    local current_target
+    current_target="$(readlink -f "$install_dir" 2>/dev/null || true)"
+    local old_release
+    while IFS= read -r old_release; do
+        [ -z "$old_release" ] && continue
+        [ "$old_release" = "$current_target" ] && continue
+        rm -rf -- "$old_release" 2>/dev/null || true
+    done < <(ls -1dt "$releases_root"/[0-9]* "$releases_root"/legacy-* 2>/dev/null | tail -n +4)
+
     return 0
+}
+
+# (AUDIT-A P3-9) Restaura a instalacao legada arquivada quando a publicacao
+# do symlink falha — o host nao pode ficar sem $install_dir.
+_crias_restore_legacy() {
+    local install_dir="$1" releases_root="$2" stamp="$3"
+    local legacy_dir="$releases_root/legacy-$stamp"
+    if [ -d "$legacy_dir" ] && [ ! -e "$install_dir" ]; then
+        if mv "$legacy_dir" "$install_dir"; then
+            ok "Instalacao legada restaurada em $install_dir"
+            return 0
+        fi
+    fi
+    return 1
 }
 
 # Lógica principal. Sourceable p/ testes (testa funções acima isoladamente).
@@ -239,6 +327,14 @@ crias_bootstrap_main() {
         err "Não foi possível obter URLs dos assets da release."
         err "Fallback: git clone https://github.com/$CRIAS_REPO && cd Crias-Server && sudo ./install.sh"
         return 1
+    fi
+
+    # (EXP-40) Mostra O QUE vai ser instalado. main pode estar a frente da
+    # release latest (correções no main só chegam ao curl|bash quando uma nova
+    # release e publicada); para pinar, use CRIAS_RELEASE_TAG=<tag>.
+    if [ -n "${CRIAS_RELEASE_TAG_NAME:-}" ]; then
+        log "Release que sera instalada: ${CRIAS_RELEASE_TAG_NAME} (alvo: ${CRIAS_RELEASE_TARGET:-desconhecido})"
+        warn "main pode estar AHEAD da release latest; veja https://github.com/$CRIAS_REPO/releases para pinar uma tag (CRIAS_RELEASE_TAG)."
     fi
     zip_url="${urls%% *}"
     sha_url="${urls#* }"

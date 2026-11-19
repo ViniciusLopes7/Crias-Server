@@ -202,6 +202,7 @@ run_or_dry_run() {
 write_file_or_dry_run() {
     local description="$1"
     local file_path="$2"
+    local file_mode="${3:-}"
 
     if dry_run_enabled; then
         print_step "[DRY_RUN] $description"
@@ -209,7 +210,16 @@ write_file_or_dry_run() {
         return 0
     fi
 
-    cat > "$file_path"
+    # (CR-08 / AUDIT-B N12) Modo explicito opcional: arquivos com segredos
+    # (runtime.env com webhook) eram criados com umask 022 -> 0644 legivel por
+    # qualquer usuario local. Com modo informado o arquivo nasce 0600
+    # (umask 077 na criacao — sem a janela de microssegundos do chmod tardio).
+    if [ -n "$file_mode" ]; then
+        (umask 077 && cat > "$file_path")
+        chmod "$file_mode" "$file_path"
+    else
+        cat > "$file_path"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -292,7 +302,17 @@ port_is_listening() {
         return 1
     fi
 
-    ss -H -tln 2>/dev/null | awk -v port=":$port" '$4 ~ port { found=1 } END { exit found ? 0 : 1 }'
+    # (CR-32) Igualdade exata de porta: o regex antigo (":$port") fazia
+    # substring — a porta 2556 conflitava com um listener em 25565. Extrai
+    # a porta do endereco local (ultimo campo separado por ":", cobre
+    # 0.0.0.0:P, *:P e [::]:P) e compara com igualdade.
+    ss -H -tln 2>/dev/null | awk -v port="$port" '
+        {
+            n = split($4, addr, ":")
+            if (addr[n] == port) { found = 1 }
+        }
+        END { exit found ? 0 : 1 }
+    '
 }
 
 clamp_value() {
@@ -380,6 +400,11 @@ safe_remove_dir() {
 # Validate server directory before destructive ops (chown -R, rm -rf).
 # Rejects empty, relative, root, and system-critical paths.
 # Resolves symlinks before validation to prevent bypass.
+# (EXP-35) Allowlist: SO diretorios dedicados de instalacao sao aceitos.
+# Raizes genericas (/home, /opt, /srv, /var, /tmp, /run, /mnt, /media) sao
+# rejeitadas como alvo direto — um chown -R nelas destruiria o host.
+# Politica: /opt/<folha>, /srv/<folha...>, /home/<usuario>/<subdir> (minimo
+# 2 niveis abaixo de /home) e /var/opt/<folha>.
 # ---------------------------------------------------------------------------
 validate_server_dir() {
     local dir="${1:-}"
@@ -413,6 +438,26 @@ validate_server_dir() {
         /root|/root/*|/lib|/lib*|/proc|/proc/*|/sys|/sys/*|/dev|/dev/*|\
         /var/lib|/var/lib/*|/var/log|/var/log/*|/opt/crias-agent|/opt/crias-agent/*)
             print_error "Diretório de servidor perigoso (área do sistema): '$dir' (resolved: '$resolved')"
+            return 1
+            ;;
+    esac
+
+    # (EXP-35) Allowlist de raizes dedicadas. O case abaixo so ACEITA
+    # subdiretorios — as raizes em si (/opt, /srv, /home, /tmp, /var/opt)
+    # caem no else e sao rejeitadas. /mnt, /media, /run e o restante de /var
+    # nao sao allowlistados de forma alguma. /home e /tmp exigem profundidade
+    # minima 2: /home/<user> e o home INTEIRO do usuario e /tmp/<dir> e filho
+    # direto de area world-writable — em ambos os casos apenas um subdiretorio
+    # dedicado dentro deles e aceito como alvo.
+    case "$resolved" in
+        /opt/*|/srv/*|/var/opt/*)
+            ;;
+        /home/*/*|/tmp/*/*)
+            ;;
+        *)
+            print_error "Diretório fora da política de instalação (EXP-35): '$dir' (resolved: '$resolved')"
+            print_error "Use um diretório dedicado, ex.: /opt/minecraft-server, /srv/crias/minecraft ou /home/<usuario>/servidor."
+            print_error "Raízes amplas (/home, /opt, /srv, /var, /tmp, /run, /mnt, /media) nunca são aceitas como alvo direto."
             return 1
             ;;
     esac
@@ -496,5 +541,24 @@ generate_token() {
     else
         # Fallback: read from /dev/urandom.
         head -c "$bytes" /dev/urandom 2>/dev/null | od -An -tx1 | tr -d ' \n'
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# (EXP-36) Versao minima de Java exigida por versao do Minecraft.
+# MC 26.x exige Java 25 (anuncio oficial da Mojang para 26.1+); linhas
+# anteriores (1.20.5–1.21.x) rodam com Java 21. Snapshots "26w14a" contam
+# como 26.x. Usada pelo installer (pacote jdk) e pelo start-server.sh
+# (validacao de major version antes do exec).
+# ---------------------------------------------------------------------------
+required_java_major() {
+    local version="${1:-}"
+    # Digitos iniciais: "26.3"->26, "26w14a"->26 (snapshot sem ponto),
+    # "1.21.11"->1. Sem digitos -> 0 (cai no default 21).
+    local major="${version%%[!0-9]*}"
+    if [[ "$major" =~ ^[0-9]+$ ]] && [ "$major" -ge 26 ]; then
+        echo 25
+    else
+        echo 21
     fi
 }

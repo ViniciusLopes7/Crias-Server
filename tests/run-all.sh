@@ -188,4 +188,12 @@ run_test "backup-saveon-success-test" "tests/backup-saveon-success-test.sh"
 run_test "envsubst-test"            "tests/envsubst-test.sh"
 run_test "java-flags-test"          "tests/java-flags-test.sh"
 run_test "stack-rollback-test"      "tests/stack-rollback-test.sh"
+# Auditoria ampliada (2026-11-19): allowlist de diretórios (EXP-35),
+# integridade real do backup (EXP-49/50/57/62, CR-05) e fronteira root x jogo
+# (EXP-33/34).
+run_test "validate-server-dir-test" "tests/validate-server-dir-test.sh"
+run_test "backup-integrity-test"    "tests/backup-integrity-test.sh"
+run_test "manager-safety-test"      "tests/manager-safety-test.sh"
+# Correções da auditoria pré-entrega (AUDIT-B): contraprovas de CR-10/48/52.
+run_test "download-modrinth-test"   "tests/download-modrinth-test.sh"
 

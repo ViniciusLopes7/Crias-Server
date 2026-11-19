@@ -87,6 +87,21 @@ FORCE_SYNC_COMMANDS=true
 - Se `DISCORD_GUILD_ID` estiver definido: sync imediato no guild (1-2s).
 - Caso contrário: sync global (pode levar até 1h para aparecer no Discord).
 
+#### Primeiro deploy (checklist)
+
+1. No **primeiro deploy** (ou sempre que adicionar/alterar comandos), defina
+   `FORCE_SYNC_COMMANDS=true` junto com as demais variáveis.
+2. Reinicie o bot e confira no log a linha `Sincronizados N slash commands ...`.
+3. Depois **remova/desative** `FORCE_SYNC_COMMANDS` — o re-sync a cada boot
+   desperdiça rate limit do Discord e não é necessário.
+4. Propagação: com `DISCORD_GUILD_ID` definido o sync no guild é instantâneo
+   (1-2s); sem guild, o sync global pode levar **até ~1h** para aparecer no
+   cliente do Discord.
+
+Sem o sync, o bot fica online mas responde apenas com "comando não
+encontrado" — o log `on_ready` avisa quantos comandos estão registrados
+localmente e como forçar a sincronização.
+
 ## Desenvolvimento local
 
 ### Pré-requisitos
@@ -192,7 +207,7 @@ status = await agent.get_status(use_cache=False)
 discord-bot/
 ├── pyproject.toml           # Poetry config + deps
 ├── requirements.txt          # pip fallback
-├── Dockerfile                # Railway build
+├── Dockerfile                # Railway build (healthcheck via crias_bot.healthcheck)
 ├── .env.example              # template de env vars
 ├── src/crias_bot/
 │   ├── __init__.py
@@ -200,6 +215,7 @@ discord-bot/
 │   ├── config.py             # carrega .env e valida
 │   ├── agent_client.py       # cliente gRPC async com cache + reconnect
 │   ├── bot.py                # CriasBot (discord.py) + MinecraftCog
+│   ├── healthcheck.py        # healthcheck do container (CR-22)
 │   └── grpc_gen/             # código protobuf gerado (não commitado)
 └── tests/
     └── test_config.py        # testes de parsing de config

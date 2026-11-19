@@ -56,3 +56,45 @@ if [ "$TT_SERVICE_MEMORY_MAX_MB" -lt 1024 ]; then
 fi
 
 echo "[terraria-tuning-test] OK"
+
+# ------------------------------------------------------------------
+# (CR-03) Contraprova: reconfigure-hardware NAO apaga a senha nem chaves
+# do operador no serverconfig.txt (merge seletivo + .crias-bak).
+# ------------------------------------------------------------------
+TT_TMP_DIR="$(mktemp -d)"
+trap 'rm -rf -- "$TT_TMP_DIR" || true' EXIT
+TT_CFG="$TT_TMP_DIR/serverconfig.txt"
+
+# Estado pre-existente com senha e chave customizada do operador.
+cat > "$TT_CFG" <<'EOF'
+worldpath=/opt/terraria-server/worlds
+worldname=reino
+password=segredo-do-admin
+maxplayers=20
+banlist=banlist.txt
+EOF
+
+write_terraria_server_config "$TT_CFG" "/nova/worlds" "7777" "novo motd" "reino"
+
+# Senha PRESERVADA (o bug antigo reescrevia password= vazio).
+if ! grep -q '^password=segredo-do-admin$' "$TT_CFG"; then
+    echo "FAIL: CR-03 — reconfigure apagou a senha do serverconfig.txt" >&2
+    cat "$TT_CFG" >&2
+    exit 1
+fi
+# Chave do operador PRESERVADA.
+if ! grep -q '^banlist=banlist.txt$' "$TT_CFG"; then
+    echo "FAIL: CR-03 — chave customizada (banlist) foi descartada" >&2
+    exit 1
+fi
+# Chaves gerenciadas ATUALIZADAS (ultima ocorrencia prevalece).
+if ! grep -q '^worldpath=/nova/worlds$' "$TT_CFG"; then
+    echo "FAIL: CR-03 — worldpath gerenciado nao atualizado" >&2
+    exit 1
+fi
+# Backup pre-merge gerado.
+if [ ! -f "$TT_CFG.crias-bak" ]; then
+    echo "FAIL: CR-03 — .crias-bak nao criado antes do merge" >&2
+    exit 1
+fi
+echo "OK: CR-03 — senha e chaves do operador preservadas no reconfigure"

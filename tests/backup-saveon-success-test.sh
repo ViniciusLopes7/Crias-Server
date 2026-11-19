@@ -37,12 +37,16 @@ exit 0
 EOF
 chmod +x "$stub_bin/mcrcon"
 
-for tool in zstd flock ionice tar; do
-    cat > "$stub_bin/$tool" <<'EOF'
-#!/usr/bin/env bash
-exit 0
-EOF
-    chmod +x "$stub_bin/$tool"
+# (EXP-57) tar/zstd/flock/ionice REAIS: o caminho novo valida o archive
+# (.partial -> zstd -t -> tar -tf -> mv). O stub antigo (exit 0 sem criar
+# arquivo) fazia qualquer tar "bem-sucedido" — justamente o falso positivo
+# que o teste de contrato precisa impedir: um tar que nao produz arquivo
+# NAO pode terminar em sucesso.
+for tool in tar zstd flock ionice; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "FAIL: ferramenta obrigatoria ausente no PATH: $tool (o teste exige tar/zstd/flock/ionice reais — EXP-57)"
+        exit 1
+    fi
 done
 
 # Executa o backup com tudo funcionando.

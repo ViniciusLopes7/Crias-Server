@@ -148,7 +148,8 @@ Todas as opções em `config.env` (comentado em PT-BR). Principais:
 
 ```bash
 # Bateria completa
-bash tests/run-all.sh
+bash tests/run-all.sh   # bateria Bash
+make test-all           # bash + go + python (CR-29)
 
 # Mutation testing (valida qualidade dos testes)
 bash tests/mutation-test.sh

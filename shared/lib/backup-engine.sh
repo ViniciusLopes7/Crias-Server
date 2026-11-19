@@ -37,11 +37,37 @@ backup_init() {
     BACKUP_DRY_RUN="${BACKUP_DRY_RUN:-false}"
     BACKUP_REQUIRE_ACTIVE_SERVICE="${BACKUP_REQUIRE_ACTIVE_SERVICE:-true}"
     BACKUP_SERVICE_NAME="${BACKUP_SERVICE_NAME:-${BACKUP_STACK_NAME:-minecraft}}"
-    BACKUP_DATE="$(date +%Y%m%d-%H%M%S)"
+    # (EXP-50) Timestamp com nanossegundos + sufixo aleatorio: dois backups no
+    # mesmo segundo compartilhavam o nome e o segundo tar sobrescrevia o
+    # primeiro (flock nao protege execucoes SEQUENCIAIS).
+    BACKUP_DATE="$(date +%Y%m%d-%H%M%S)-$(date +%N 2>/dev/null | tail -c 5 || echo $$)"
     BACKUP_NAME="${BACKUP_STACK_NAME:?}-backup-${BACKUP_DATE}.tar.zst"
     BACKUP_LOCK_FD=200
 
-    # Load runtime.env if present (inherits BACKUP_RETENTION_DAYS, etc.).
+    # (CR-07) Load do runtime.env extraido em funcao propria: os scripts de
+    # cron precisam ler BACKUP_INCLUDE_MODS ANTES de montar BACKUP_DIRS —
+    # antes a montagem acontecia antes do backup_init carregar o runtime.env
+    # e um `false` so nesse arquivo chegava tarde demais.
+    backup_load_runtime_env
+
+    # Re-apply defaults in case runtime.env overwrote with empty value.
+    BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-7}"
+    BACKUP_ZSTD_LEVEL="${BACKUP_ZSTD_LEVEL:--3}"
+
+    # Validate formats. Reject 0 (would delete all backups).
+    if ! [[ "$BACKUP_RETENTION_DAYS" =~ ^[0-9]+$ ]] || [ "$BACKUP_RETENTION_DAYS" -lt 1 ]; then
+        backup_log "AVISO: BACKUP_RETENTION_DAYS=$BACKUP_RETENTION_DAYS invalido (deve ser >= 1). Usando default 7."
+        BACKUP_RETENTION_DAYS=7
+    fi
+    if ! [[ "$BACKUP_ZSTD_LEVEL" =~ ^-?[0-9]+$ ]]; then
+        BACKUP_ZSTD_LEVEL=-3
+    fi
+}
+
+# Carrega o runtime.env do servidor (herda BACKUP_RETENTION_DAYS, INCLUDE_MODS,
+# etc). Idempotente — pode ser chamado pelos scripts de cron antes do
+# backup_init para construir o escopo com a configuracao correta (CR-07).
+backup_load_runtime_env() {
     local runtime_env="${BACKUP_SERVER_DIR}/runtime.env"
     if [ -f "$runtime_env" ]; then
         if declare -F load_config_file >/dev/null 2>&1; then
@@ -57,19 +83,6 @@ backup_init() {
             source "$runtime_env"
             set +a
         fi
-    fi
-
-    # Re-apply defaults in case runtime.env overwrote with empty value.
-    BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-7}"
-    BACKUP_ZSTD_LEVEL="${BACKUP_ZSTD_LEVEL:--3}"
-
-    # Validate formats. Reject 0 (would delete all backups).
-    if ! [[ "$BACKUP_RETENTION_DAYS" =~ ^[0-9]+$ ]] || [ "$BACKUP_RETENTION_DAYS" -lt 1 ]; then
-        backup_log "AVISO: BACKUP_RETENTION_DAYS=$BACKUP_RETENTION_DAYS invalido (deve ser >= 1). Usando default 7."
-        BACKUP_RETENTION_DAYS=7
-    fi
-    if ! [[ "$BACKUP_ZSTD_LEVEL" =~ ^-?[0-9]+$ ]]; then
-        BACKUP_ZSTD_LEVEL=-3
     fi
 }
 
@@ -113,6 +126,14 @@ acquire_lock() {
         backup_log "ERRO: Ja existe um backup em andamento. Abortando nova execucao."
         return 1
     fi
+    # (AUDIT-B N10) Sob o lock exclusivo: remove .partial orfaos de execucoes
+    # mortas por SIGKILL/OOM (a limpeza normal nao roda nesses caminhos).
+    local stale_partial
+    for stale_partial in "$BACKUP_DIR"/."${BACKUP_STACK_NAME:?}"-backup-*.partial; do
+        [ -e "$stale_partial" ] || continue
+        backup_log "AVISO: removendo backup parcial orfao: $(basename "$stale_partial")"
+        rm -f -- "$stale_partial"
+    done
 }
 
 # ---------------------------------------------------------------------------
@@ -152,7 +173,18 @@ create_backup() {
     local backup_dirs=()
     local dir
 
+    # (EXP-51) Valida cada entrada ANTES de aceita-la: nomes de mundo vem do
+    # server.properties (level-name) e podem conter traversal (../x), paths
+    # absolutos ou prefixo de opcao (-checkpoint). Tar recebe `--` e as
+    # entradas sao sempre relativas a BACKUP_SERVER_DIR.
     for dir in ${BACKUP_DIRS[@]+"${BACKUP_DIRS[@]}"}; do
+        case "$dir" in
+            # (AUDIT-B N11) "." e ".." explicitos tambem sao traversal.
+            /*|.|..|../*|*/../*|*/..|.*|-*)
+                backup_log "ERRO: Entrada de backup rejeitada (traversal/absoluta/opcao): $dir"
+                return 1
+                ;;
+        esac
         # -e (nao -d): entradas podem ser arquivos (server.properties) alem
         # de diretorios — o escopo do backup inclui configuracao (CR-14).
         if [ -e "$BACKUP_SERVER_DIR/$dir" ]; then
@@ -164,6 +196,18 @@ create_backup() {
         backup_log "ERRO: Nenhuma entrada de backup encontrada em $BACKUP_SERVER_DIR."
         return 1
     fi
+
+    # (CR-05) Entradas OBRIGATORIAS (mundo efetivo): sem o mundo o tar pode
+    # terminar "com sucesso" produzindo um backup sem dados de jogo —
+    # server.properties/config sozinhos nao sao backup. BACKUP_REQUIRED_DIRS
+    # e definido pelo script do stack (mc: level-name; tt: worlds/Worlds).
+    local req
+    for req in ${BACKUP_REQUIRED_DIRS[@]+"${BACKUP_REQUIRED_DIRS[@]}"}; do
+        if [ ! -e "$BACKUP_SERVER_DIR/$req" ]; then
+            backup_log "ERRO: Entrada obrigatoria ausente: $BACKUP_SERVER_DIR/$req — backup SEM o mundo seria falso sucesso (CR-05)."
+            return 1
+        fi
+    done
 
     if ! acquire_lock; then
         return 1
@@ -181,7 +225,13 @@ create_backup() {
     # pre-hook falhar depois de um save-off bem-sucedido (ex.: save-all
     # falhando), o EXIT trap ainda restaura save-on (CR-02/CR-16).
     if declare -F backup_post_hook >/dev/null 2>&1; then
-        trap 'backup_post_hook' EXIT INT TERM
+        # (AUDIT-B N9) Composicao com o trap do common.sh: so o post-hook
+        # descartava a limpeza de temporarios registrados por mktemp_crias_*.
+        if declare -F _crias_cleanup_temps >/dev/null 2>&1; then
+            trap 'backup_post_hook; _crias_cleanup_temps' EXIT INT TERM
+        else
+            trap 'backup_post_hook' EXIT INT TERM
+        fi
     fi
 
     # Pre hook (RCON save-lock para Minecraft; no-op para Terraria).
@@ -199,7 +249,25 @@ create_backup() {
         return 1
     fi
 
-    if ionice -c2 -n7 tar -I "zstd ${BACKUP_ZSTD_LEVEL}" -cf "$BACKUP_DIR/$BACKUP_NAME" "${backup_dirs[@]}"; then
+    # (EXP-49) Grava em .partial e SO publica (mv) depois de validar: um tar
+    # morto no meio (ENOSPC, processo morto) deixava um .tar.zst truncado com
+    # nome final de backup — listavel/restore como se fosse valido.
+    local partial_file="$BACKUP_DIR/.${BACKUP_NAME}.partial"
+    if ionice -c2 -n7 tar -I "zstd ${BACKUP_ZSTD_LEVEL}" -cf "$partial_file" -- "${backup_dirs[@]}" \
+        && zstd -t -q "$partial_file" \
+        && tar -I zstd -tf "$partial_file" > /dev/null; then
+
+        # (EXP-50) Publicacao sem sobrescrever: nome unico + guard de existencia.
+        if [ -e "$BACKUP_DIR/$BACKUP_NAME" ]; then
+            backup_log "ERRO: Destino de backup ja existe ($BACKUP_NAME); abortando sem sobrescrever."
+            rm -f "$partial_file"
+            return 1
+        fi
+        if ! mv -- "$partial_file" "$BACKUP_DIR/$BACKUP_NAME"; then
+            backup_log "ERRO: Falha ao publicar o backup (mv)."
+            rm -f "$partial_file"
+            return 1
+        fi
         adopt_backup_ownership "$BACKUP_DIR/$BACKUP_NAME"
         backup_log "Backup criado: $BACKUP_DIR/$BACKUP_NAME"
         # Reativa saves explicitamente no sucesso (CR-02): o trap so cobre
@@ -216,7 +284,8 @@ create_backup() {
         return 0
     fi
 
-    backup_log "ERRO: Falha ao criar backup."
+    backup_log "ERRO: Falha ao criar backup (tar/validacao zstd)."
+    rm -f "$partial_file"
     return 1
 }
 
@@ -244,6 +313,10 @@ cleanup_old_backups() {
         backup_timestamp="${backup_name#${BACKUP_STACK_NAME}-backup-}"
         backup_timestamp="${backup_timestamp%.tar.zst}"
 
+        # (EXP-50) Aceita o formato novo (sufixo -NNNN apos o timestamp) e o
+        # legado (timestamp puro). A comparacao usa so os 15 primeiros chars
+        # (YYYYmmdd-HHMMSS), comuns aos dois formatos.
+        backup_timestamp="${backup_timestamp:0:15}"
         if [[ "$backup_timestamp" =~ ^[0-9]{8}-[0-9]{6}$ ]] && [[ "$backup_timestamp" < "$cutoff_timestamp" ]]; then
             rm -f "$backup_file"
         fi
@@ -287,7 +360,9 @@ backup_notify_webhook() {
     local json
     json=$(printf '{"embeds":[{"title":"Backup %s","description":"%s","color":%s,"timestamp":"%s"}]}' \
         "$BACKUP_STACK_NAME" "$message" "$color" "$(date -u +%Y-%m-%dT%H:%M:%SZ)")
-    if curl -fsSL -X POST -H "Content-Type: application/json" -d "$json" "$BACKUP_NOTIFY_WEBHOOK" 2>/dev/null; then
+    # (EXP-54) Timeout explicito: um endpoint lento/pendurado prendia o
+    # servico de backup ate o TimeoutStartSec=3600 do systemd.
+    if curl -fsSL --connect-timeout 10 --max-time 20 -X POST -H "Content-Type: application/json" -d "$json" "$BACKUP_NOTIFY_WEBHOOK" 2>/dev/null; then
         backup_log "Notificacao webhook enviada ($status)."
     else
         backup_log "AVISO: Falha ao enviar notificacao webhook."
@@ -310,6 +385,12 @@ backup_run() {
     if create_backup; then
         # Limpeza e best-effort por design: falha aqui nao invalida o backup.
         cleanup_old_backups || backup_log "AVISO: limpeza de backups antigos falhou."
+        # (EXP-62) DRY_RUN e SIMULACAO: sem arquivo criado nao existe
+        # "sucesso operacional" — notificar sucesso confundiria o operador.
+        if is_true "${BACKUP_DRY_RUN:-false}"; then
+            backup_log "[DRY_RUN] Backup simulado concluido; notificacoes suprimidas."
+            return 0
+        fi
         # Distingue "local OK, remoto falhou": notifica falha e sai com erro
         # para o cron/journal refletir a pendencia (antes: set -e matava o
         # processo sem nenhuma notificacao).
@@ -321,7 +402,9 @@ backup_run() {
         backup_notify_webhook "success"
         backup_log "Backup concluido com sucesso."
     else
-        backup_notify_webhook "failure"
+        if ! is_true "${BACKUP_DRY_RUN:-false}"; then
+            backup_notify_webhook "failure"
+        fi
         exit 1
     fi
 }

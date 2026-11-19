@@ -154,3 +154,55 @@ if [ -f "$props2.crias-bak" ]; then
 fi
 
 echo "[minecraft-tuning-test] OK (inclui contrato de merge CR-09)"
+
+# ------------------------------------------------------------------
+# (CR-13) Contraprova de precedencia no runtime.env:
+#   override do ambiente (config.env) > valor existente no arquivo > tier.
+# ------------------------------------------------------------------
+MC_TMP_DIR="$(mktemp -d)"
+trap 'rm -rf -- "$MC_TMP_DIR" || true' EXIT
+MC_ENV="$MC_TMP_DIR/runtime.env"
+
+source "$ROOT_DIR/shared/lib/hardware-profile.sh" 2>/dev/null || true
+compute_minecraft_tuning 16384 8 SSD HIGH
+
+# Caso 1: override explicito vence o tier (HIGH=10 dias, -1 zstd).
+BACKUP_RETENTION_DAYS=21 BACKUP_ZSTD_LEVEL=-5     write_minecraft_runtime_env "$MC_ENV" >/dev/null 2>&1 || true
+if ! grep -q '^BACKUP_RETENTION_DAYS="21"$' "$MC_ENV" || ! grep -q '^BACKUP_ZSTD_LEVEL="-5"$' "$MC_ENV"; then
+    echo "FAIL: CR-13 — override do config.env nao chegou ao runtime.env" >&2
+    grep -E 'BACKUP_(RETENTION|ZSTD)' "$MC_ENV" >&2
+    exit 1
+fi
+
+# Caso 2: sem override, valor editado pelo operador no arquivo e preservado.
+printf 'BACKUP_RETENTION_DAYS="42"\nBACKUP_ZSTD_LEVEL="-9"\n' > "$MC_ENV"
+unset BACKUP_RETENTION_DAYS BACKUP_ZSTD_LEVEL
+write_minecraft_runtime_env "$MC_ENV" >/dev/null 2>&1 || true
+if ! grep -q '^BACKUP_RETENTION_DAYS="42"$' "$MC_ENV" || ! grep -q '^BACKUP_ZSTD_LEVEL="-9"$' "$MC_ENV"; then
+    echo "FAIL: CR-13 — edicao manual do operador foi sobrescrita pelo tier" >&2
+    grep -E 'BACKUP_(RETENTION|ZSTD)' "$MC_ENV" >&2
+    exit 1
+fi
+
+# Caso 3: sem override e sem valor anterior, o auto-tuning por tier aplica.
+printf '' > "$MC_ENV"
+write_minecraft_runtime_env "$MC_ENV" >/dev/null 2>&1 || true
+if ! grep -q '^BACKUP_RETENTION_DAYS="10"$' "$MC_ENV"; then
+    echo "FAIL: CR-13 — auto-tuning por tier (HIGH=10) nao aplicado" >&2
+    grep -E 'BACKUP_(RETENTION|ZSTD)' "$MC_ENV" >&2
+    exit 1
+fi
+
+# (CR-08) runtime.env e arquivo de segredo: modo 0600.
+perms="$(stat -c '%a' "$MC_ENV")"
+if [ "$perms" != "600" ]; then
+    echo "FAIL: CR-08 — runtime.env com modo $perms (esperado 600)" >&2
+    exit 1
+fi
+
+# (EXP-36/39) runtime.env carrega versao do jogo e SERVER_JAR (quilt=mc.jar).
+if ! grep -q '^MINECRAFT_VERSION=' "$MC_ENV" || ! grep -q '^SERVER_JAR=' "$MC_ENV"; then
+    echo "FAIL: EXP-36/39 — MINECRAFT_VERSION/SERVER_JAR ausentes no runtime.env" >&2
+    exit 1
+fi
+echo "OK: CR-13/CR-08/EXP-36 — precedencia, modo 0600 e chaves novas no runtime.env"

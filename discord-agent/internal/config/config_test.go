@@ -2,6 +2,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -121,6 +122,119 @@ server:
 	}
 	if cfg.Features.HealthCheck.IntervalSeconds != 300 {
 		t.Errorf("IntervalSeconds default = %d, esperado 300", cfg.Features.HealthCheck.IntervalSeconds)
+	}
+	if cfg.Features.Console.StreamDeadlineSeconds != 300 {
+		t.Errorf("Console.StreamDeadlineSeconds default = %d, esperado 300", cfg.Features.Console.StreamDeadlineSeconds)
+	}
+}
+
+// --- features.console.stream_deadline_seconds (EXP-47) ---
+
+func TestLoad_ConsoleStreamDeadline_Default(t *testing.T) {
+	// Chave ausente → default 300 (comportamento anterior hard-coded).
+	dir := t.TempDir()
+	path := filepath.Join(dir, "agent.yaml")
+	err := os.WriteFile(path, []byte(`
+agent:
+  auth_token: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+server:
+  service_name: "minecraft"
+`), 0644)
+	if err != nil {
+		t.Fatalf("escrever config: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Features.Console.StreamDeadlineSeconds != 300 {
+		t.Errorf("StreamDeadlineSeconds default = %d, esperado 300", cfg.Features.Console.StreamDeadlineSeconds)
+	}
+}
+
+func TestLoad_ConsoleStreamDeadline_Valid(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "agent.yaml")
+	err := os.WriteFile(path, []byte(`
+agent:
+  auth_token: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+server:
+  service_name: "minecraft"
+features:
+  console:
+    stream_deadline_seconds: 3600  # 1h
+`), 0644)
+	if err != nil {
+		t.Fatalf("escrever config: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Features.Console.StreamDeadlineSeconds != 3600 {
+		t.Errorf("StreamDeadlineSeconds = %d, esperado 3600", cfg.Features.Console.StreamDeadlineSeconds)
+	}
+}
+
+func TestLoad_ConsoleStreamDeadline_OutOfRange(t *testing.T) {
+	// Valores fora do range [60, 86400] devem ser rejeitados no Load.
+	for _, secs := range []string{"59", "10", "86401", "100000"} {
+		t.Run(secs, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "agent.yaml")
+			err := os.WriteFile(path, []byte(`
+agent:
+  auth_token: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+server:
+  service_name: "minecraft"
+features:
+  console:
+    stream_deadline_seconds: `+secs+`
+`), 0644)
+			if err != nil {
+				t.Fatalf("escrever config: %v", err)
+			}
+
+			_, err = Load(path)
+			if err == nil {
+				t.Fatalf("esperado erro para stream_deadline_seconds=%s (fora do range 60-86400)", secs)
+			}
+			if !strings.Contains(err.Error(), "stream_deadline_seconds") {
+				t.Errorf("erro deve mencionar stream_deadline_seconds, obtido: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoad_ConsoleStreamDeadline_Boundaries(t *testing.T) {
+	// 60 e 86400 são válidos (limites inclusivos).
+	for _, secs := range []int{60, 86400} {
+		t.Run(fmt.Sprintf("%d", secs), func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "agent.yaml")
+			err := os.WriteFile(path, []byte(fmt.Sprintf(`
+agent:
+  auth_token: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+server:
+  service_name: "minecraft"
+features:
+  console:
+    stream_deadline_seconds: %d
+`, secs)), 0644)
+			if err != nil {
+				t.Fatalf("escrever config: %v", err)
+			}
+
+			cfg, err := Load(path)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.Features.Console.StreamDeadlineSeconds != secs {
+				t.Errorf("StreamDeadlineSeconds = %d, esperado %d", cfg.Features.Console.StreamDeadlineSeconds, secs)
+			}
+		})
 	}
 }
 

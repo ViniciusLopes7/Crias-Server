@@ -61,34 +61,12 @@ sudo systemctl enable --now nftables
 
 ## SSH (v1.2.0)
 
-### Live ISO
+### Live ISO (legado — descontinuado)
 
-O `install.sh` instala `openssh` se necessário. O `sshd` **não** sobe
-sozinho no boot do live USB. O `root` está **travado** no `/etc/shadow`
-(hash `!` ou `*` — verificado por `tests/iso-live-credentials-validate.sh`),
-mas um drop-in systemd (`/etc/systemd/system/getty@tty1.service.d/autologin.conf`)
-de senha apenas naquele terminal físico.
-
-Para iniciar `sshd` manualmente no live (ex.: para instalar remotamente via
-SSH), você precisa primeiro definir uma senha de root (porque root está
-travado por padrão):
-
-```bash
-# No console do live ISO (como root, já autologado no tty1):
-passwd                  # define uma senha de root (NÃO deixe vazia)
-systemctl start sshd
-# Agora: ssh root@<ip-do-live>
-```
-
-> **Atenção**: o autologin do root no tty1 é uma conveniência de mídia de
-> Se você iniciar o `sshd` no live **sem** definir uma senha de root forte,
-> qualquer um que alcançar a porta 22 NÃO terá shell (root está travado).
-> Mas se você definiu `passwd` com senha fraca, o risco é real. **Sempre**
-> defina uma senha forte OU restrinja via firewall antes de iniciar o `sshd`.
->
-> Em outros ttys (tty2-tty6), root não consegue logar (senha travada). Para
-> acesso non-root no live, crie um usuário: `useradd -m -G wheel -s /bin/bash
-> <nome>` + `passwd <nome>`.
+O fluxo de live ISO customizada foi descontinuado; o procedimento
+histórico (credenciais, autologin, sshd manual) está preservado em
+[docs/legacy-iso.md](legacy-iso.md). O fluxo suportado é o bootstrap no
+host instalado (`crias-bootstrap.sh`).
 
 ### Host instalado (`INSTALL_SSH=true`)
 
@@ -149,10 +127,10 @@ Se mudar o diretório do servidor, reinstale ou reaplique a configuração para 
 
 ```bash
 # Minecraft: porta + RCON
-sudo /opt/minecraft-server/mc-manager.sh health
+sudo /usr/local/libexec/crias/mc-manager.sh health
 
 # Terraria: apenas porta (sem RCON nativo)
-sudo /opt/terraria-server/tt-manager.sh health
+sudo /usr/local/libexec/crias/tt-manager.sh health
 
 # crias-agent: porta + RCON via gRPC GetHealth
 # (validado pelo bot Discord automaticamente a cada 5 min)
@@ -160,17 +138,17 @@ sudo /opt/terraria-server/tt-manager.sh health
 
 ## Hardening systemd
 
-Todos os templates `.service` do projeto aplicam hardening:
+Os templates `.service` do projeto aplicam hardening:
 
 ```ini
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 NoNewPrivileges=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectKernelLogs=true
-ProtectControlGroups=true
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
 ProtectClock=yes
 ProtectHostname=yes
 RestrictSUIDSGID=true
@@ -184,7 +162,18 @@ SystemCallFilter=@system-service
 SystemCallArchitectures=native
 ```
 
-> **Atenção**: `MemoryDenyWriteExecute=yes` **NÃO** é aplicado em `minecraft.service`/`terraria.service` porque JVM/Mono precisam de JIT. É aplicado em `crias-agent.service` (Go é AOT-compiled).
+> **Atenção**: `MemoryDenyWriteExecute=yes` **NÃO** é aplicado em
+> `minecraft.service`/`terraria.service` porque JVM/Mono precisam de JIT. É
+> aplicado em `crias-agent.service` (Go é AOT-compiled).
+>
+> **Exceção do crias-agent (CR-02)**: a unit do AGENTE **não** aplica
+> `NoNewPrivileges`, `RestrictSUIDSGID`, `CapabilityBoundingSet=` nem
+> `AmbientCapabilities=` — o agente invoca `/usr/bin/sudo` (setuid) para o
+> systemctl allowlistado, e essas diretivas bloqueiam a recuperação de
+> privilégios pelo setuid (controle remoto falhava em silêncio). A fronteira
+> de privilégio do agente é o sudoers allowlist; todo o RESTO do hardening
+> acima permanece. **Não "corrija" a unit do agente de volta** — ver seção
+> "Hardening do agente (crias-agent)" no final deste documento.
 
 ### Editar units (cuidado com `Conflicts=`)
 
@@ -257,3 +246,76 @@ source /etc/profile.d/crias-server.sh
 - [tutorial.md](tutorial.md) — Tutorial de operação
 - [Tailscale.md](Tailscale.md) — Conexão via Tailscale
 - [../README.md](../README.md) — README principal (hardening do crias-agent)
+
+
+## Fronteira root x usuário do jogo (EXP-33/EXP-34)
+
+A partir desta versão os artefatos administrativos vivem FORA do diretório
+do servidor:
+
+| Artefato | Local | Dono | Motivo |
+|---|---|---|---|
+| Managers (`mc-manager.sh`, `tt-manager.sh`) | `/usr/local/libexec/crias/` | root:root 0755 | executados via `sudo` — não podem ser graváveis pelo jogo |
+| `setup-cron.sh` (wrapper administrativo) | `/usr/local/libexec/crias/` | root:root 0755 | roda como root via manager |
+| Libs compartilhadas administrativas | `/usr/local/libexec/crias/lib/` | root:root 0644 | sourced por managers root |
+| Scripts de runtime (`start-server.sh`, `backup-cron.sh`) | diretório do servidor | usuário do jogo | executam com o privilégio do próprio jogo |
+| `/etc/profile.d/crias-server.sh` | `/etc/profile.d/` | root:root 0644 | aliases ESTÁTICOS — nunca faz `source` de `comandos.sh` no diretório do jogo |
+
+Defesa em profundidade:
+
+- Managers, ao rodar como root, **recusam** executar/ler qualquer script que
+  não seja `root:root` sem escrita para grupo/outros (bypass explícito de
+  desenvolvimento: `CRIS_MANAGER_ALLOW_UNSAFE=1`).
+- O deploy do instalador **remove** as cópias legadas de
+  `mc-manager.sh`/`tt-manager.sh`/`setup-cron.sh`/`.shared/manager-common.sh`
+  do diretório do jogo (migração automática de instalações antigas).
+- O gerador de aliases do perfil global não referencia nenhum caminho dentro
+  do diretório do servidor (verificado por `tests/manager-safety-test.sh`).
+
+Contraverificação sugerida em host real:
+
+```bash
+sudo -u minecraft test -w /usr/local/libexec/crias/mc-manager.sh   # deve FALHAR
+sudo -u minecraft test -w /usr/local/libexec/crias/lib/common.sh   # deve FALHAR
+stat -c '%U %G %a %n' /etc/profile.d/crias-server.sh              # root root 644
+grep -r 'source.*comandos' /etc/profile.d/crias-server.sh          # vazio
+```
+
+## Hardening do agente (crias-agent)
+
+A unit `crias-agent.service` mantém todo o sandbox (`ProtectSystem=strict`,
+`MemoryDenyWriteExecute`, `SystemCallFilter=@system-service`, ...) EXCETO o
+bounding set de capabilities: um `CapabilityBoundingSet=` vazio sobrevive ao
+`exec` e também aos binários setuid — o `/usr/bin/sudo` do agente não
+conseguiria recuperar privilégios e TODO controle remoto falharia em
+silêncio (CR-02). A fronteira de privilégio real é o sudoers allowlist:
+apenas `systemctl <verbo> <jogo>` e os comandos do manager.
+
+O usuário `crias-agent` é adicionado ao grupo `systemd-journal` para que o
+`/mc console` (journalctl sem sudo) funcione em hosts com journal restrito
+(CR-14). Implicação: o agente pode ler o journal GLOBAL do host — tradeoff
+documentado; uma alternativa mais restrita exigiria um helper de journal
+dedicado.
+
+O token de autenticação do agente é **reutilizado** em reinstalações
+(EXP-44); rotação explícita via `AGENT_ROTATE_TOKEN=true`.
+
+## SSH no host instalado
+
+O drop-in `/etc/ssh/sshd_config.d/10-crias.conf` aplica `PermitRootLogin no`
+e **preserva a política de senha existente** (EXP-65): se o host já está
+configurado com `PasswordAuthentication no` (key-only), o instalador não
+reativa senha. A configuração é validada com `sshd -t` ANTES do restart.
+
+## Verificação adicional da release (limitação conhecida — CR-24)
+
+O bootstrap valida o SHA-256 dos assets contra o `sha256sums.txt` da MESMA
+release. Isso protege contra corrupção/URL intermediária, mas não contra um
+atacante que controle os assets da release (checksum e binário vieram da
+mesma fonte). Para cadeia de custódia completa, assine o manifesto (cosign/
+minisign) ou valide a proveniência do workflow no momento do uso — a
+infraestrutura de assinatura ainda não está implementada.
+
+O bootstrap exibe a tag e o commit-alvo da release antes de instalar
+(EXP-40). A branch `main` pode estar à frente da release `latest`; para
+pinar: `CRIAS_RELEASE_TAG=v2026.11.19-<sha> crias-bootstrap`.

@@ -57,28 +57,53 @@ O `ls` decide o que o passo 5 vai restaurar: **só restaure entradas que
 existem no archive** (CR-26 — o fluxo antigo copiava `world_nether/` e
 `world_the_end/` incondicionalmente e falhava em backups sem essas pastas).
 
-### 5. Substituir APENAS as entradas presentes no backup
+### 5. Substituir APENAS as entradas presentes no backup (script com guards)
+
+O bloco abaixo é um script completo: descobre o `level-name`, testa cada
+entrada com `-d`/`-f` ANTES de restaurar e usa `--delete` apenas onde a
+entrada existe no backup (CR-28 — o exemplo antigo restaurava
+`world_nether/` incondicionalmente e quebrava em mundos legacy).
 
 ```bash
-# ATENÇÃO: --delete remove arquivos não presentes no backup
-sudo rsync -a --delete "$tmpdir/world/" /opt/minecraft-server/world/
+#!/bin/bash
+# restore-mc.sh — restaura entradas PRESENTES no backup extraído em $tmpdir.
+set -euo pipefail
 
-# Dimensões separadas existem apenas em servidores Bukkit/Spigot/Paper-like;
-# restaure SOMENTE se apareceram no ls do passo 4:
-sudo rsync -a --delete "$tmpdir/world_nether/" /opt/minecraft-server/world_nether/
-sudo rsync -a --delete "$tmpdir/world_the_end/" /opt/minecraft-server/world_the_end/
+server=/opt/minecraft-server
+tmpdir="${1:?uso: restore-mc.sh <dir-do-backup-extraido>}"
 
-# Configuração (presente em backups atuais; opcional em legados):
-sudo rsync -a --delete "$tmpdir/config/" /opt/minecraft-server/config/
-sudo cp -a "$tmpdir/server.properties" /opt/minecraft-server/server.properties
+[ -d "$tmpdir" ] || { echo "ERRO: $tmpdir nao existe" >&2; exit 1; }
 
-# Mods (presente em backups atuais com BACKUP_INCLUDE_MODS=true):
-sudo rsync -a --delete "$tmpdir/mods/" /opt/minecraft-server/mods/
+# Mundo efetivo: level-name do server.properties DO BACKUP (nao do alvo).
+level="world"
+if [ -f "$tmpdir/server.properties" ]; then
+    level="$(awk -F= '$1=="level-name"{v=substr($0,index($0,"=")+1)} END{if(v!="")print v}' "$tmpdir/server.properties")"
+    level="${level:-world}"
+fi
+echo "Mundo efetivo: $level"
+
+# Mundo principal (obrigatório no backup — CR-05 garante).
+[ -d "$tmpdir/$level" ] || { echo "ERRO: backup sem o diretorio do mundo ($level)" >&2; exit 1; }
+sudo rsync -a --delete "$tmpdir/$level/" "$server/$level/"
+
+# Dimensões separadas: SÓ se existirem no backup.
+for dim in "${level}_nether" "${level}_the_end"; do
+    if [ -d "$tmpdir/$dim" ]; then
+        sudo rsync -a --delete "$tmpdir/$dim/" "$server/$dim/"
+    else
+        echo "skip: $dim ausente no backup (normal em mundos vanilla)"
+    fi
+done
+
+# Configuração e properties: SÓ se presentes.
+[ -d "$tmpdir/config" ] && sudo rsync -a --delete "$tmpdir/config/" "$server/config/"
+[ -f "$tmpdir/server.properties" ] && sudo cp -a "$tmpdir/server.properties" "$server/server.properties"
+
+# Mods: SÓ se presentes (BACKUP_INCLUDE_MODS=true no momento do backup).
+[ -d "$tmpdir/mods" ] && sudo rsync -a --delete "$tmpdir/mods/" "$server/mods/"
+
+echo "Restore concluído. Ajuste permissões (passo 6) e inicie o serviço."
 ```
-
-> **Nota**: mundos com `level-name` customizado têm pastas com o nome
-> correspondente (ex.: `reino/`, `reino_nether/`) — o backup usa o nome
-> efetivo lido de `server.properties`.
 
 ### 6. Ajustar permissões
 

@@ -7,7 +7,7 @@ Documentação específica do stack Terraria. Para visão geral, veja [../README
 | Arquivo | Função |
 |---------|--------|
 | `/opt/terraria-server/start-terraria.sh` | Launcher runtime |
-| `/opt/terraria-server/tt-manager.sh` | CLI de gerenciamento (start/stop/status/console/backup/health/...) |
+| `/usr/local/libexec/crias/tt-manager.sh` | CLI de gerenciamento (start/stop/status/console/backup/health/...) |
 | `/opt/terraria-server/backup-cron.sh` | Backup com zstd + flock |
 | `/opt/terraria-server/setup-cron.sh` | Configura timer systemd de backup |
 | `/opt/terraria-server/terraria.service` | Unit systemd (gerada via envsubst com hardening) |
@@ -25,13 +25,13 @@ sudo systemctl start terraria                                   # iniciar
 sudo systemctl stop terraria                                    # parar (graceful)
 sudo systemctl restart terraria                                 # reiniciar
 sudo systemctl status terraria                                  # status systemd
-sudo /opt/terraria-server/tt-manager.sh status                  # status + hardware
-sudo /opt/terraria-server/tt-manager.sh console                 # logs em tempo real (sem RCON nativo)
-sudo /opt/terraria-server/tt-manager.sh backup                  # backup imediato
-sudo /opt/terraria-server/tt-manager.sh health                  # verifica porta
-sudo /opt/terraria-server/tt-manager.sh hardware-report         # perfil aplicado
-sudo /opt/terraria-server/tt-manager.sh reconfigure-hardware            # recalibrar tier
-sudo /opt/terraria-server/tt-manager.sh reconfigure-hardware HIGH       # forçar tier
+sudo /usr/local/libexec/crias/tt-manager.sh status                  # status + hardware
+sudo /usr/local/libexec/crias/tt-manager.sh console                 # logs em tempo real (sem RCON nativo)
+sudo /usr/local/libexec/crias/tt-manager.sh backup                  # backup imediato
+sudo /usr/local/libexec/crias/tt-manager.sh health                  # verifica porta
+sudo /usr/local/libexec/crias/tt-manager.sh hardware-report         # perfil aplicado
+sudo /usr/local/libexec/crias/tt-manager.sh reconfigure-hardware            # recalibrar tier
+sudo /usr/local/libexec/crias/tt-manager.sh reconfigure-hardware HIGH       # forçar tier
 sudo /opt/terraria-server/setup-cron.sh                         # configurar timer de backup
 ```
 
@@ -112,7 +112,7 @@ automaticamente), e gotchas do .NET JIT sob systemd, veja
 
 ```bash
 sudo journalctl -u terraria -n 50 --no-pager
-sudo /opt/terraria-server/tt-manager.sh health
+sudo /usr/local/libexec/crias/tt-manager.sh health
 ```
 
 Causas comuns:

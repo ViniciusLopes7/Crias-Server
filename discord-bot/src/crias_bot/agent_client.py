@@ -35,6 +35,15 @@ class AgentClientError(Exception):
     """Agent communication error."""
 
 
+class AgentOfflineError(AgentClientError):
+    """Agent is not connected and could not be reached within the timeout.
+
+    CR-09: raised by ``ensure_connected`` so the command path fails fast
+    with a friendly message instead of hanging on the infinite background
+    reconnect loop.
+    """
+
+
 # Default unary RPC timeout (seconds).
 DEFAULT_RPC_TIMEOUT: float = 10.0
 # Stop/restart can take as long as the unit's graceful shutdown allows
@@ -42,6 +51,8 @@ DEFAULT_RPC_TIMEOUT: float = 10.0
 # the previous 10s default made /mc stop fail with a deadline error while
 # systemd was still saving chunks (CR-28).
 STOP_RPC_TIMEOUT: float = 130.0
+# CR-09: upper bound for command-path connection waits (ensure_connected).
+DEFAULT_ENSURE_CONNECTED_TIMEOUT: float = 5.0
 
 
 def _is_localhost(host: str) -> bool:
@@ -105,6 +116,13 @@ class AgentClient:
 
         # Signals close() to break connect() retry loop.
         self._closing: asyncio.Event = asyncio.Event()
+
+        # CR-09: supervised background connect() task, (re)started lazily by
+        # ensure_connected() so reconnection keeps retrying forever even when
+        # the entry-point connector (__main__) already returned.
+        self._reconnect_task: asyncio.Task[None] | None = None
+        # Last fatal error observed by the reconnect supervisor (diagnostics).
+        self._last_connect_error: Exception | None = None
 
         # GetStatus cache.
         self._status_cache: tuple[crias_pb2.StatusResponse, float] | None = None
@@ -225,6 +243,16 @@ class AgentClient:
     async def close(self) -> None:
         """Close gRPC channel with 5s timeout to avoid hang."""
         self._closing.set()  # signal connect() to abort
+        # CR-09: also stop the supervised reconnect task so close() doesn't
+        # wait out the current backoff window.
+        task = self._reconnect_task
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            self._reconnect_task = None
         async with self._connect_lock:
             if self._channel is not None:
                 try:
@@ -240,9 +268,61 @@ class AgentClient:
     def _metadata(self) -> list[tuple[str, str]]:
         return [("x-api-token", self.token)]
 
-    async def _ensure_connected(self) -> None:
-        if self._stub is None or self._event_stub is None:
+    def _start_background_reconnect(self) -> None:
+        """Ensure a supervised background ``connect()`` is running (CR-09).
+
+        ``connect()`` serializes on ``_connect_lock``, so this never creates
+        a parallel retry loop: when the entry-point connector (``__main__``)
+        already holds the lock retrying, this task simply waits for it.
+        Synchronous on purpose — the check-then-create must be atomic in
+        the event loop.
+        """
+        if self._closing.is_set():
+            return
+        task = self._reconnect_task
+        if task is not None and not task.done():
+            return
+        self._reconnect_task = asyncio.create_task(self._reconnect_supervised())
+
+    async def _reconnect_supervised(self) -> None:
+        """Run ``connect()`` (retry-forever) with an error safety net."""
+        try:
             await self.connect()
+            if self._stub is not None:
+                self._last_connect_error = None
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            self._last_connect_error = e
+            logger.error("Reconexão com o agente terminou com erro: %s", e)
+
+    async def ensure_connected(self, timeout: float = DEFAULT_ENSURE_CONNECTED_TIMEOUT) -> None:
+        """Wait at most ``timeout`` seconds for an established channel (CR-09).
+
+        Unlike :meth:`connect` — which retries forever and is meant for the
+        background reconnection task — this is the command-path entry point:
+        slash commands must fail fast with :class:`AgentOfflineError`
+        instead of hanging until Discord's interaction window expires.
+        While waiting, a supervised background ``connect()`` is kept running
+        so the connection is established as soon as the agent comes back.
+        """
+        deadline = time.monotonic() + timeout
+        while self._stub is None or self._event_stub is None:
+            if self._closing.is_set():
+                raise AgentOfflineError("cliente do agente está fechando")
+            self._start_background_reconnect()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                detail = (
+                    f" (último erro: {self._last_connect_error})"
+                    if self._last_connect_error
+                    else ""
+                )
+                raise AgentOfflineError(
+                    f"agente remoto offline — sem conexão com {_redact_url(self.host)} "
+                    f"após {timeout:.0f}s{detail}"
+                )
+            await asyncio.sleep(min(0.1, remaining))
 
     async def _handle_rpc_error(self, e: grpc.RpcError) -> None:
         """Reset stub/channel on persistent RPC failures so the next call reconnects.
@@ -259,6 +339,14 @@ class AgentClient:
         code_fn = getattr(e, "code", None)
         code = code_fn() if callable(code_fn) else None
         if code not in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.UNKNOWN):
+            return
+        if self._connect_lock.locked():
+            # CR-09: a connect() retry loop already holds the lock (agent is
+            # down, background reconnect running). It closes the stale channel
+            # on every retry, so the eager reset here would be redundant — and
+            # blocking on the lock would hang this caller's error path until
+            # the agent comes back.
+            logger.debug("RPC falhou com %s — reconnect já em andamento; reset adiado", code)
             return
         logger.warning("RPC falhou com %s — resetando canal gRPC para forçar reconexão", code)
         async with self._connect_lock:
@@ -280,8 +368,17 @@ class AgentClient:
 
     # --- ServerControl RPCs ---
 
+    def _invalidate_status_cache(self) -> None:
+        """Drop the cached GetStatus response (EXP-63).
+
+        Called after state-changing RPCs (start/stop/restart/RCON) so an
+        immediate ``/mc status`` performs a fresh call instead of serving
+        the pre-command state for up to ``_status_cache_ttl`` seconds.
+        """
+        self._status_cache = None
+
     async def start_server(self) -> dict[str, Any]:
-        await self._ensure_connected()
+        await self.ensure_connected()
         if self._stub is None:
             raise AgentClientError("não conectado ao agente")
         try:
@@ -290,13 +387,15 @@ class AgentClient:
                 metadata=self._metadata(),
                 timeout=DEFAULT_RPC_TIMEOUT,
             )
+            # EXP-63: lifecycle RPC changed server state — drop cached status.
+            self._invalidate_status_cache()
             return {"ok": resp.ok, "message": resp.message, "service": resp.service_name}
         except grpc.RpcError as e:
             await self._handle_rpc_error(e)
             raise AgentClientError(f"StartServer falhou: {e}") from e
 
     async def stop_server(self) -> dict[str, Any]:
-        await self._ensure_connected()
+        await self.ensure_connected()
         if self._stub is None:
             raise AgentClientError("não conectado ao agente")
         try:
@@ -305,13 +404,15 @@ class AgentClient:
                 metadata=self._metadata(),
                 timeout=STOP_RPC_TIMEOUT,
             )
+            # EXP-63: lifecycle RPC changed server state — drop cached status.
+            self._invalidate_status_cache()
             return {"ok": resp.ok, "message": resp.message, "service": resp.service_name}
         except grpc.RpcError as e:
             await self._handle_rpc_error(e)
             raise AgentClientError(f"StopServer falhou: {e}") from e
 
     async def restart_server(self) -> dict[str, Any]:
-        await self._ensure_connected()
+        await self.ensure_connected()
         if self._stub is None:
             raise AgentClientError("não conectado ao agente")
         try:
@@ -320,6 +421,8 @@ class AgentClient:
                 metadata=self._metadata(),
                 timeout=STOP_RPC_TIMEOUT,
             )
+            # EXP-63: lifecycle RPC changed server state — drop cached status.
+            self._invalidate_status_cache()
             return {"ok": resp.ok, "message": resp.message, "service": resp.service_name}
         except grpc.RpcError as e:
             await self._handle_rpc_error(e)
@@ -335,7 +438,7 @@ class AgentClient:
             if time.monotonic() - cached_at < ttl:
                 return _status_to_dict(cached_resp)
 
-        await self._ensure_connected()
+        await self.ensure_connected()
         if self._stub is None:
             raise AgentClientError("não conectado ao agente")
         try:
@@ -351,7 +454,7 @@ class AgentClient:
             raise AgentClientError(f"GetStatus falhou: {e}") from e
 
     async def get_health(self) -> dict[str, Any]:
-        await self._ensure_connected()
+        await self.ensure_connected()
         if self._stub is None:
             raise AgentClientError("não conectado ao agente")
         try:
@@ -373,7 +476,7 @@ class AgentClient:
             raise AgentClientError(f"GetHealth falhou: {e}") from e
 
     async def send_rcon_command(self, command: str) -> dict[str, Any]:
-        await self._ensure_connected()
+        await self.ensure_connected()
         if self._stub is None:
             raise AgentClientError("não conectado ao agente")
         try:
@@ -382,6 +485,9 @@ class AgentClient:
                 metadata=self._metadata(),
                 timeout=DEFAULT_RPC_TIMEOUT,
             )
+            # EXP-63: whitelisted RCON commands may change server state —
+            # drop cached status.
+            self._invalidate_status_cache()
             return {"ok": resp.ok, "output": resp.output, "error": resp.error}
         except grpc.RpcError as e:
             await self._handle_rpc_error(e)
@@ -389,7 +495,7 @@ class AgentClient:
 
     async def stream_console(self, tail_lines: int = 50) -> AsyncIterator[str]:
         """Stream console output indefinitely until caller cancels."""
-        await self._ensure_connected()
+        await self.ensure_connected()
         if self._stub is None:
             raise AgentClientError("não conectado ao agente")
         stream = self._stub.StreamConsole(
@@ -418,7 +524,7 @@ class AgentClient:
         self, event_types: list[str] | None = None
     ) -> AsyncIterator[dict[str, Any]]:
         """Subscribe to agent events indefinitely."""
-        await self._ensure_connected()
+        await self.ensure_connected()
         assert self._event_stub is not None
         try:
             req = crias_pb2.SubscribeEventsRequest()

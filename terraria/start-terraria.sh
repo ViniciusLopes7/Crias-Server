@@ -103,11 +103,10 @@ if ! [[ "$SERVER_PORT" =~ ^[0-9]+$ ]]; then
     SERVER_PORT=7777
 fi
 
-if command -v ss >/dev/null 2>&1; then
-    if ss -H -tln | awk -v port=":$SERVER_PORT" '$4 ~ port { found=1 } END { exit found ? 0 : 1 }'; then
-        echo "ERRO: Porta $SERVER_PORT ja esta em uso. Ajuste port em $CONFIG_FILE."
-        exit 1
-    fi
+# (CR-32) Igualdade exata de porta via helper do common.sh (2556 != 25565).
+if port_is_listening "$SERVER_PORT"; then
+    echo "ERRO: Porta $SERVER_PORT ja esta em uso. Ajuste port em $CONFIG_FILE."
+    exit 1
 fi
 
 echo "=========================================="

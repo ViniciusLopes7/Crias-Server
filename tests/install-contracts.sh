@@ -40,6 +40,11 @@ assert_expected_failure() {
     fi
 }
 
+# (EXP-35) Base aninhada para os dirs de servidor dos contratos: a
+# politica de instalacao exige subdiretorio dedicado (profundidade >= 2
+# sob /tmp) — /tmp/<dir> direto e rejeitado.
+mkdir -p /tmp/crias-contracts/eula-ci /tmp/crias-contracts/invalid-port-ci /tmp/crias-contracts/paper-ci
+
 run_missing_server_type_contract() {
     local cfg_file="$TMP_TEST_DIR/missing-server-type.env"
     local log_file="$TMP_TEST_DIR/missing-server-type.log"
@@ -175,7 +180,7 @@ INSTALL_TAILSCALE="false"
 APPLY_SYSTEM_TUNING="false"
 CLEANUP_OTHER_STACK="false"
 MINECRAFT_USER="minecraft-ci"
-MINECRAFT_SERVER_DIR="/tmp/minecraft-eula-ci"
+MINECRAFT_SERVER_DIR="/tmp/crias-contracts/eula-ci/minecraft"
 MINECRAFT_PORT=45165
 MINECRAFT_ONLINE_MODE="false"
 MINECRAFT_VERSION="1.21.11"
@@ -216,7 +221,7 @@ INSTALL_TAILSCALE="false"
 APPLY_SYSTEM_TUNING="false"
 CLEANUP_OTHER_STACK="false"
 MINECRAFT_USER="minecraft-ci"
-MINECRAFT_SERVER_DIR="/tmp/minecraft-invalid-port-ci"
+MINECRAFT_SERVER_DIR="/tmp/crias-contracts/invalid-port-ci/minecraft"
 MINECRAFT_PORT=70000
 MINECRAFT_ONLINE_MODE="false"
 MINECRAFT_VERSION="1.21.11"
@@ -256,7 +261,7 @@ INSTALL_TAILSCALE="false"
 APPLY_SYSTEM_TUNING="false"
 CLEANUP_OTHER_STACK="false"
 TERRARIA_USER="terraria-ci"
-TERRARIA_SERVER_DIR="/tmp/terraria-invalid-port-ci"
+TERRARIA_SERVER_DIR="/tmp/crias-contracts/invalid-port-ci/terraria"
 TERRARIA_PORT=70000
 TERRARIA_WORLD_NAME="world"
 TERRARIA_MOTD="Contrato CI"
@@ -294,7 +299,7 @@ INSTALL_TAILSCALE="false"
 APPLY_SYSTEM_TUNING="false"
 CLEANUP_OTHER_STACK="false"
 MINECRAFT_USER="minecraft-ci"
-MINECRAFT_SERVER_DIR="/tmp/minecraft-paper-ci"
+MINECRAFT_SERVER_DIR="/tmp/crias-contracts/paper-ci/minecraft"
 MINECRAFT_PORT=45165
 MINECRAFT_ONLINE_MODE="false"
 MINECRAFT_VERSION="1.21.11"

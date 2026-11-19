@@ -8,34 +8,51 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Load common.sh (prefer installed .shared).
-COMMON_LIB="$SCRIPT_DIR/.shared/common.sh"
-if [ -f "$COMMON_LIB" ]; then
-    # shellcheck source=/dev/null
-    source "$COMMON_LIB"
-else
-    ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-    # shellcheck source=/dev/null
-    source "$ROOT_DIR/shared/lib/common.sh"
-fi
+# (EXP-34/AUDIT-A-P1) Wrapper ADMINISTRATIVO: instalado em
+# /usr/local/libexec/crias (root:root). Resolve as libs do libexec primeiro;
+# fallbacks para .shared do servidor (legado) e repo (desenvolvimento).
+CRIS_LIBEXEC_LIB_DIR="/usr/local/libexec/crias/lib"
 
-# Load setup-cron.sh (prefer installed .shared).
-SETUP_CRON_LIB="$SCRIPT_DIR/.shared/setup-cron.sh"
-if [ -f "$SETUP_CRON_LIB" ]; then
-    # shellcheck source=/dev/null
-    source "$SETUP_CRON_LIB"
-else
-    ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-    # shellcheck source=/dev/null
-    source "$ROOT_DIR/shared/lib/setup-cron.sh"
+load_crias_lib() {
+    local lib_name="$1"
+    if [ -f "$CRIS_LIBEXEC_LIB_DIR/$lib_name" ]; then
+        # shellcheck source=/dev/null
+        source "$CRIS_LIBEXEC_LIB_DIR/$lib_name"
+        return 0
+    fi
+    local server_dir="${SERVER_DIR:-/opt/terraria-server}"
+    if [ -f "$server_dir/.shared/$lib_name" ]; then
+        # shellcheck source=/dev/null
+        source "$server_dir/.shared/$lib_name"
+        return 0
+    fi
+    local root_dir
+    root_dir="$(cd "$SCRIPT_DIR/.." && pwd)"
+    if [ -f "$root_dir/shared/lib/$lib_name" ]; then
+        # shellcheck source=/dev/null
+        source "$root_dir/shared/lib/$lib_name"
+        return 0
+    fi
+    return 1
+}
+
+if ! load_crias_lib common.sh; then
+    echo "[ERRO] common.sh nao encontrado (libexec/.shared/repo)." >&2
+    exit 1
+fi
+if ! load_crias_lib setup-cron.sh; then
+    echo "[ERRO] setup-cron.sh nao encontrado (libexec/.shared/repo)." >&2
+    exit 1
 fi
 
 # Terraria-specific config. Variables read by setup_cron_run() in shared/lib/setup-cron.sh.
 # shellcheck disable=SC2034
 SETUP_CRON_STACK_NAME="terraria"
 SETUP_CRON_SERVICE_NAME="terraria"
-SETUP_CRON_SERVER_DIR="$SCRIPT_DIR"
-SETUP_CRON_BACKUP_SCRIPT="$SCRIPT_DIR/backup-cron.sh"
+# (EXP-34) Diretorio do servidor: default do stack com override SERVER_DIR —
+# o SCRIPT_DIR so coincide quando rodando do repo (desenvolvimento).
+SETUP_CRON_SERVER_DIR="${SERVER_DIR:-/opt/terraria-server}"
+SETUP_CRON_BACKUP_SCRIPT="$SETUP_CRON_SERVER_DIR/backup-cron.sh"
 SETUP_CRON_SERVER_USER="${SERVER_USER:-}"
 
 setup_cron_run

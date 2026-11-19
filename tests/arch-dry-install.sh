@@ -162,7 +162,9 @@ run_minecraft_dry_install
 mc_alias_file="$TMP_TEST_DIR/minecraft-comandos.sh"
 capture_generated_alias_script minecraft "$TMP_TEST_DIR/minecraft" "$mc_alias_file"
 assert_grep "^alias mcstart='sudo systemctl start minecraft'" "$mc_alias_file"
-assert_grep "^alias mcreconfig='sudo $TMP_TEST_DIR/minecraft/mc-manager.sh reconfigure-hardware'" "$mc_alias_file"
+# (EXP-34) Aliases apontam para o manager no libexec (root:root), nunca
+# para o diretorio gravavel pelo jogo.
+assert_grep "^alias mcreconfig='sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware'" "$mc_alias_file"
 
 echo "[arch-dry-install] Iniciando dry-run de instalacao Terraria..."
 run_terraria_dry_install
@@ -170,6 +172,6 @@ run_terraria_dry_install
 tt_alias_file="$TMP_TEST_DIR/terraria-comandos.sh"
 capture_generated_alias_script terraria "$TMP_TEST_DIR/terraria" "$tt_alias_file"
 assert_grep "^alias ttstart='sudo systemctl start terraria'" "$tt_alias_file"
-assert_grep "^alias ttreconfig='sudo $TMP_TEST_DIR/terraria/tt-manager.sh reconfigure-hardware'" "$tt_alias_file"
+assert_grep "^alias ttreconfig='sudo /usr/local/libexec/crias/tt-manager.sh reconfigure-hardware'" "$tt_alias_file"
 
 echo "[arch-dry-install] OK"

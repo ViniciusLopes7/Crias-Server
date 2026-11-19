@@ -17,8 +17,10 @@ COMMON_LIB="$SCRIPT_DIR/.shared/common.sh"
 BACKUP_LIB="$SCRIPT_DIR/.shared/backup-engine.sh"
 
 if [ -f "$BACKUP_LIB" ]; then
+    # (AUDIT-B N13) Sem `|| true`: falha ao carregar o common.sh deve derrubar
+    # o script AGORA com mensagem clara, nao depois com "is_true: command not found".
     # shellcheck source=/dev/null
-    source "$COMMON_LIB" 2>/dev/null || true
+    source "$COMMON_LIB"
     # shellcheck source=/dev/null
     source "$BACKUP_LIB"
 else
@@ -39,6 +41,11 @@ BACKUP_STACK_NAME="terraria"
 BACKUP_SERVICE_NAME="${BACKUP_SERVICE_NAME:-terraria}"
 # Diretórios de backup: worlds/ + config/ sempre; Mods/ + Worlds/ se tModLoader.
 BACKUP_DIRS=("worlds" "config")
+
+# (CR-07) Carrega o runtime.env ANTES de montar o escopo: um
+# BACKUP_INCLUDE_MODS=false so nesse arquivo chegava APOS o backup_init e
+# nao excluia Mods/.
+backup_load_runtime_env
 
 # Modo tML (CR-12): chave explicita do runtime.env com prioridade sobre a
 # deteccao por artefato — mesma regra do start-terraria.sh.
@@ -61,6 +68,14 @@ if [ "$TT_IS_TML" = "true" ]; then
     if is_true "${BACKUP_INCLUDE_MODS:-true}"; then
         BACKUP_DIRS+=("Mods")
     fi
+fi
+
+# (CR-05) Mundo e OBRIGATORIO no escopo: sem ele o tar terminaria "OK" com um
+# backup sem dados de jogo. Vanilla: worlds/; tML: Worlds/.
+if [ "$TT_IS_TML" = "true" ]; then
+    BACKUP_REQUIRED_DIRS=("Worlds")
+else
+    BACKUP_REQUIRED_DIRS=("worlds")
 fi
 
 # Inherit legacy variables (backward compat).

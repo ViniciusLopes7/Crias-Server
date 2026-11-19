@@ -11,15 +11,17 @@ import logging
 import os
 import re
 import time
+from pathlib import Path
 
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from .agent_client import AgentClient, AgentClientError
+from .agent_client import AgentClient, AgentClientError, AgentOfflineError
 from .config import BotConfig
 from .embeds import (
     agent_error,
+    agent_offline,
     command_result,
     console_stream_error,
     console_stream_started,
@@ -32,14 +34,46 @@ from .embeds import (
     say_confirmation,
     status_offline,
     status_online,
+    truncate_for_codeblock,
     warning,
 )
+from .healthcheck import HEARTBEAT_PATH
 
 logger = logging.getLogger(__name__)
 
 
 # RCON message sanitizer: strips control characters.
 _RCON_MSG_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+# ---------------------------------------------------------------------------
+# Console stream constants (EXP-47 / EXP-61).
+# ---------------------------------------------------------------------------
+
+# EXP-61: game/mod-controlled log lines may contain triple backticks (which
+# would break the code fence) and @everyone/@here (mass mentions). Every
+# chunk posted to #console is sanitized and sent with mentions disabled.
+_TRIPLE_BACKTICK_RE = re.compile(r"`{3,}")
+# Content budget inside the code fence; Discord caps messages at 2000 chars.
+_CONSOLE_MAX_CONTENT = 1800
+# EXP-47: the agent closes StreamConsole at its server-side deadline
+# (default 5 min) and emits this marker line just before closing.
+_CONSOLE_DEADLINE_MARKER = "[crias-agent] console stream deadline reached"
+# Reopen policy: exponential backoff 1s → 15s; give up after 5 consecutive
+# unhealthy attempts (instant errors or sub-minute streams).
+_CONSOLE_RECONNECT_INITIAL_DELAY = 1.0
+_CONSOLE_RECONNECT_MAX_DELAY = 15.0
+_CONSOLE_MAX_RECONNECT_FAILURES = 5
+_CONSOLE_STREAM_MIN_LIFETIME = 60.0
+# journalctl tail on reopen: cover the backoff gap without replaying the
+# initial 50-line history on every deadline reopen.
+_CONSOLE_RECONNECT_TAIL_LINES = 1
+# Discord send failures tolerated before auto-stopping the stream.
+_CONSOLE_MAX_SEND_FAILURES = 5
+
+# _send_console_buffer outcomes.
+_FLUSH_OK = "ok"
+_FLUSH_RETRY = "retry"
+_FLUSH_STOP = "stop"
 
 
 def _sanitize_rcon_message(msg: str) -> str | None:
@@ -98,6 +132,10 @@ class CriasBot(commands.Bot):
         self._console_lock: asyncio.Lock = asyncio.Lock()
         # per-user rate limiter
         self._rate_limiter = _RateLimiter(max_calls=5, period=10.0)
+        # CR-22: login state — the heartbeat file is only written when set.
+        self._bot_ready = False
+        # CR-30: log the manual-sync notice only once per process.
+        self._sync_notice_logged = False
 
     async def setup_hook(self) -> None:
         """Sync slash commands to guild if FORCE_SYNC_COMMANDS is set."""
@@ -123,10 +161,34 @@ class CriasBot(commands.Bot):
 
         # Start event bridge background task.
         self.event_bridge.start()
+        # CR-22: liveness heartbeat for the Docker healthcheck.
+        self.heartbeat.start()
+
+    async def on_ready(self) -> None:
+        """Mark the bot as ready (heartbeat gate) and log sync guidance.
+
+        CR-30: on a fresh deploy without FORCE_SYNC_COMMANDS the bot comes
+        online with no commands, which looks broken. Log (once) that sync
+        is manual and how to trigger it, including how many app commands
+        are registered locally.
+        """
+        self._bot_ready = True
+        if self._sync_notice_logged:
+            return
+        self._sync_notice_logged = True
+        force_sync = os.environ.get("FORCE_SYNC_COMMANDS", "false").strip().lower() == "true"
+        if not force_sync:
+            logger.info(
+                "Sync de comandos é manual: %d comandos registrados localmente. "
+                "Para sincronizar com o Discord, defina FORCE_SYNC_COMMANDS=true "
+                "e reinicie o bot (guild sync é instantâneo; global pode levar ~1h).",
+                len(self.tree.get_commands()),
+            )
 
     async def close(self) -> None:
         """Graceful shutdown: cancel tasks and close gRPC channel."""
         self.event_bridge.cancel()
+        self.heartbeat.cancel()  # CR-22
         if self._console_task is not None:
             self._console_task.cancel()
             try:
@@ -160,6 +222,10 @@ class CriasBot(commands.Bot):
         try:
             async for ev in self.agent.subscribe_events():
                 await self._dispatch_event(ev)
+        except AgentOfflineError:
+            # CR-09: bounded connection wait — the supervised background
+            # reconnect keeps trying; retry on the next loop tick.
+            logger.debug("EventBridge: agente offline; tentarei de novo no próximo ciclo")
         except AgentClientError as e:
             logger.warning("EventBridge falhou (vai tentar de novo em 5s): %s", e)
         except (TimeoutError, OSError, ConnectionError) as e:
@@ -170,6 +236,29 @@ class CriasBot(commands.Bot):
 
     @event_bridge.before_loop
     async def _before_event_bridge(self) -> None:
+        await self.wait_until_ready()
+
+    @tasks.loop(seconds=30)
+    async def heartbeat(self) -> None:
+        """CR-22: write a liveness heartbeat file for the Docker healthcheck.
+
+        The file is only written while the bot is connected
+        (``_bot_ready``); a running tick itself proves the event loop is
+        alive. ``crias_bot.healthcheck`` fails when the file goes stale
+        (bot hung or gateway dead). Harmless outside containers — it is
+        just a small file in /tmp.
+        """
+        if not self._bot_ready:
+            return
+        try:
+            Path(HEARTBEAT_PATH).write_text(str(time.time()))
+        except OSError as e:
+            # Read-only FS, permissions, ... — the healthcheck will surface
+            # persistent problems.
+            logger.debug("Heartbeat: falha ao escrever %s: %s", HEARTBEAT_PATH, e)
+
+    @heartbeat.before_loop
+    async def _before_heartbeat(self) -> None:
         await self.wait_until_ready()
 
     async def _dispatch_event(self, ev: dict) -> None:
@@ -189,7 +278,9 @@ class CriasBot(commands.Bot):
             logger.debug("Evento sem embed dedicado: %s", event_type)
             embed = warning(
                 f"Evento: {event_type}",
-                f"```\n{metadata}\n```",
+                # EXP-61: metadata is game-controlled — sanitize backticks and
+                # bound the length before interpolating into a code block.
+                f"```\n{truncate_for_codeblock(str(metadata))}\n```",
             )
 
         try:
@@ -260,7 +351,18 @@ class MinecraftCog(commands.Cog):
         return False
 
     async def _send_agent_error(self, interaction: discord.Interaction, e: Exception) -> None:
-        """Send agent error embed as followup; fall back to plain text on HTTP failure."""
+        """Send agent error embed as followup; fall back to plain text on HTTP failure.
+
+        CR-09: ``AgentOfflineError`` gets a dedicated friendly, ephemeral
+        reply (``agent_offline``) instead of the generic communication-error
+        embed, so users know exactly what to check.
+        """
+        if isinstance(e, AgentOfflineError):
+            try:
+                await interaction.followup.send(embed=agent_offline(), ephemeral=True)
+            except discord.HTTPException:
+                logger.warning("Falha ao enviar embed de agente offline: %s", e)
+            return
         try:
             await interaction.followup.send(embed=agent_error(str(e)))
         except discord.HTTPException:
@@ -391,7 +493,9 @@ class MinecraftCog(commands.Cog):
                 err_msg = result.get("error", "erro desconhecido")
                 try:
                     await interaction.followup.send(
-                        embed=error("Falha no RCON", f"```\n{err_msg}\n```"),
+                        # EXP-61: RCON output is game-controlled — sanitize
+                        # backticks and bound the length.
+                        embed=error("Falha no RCON", f"```\n{truncate_for_codeblock(err_msg)}\n```"),
                         ephemeral=True,
                     )
                 except discord.HTTPException:
@@ -463,75 +567,135 @@ class MinecraftCog(commands.Cog):
     async def _console_stream_loop(self, channel: discord.TextChannel) -> None:
         """Consume StreamConsole and post to #console; 2s buffer, ~1800-char chunks.
 
+        EXP-47: the agent closes StreamConsole at its server-side deadline
+        (default 5 min). When the stream ends while the session is still
+        active, this loop reopens it automatically with exponential backoff
+        (1s → 15s) so the session keeps delivering logs; the agent's
+        deadline marker line is filtered from the output. An attempt that
+        saw the deadline marker or streamed for at least
+        ``_CONSOLE_STREAM_MIN_LIFETIME`` is healthy and resets the backoff;
+        short-lived/erroring attempts count toward
+        ``_CONSOLE_MAX_RECONNECT_FAILURES`` consecutive failures.
+
+        The session stops when: the user runs the stop command, the task is
+        cancelled (bot shutdown), the #console channel disappears, Discord
+        sends fail ``_CONSOLE_MAX_SEND_FAILURES`` times in a row, or
+        reconnecting fails ``_CONSOLE_MAX_RECONNECT_FAILURES`` times in a
+        row — the last two post a visible notice.
+
         On send failure the buffer is preserved and retried on the next flush
-        so no console lines are silently dropped. After MAX_CONSECUTIVE_FAILURES
-        the stream auto-stops and notifies the control channel.
+        so no console lines are silently dropped.
         """
         buffer: list[str] = []
         last_flush = time.monotonic()
-        MAX_CHARS = 1800  # margin for ``` + newlines
-        MAX_CONSECUTIVE_FAILURES = 5
-        consecutive_failures = 0
+        consecutive_send_failures = 0
+        reconnect_delay = _CONSOLE_RECONNECT_INITIAL_DELAY
+        consecutive_reconnect_failures = 0
+        # First stream replays recent journal history; reopens use a minimal
+        # tail so the 50-line history is not re-posted on every deadline.
+        tail_lines = 50
 
         try:
-            async for line in self.bot.agent.stream_console(tail_lines=50):
-                buffer.append(line)
+            while self.bot._console_stream_active:
+                attempt_started = time.monotonic()
+                saw_deadline_marker = False
+                try:
+                    async for line in self.bot.agent.stream_console(tail_lines=tail_lines):
+                        if _CONSOLE_DEADLINE_MARKER in line:
+                            # Agent-side stream deadline: the stream is about
+                            # to close and is reopened below (EXP-47). Filter
+                            # the marker from user-visible output.
+                            saw_deadline_marker = True
+                            continue
+                        buffer.append(line)
 
-                # Flush every 2s or when buffer fills.
-                now = time.monotonic()
-                total_chars = sum(len(s) for s in buffer)
-                if total_chars >= MAX_CHARS or (now - last_flush) >= 2.0:
-                    if not buffer:
-                        last_flush = now
-                        continue
-                    # Split into chunks that fit within MAX_CHARS.
-                    chunks = _partition_lines(buffer, MAX_CHARS)
-                    send_failed = False
-                    for chunk in chunks:
+                        # Flush every 2s or when buffer fills.
+                        now = time.monotonic()
+                        total_chars = sum(len(s) for s in buffer)
+                        if total_chars >= _CONSOLE_MAX_CONTENT or (now - last_flush) >= 2.0:
+                            if not buffer:
+                                last_flush = now
+                                continue
+                            status = await _send_console_buffer(channel, buffer)
+                            if status == _FLUSH_STOP:
+                                # Channel deleted — stop the stream (finally
+                                # clears _console_stream_active).
+                                return
+                            if status == _FLUSH_OK:
+                                # All chunks sent — clear buffer and reset
+                                # the failure counter.
+                                buffer = []
+                                consecutive_send_failures = 0
+                            else:
+                                consecutive_send_failures += 1
+                                if (
+                                    consecutive_send_failures
+                                    >= _CONSOLE_MAX_SEND_FAILURES
+                                ):
+                                    logger.warning(
+                                        "Console stream: %d falhas consecutivas de envio; "
+                                        "parando stream",
+                                        consecutive_send_failures,
+                                    )
+                                    await self._notify_console_stream_auto_stopped(
+                                        channel,
+                                        "Stream de console parado após falhas consecutivas "
+                                        "de envio.",
+                                    )
+                                    return
+                                # Keep buffer for retry on next flush; advance
+                                # last_flush so we don't busy-spin on it.
+                            last_flush = now
+                except AgentClientError as e:
+                    logger.warning("Console stream interrompido (vai reconectar): %s", e)
+
+                # Stream ended (agent deadline EOF or an error). Honor a user
+                # stop that happened while we were streaming.
+                if not self.bot._console_stream_active:
+                    return
+
+                # Best-effort flush of lines buffered during the attempt so
+                # output keeps flowing across the reconnect gap.
+                if buffer:
+                    status = await _send_console_buffer(channel, buffer)
+                    if status == _FLUSH_STOP:
+                        return
+                    if status == _FLUSH_OK:
+                        buffer = []
+                    last_flush = time.monotonic()
+
+                tail_lines = _CONSOLE_RECONNECT_TAIL_LINES
+
+                attempt_healthy = saw_deadline_marker or (
+                    time.monotonic() - attempt_started >= _CONSOLE_STREAM_MIN_LIFETIME
+                )
+                if attempt_healthy:
+                    consecutive_reconnect_failures = 0
+                    reconnect_delay = _CONSOLE_RECONNECT_INITIAL_DELAY
+                else:
+                    consecutive_reconnect_failures += 1
+                    if consecutive_reconnect_failures >= _CONSOLE_MAX_RECONNECT_FAILURES:
+                        logger.warning(
+                            "Console stream: %d falhas consecutivas de reconexão; "
+                            "parando stream",
+                            consecutive_reconnect_failures,
+                        )
+                        reason = (
+                            "Falhas consecutivas de reconexão ao agente. "
+                            "Use `/mc console` para reativar quando o agente voltar."
+                        )
                         try:
-                            await channel.send(f"```\n{chunk}\n```")
-                        except discord.NotFound:
-                            # Channel deleted — stop the stream (finally clears
-                            # _console_stream_active).
+                            await channel.send(embed=console_stream_error(reason))
+                        except discord.HTTPException:
                             logger.warning(
-                                "Console stream: canal %d não existe mais; parando stream",
-                                channel.id,
+                                "Falha ao avisar fim do console stream no canal %d", channel.id
                             )
-                            return
-                        except discord.HTTPException as send_err:
-                            logger.warning(
-                                "Console stream: falha ao enviar chunk no canal %d: %s",
-                                channel.id,
-                                send_err,
-                            )
-                            send_failed = True
-                            break
-                    if send_failed:
-                        consecutive_failures += 1
-                        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                            logger.warning(
-                                "Console stream: %d falhas consecutivas de envio; parando stream",
-                                consecutive_failures,
-                            )
-                            await self._notify_console_stream_auto_stopped(
-                                channel,
-                                "Stream de console parado após falhas consecutivas de envio.",
-                            )
-                            return
-                        # Keep buffer for retry on next flush; advance
-                        # last_flush so we don't busy-spin on the same chunk.
-                        last_flush = now
-                        continue
-                    # All chunks sent — clear buffer and reset failure counter.
-                    buffer = []
-                    last_flush = now
-                    consecutive_failures = 0
-        except AgentClientError as e:
-            logger.warning("Console stream falhou: %s", e)
-            try:
-                await channel.send(embed=console_stream_error(str(e)))
-            except discord.HTTPException:
-                pass
+                        await self._notify_console_stream_auto_stopped(channel, reason)
+                        return
+
+                await asyncio.sleep(reconnect_delay)
+                if not attempt_healthy:
+                    reconnect_delay = min(reconnect_delay * 2, _CONSOLE_RECONNECT_MAX_DELAY)
         except asyncio.CancelledError:
             logger.info("Console stream cancelado")
             raise
@@ -583,6 +747,58 @@ def _partition_lines(lines: list[str], max_chars: int) -> list[str]:
     if current:
         chunks.append("\n".join(current))
     return chunks
+
+
+def _sanitize_console_text(text: str) -> str:
+    """Neutralize runs of 3+ backticks so log lines can't break the code fence (EXP-61).
+
+    Inserts a zero-width space after the first backtick (````` ``` ````` becomes
+    ````` `\\u200b`` ````). A regex over runs of 3+ is required: a plain
+    ``str.replace("```", ...)`` would leave a trailing triple when the run
+    has 4+ backticks.
+    """
+    return _TRIPLE_BACKTICK_RE.sub("`\u200b``", text)
+
+
+def _format_console_chunk(chunk: str) -> str:
+    """Wrap a log chunk in a code fence, sanitized and hard-truncated (EXP-61).
+
+    Sanitizing can grow the text (each triple backtick gains one char), so
+    the truncation happens after sanitization — the final message is
+    guaranteed to stay under Discord's 2000-char limit including the fence.
+    """
+    sanitized = _sanitize_console_text(chunk)
+    if len(sanitized) > _CONSOLE_MAX_CONTENT:
+        sanitized = sanitized[: _CONSOLE_MAX_CONTENT - 1] + "…"
+    return f"```\n{sanitized}\n```"
+
+
+async def _send_console_buffer(channel: discord.TextChannel, buffer: list[str]) -> str:
+    """Post buffered console lines as fenced chunks (EXP-61).
+
+    Returns ``_FLUSH_OK`` (all sent), ``_FLUSH_RETRY`` (transient Discord
+    error — the caller keeps the buffer and retries on the next flush) or
+    ``_FLUSH_STOP`` (channel deleted). Every send disables mentions: log
+    lines are game-controlled and may contain @everyone/@here. The buffer
+    is never modified here.
+    """
+    if not buffer:
+        return _FLUSH_OK
+    for chunk in _partition_lines(buffer, _CONSOLE_MAX_CONTENT):
+        payload = _format_console_chunk(chunk)
+        try:
+            await channel.send(payload, allowed_mentions=discord.AllowedMentions.none())
+        except discord.NotFound:
+            logger.warning("Console stream: canal %d não existe mais", channel.id)
+            return _FLUSH_STOP
+        except discord.HTTPException as send_err:
+            logger.warning(
+                "Console stream: falha ao enviar chunk no canal %d: %s",
+                channel.id,
+                send_err,
+            )
+            return _FLUSH_RETRY
+    return _FLUSH_OK
 
 
 def _format_uptime(seconds: int) -> str:

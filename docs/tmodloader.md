@@ -120,10 +120,10 @@ sudo systemctl stop terraria
 sudo systemctl restart terraria
 
 # Status + hardware:
-sudo /opt/terraria-server/tt-manager.sh status
+sudo /usr/local/libexec/crias/tt-manager.sh status
 
 # Backup (inclui Mods/ e Worlds/ automaticamente se tModLoader):
-sudo /opt/terraria-server/tt-manager.sh backup
+sudo /usr/local/libexec/crias/tt-manager.sh backup
 
 # Logs:
 sudo journalctl -u terraria -f

@@ -68,53 +68,141 @@ create_stack_user_and_dirs() {
 }
 
 # ---------------------------------------------------------------------------
-# Snapshot dos artefatos preexistentes (CR-08): captura unit, runtime.env,
-# scripts e .shared ANTES de o installer sobrescrever, para que o rollback
-# RESTAURE o estado anterior em vez de apagar. So captura diretorio
-# preexistente (instalacao nova nao tem o que preservar).
+# Snapshot dos artefatos preexistentes (CR-04): captura TUDO que o installer
+# pode sobrescrever — unit, runtime.env, hardware-profile.env, comandos.sh,
+# scripts de runtime, .shared/ E os extras declarados pelo stack
+# (server.properties, serverconfig.txt, server.jar, server/, steamapps/...) —
+# ANTES de qualquer fase modificar o diretorio. O rollback usa o MANIFESTO
+# (arquivo de decisoes) para saber, por artefato: restaurar do snapshot,
+# remover (nao existia antes) ou preservar o atual (snapshot pulado por
+# tamanho). Snapshot de artefato existente que FALHA aborta a instalacao
+# (fail-closed) — antes `cp -a ... || true` deixava o rollback sem estado
+# para restaurar.
 # ---------------------------------------------------------------------------
 STACK_SNAPSHOT_DIR=""
+STACK_SNAPSHOT_MANIFEST=""
+# (AUDIT-A P2-3) So e true quando o snapshot foi 100% concluido. Se a
+# preparacao do snapshot falhar (mktemp/disco), o rollback NAO pode rodar a
+# limpeza legacy (apagaria artefatos preexistentes que esta execucao nunca
+# tocou — contradizendo o contrato do CR-04).
+STACK_SNAPSHOT_COMPLETE=false
+
+# Registra uma decisao no manifesto: "restore|remove|leave <rel>".
+_snapshot_record() {
+    printf '%s %s\n' "$1" "$2" >> "$STACK_SNAPSHOT_MANIFEST"
+}
+
+# Snapshot de um artefato (arquivo ou diretorio) com verificacao.
+# $1 = caminho absoluto do artefato; $2 = nome relativo no snapshot.
+_snapshot_capture() {
+    local path="$1" rel="$2"
+
+    if [ ! -e "$path" ]; then
+        # Nao existia antes desta execucao: o rollback pode remover.
+        _snapshot_record "remove" "$rel"
+        return 0
+    fi
+
+    # Diretorios enormes (tML ~centenas de MB) podem nao caber no TMPDIR;
+    # acima do teto o snapshot e PULADO e o rollback PRESERVA o atual
+    # (nunca apaga o que nao pode restaurar). Aviso claro, decisao "leave".
+    local size_bytes=0
+    if [ -d "$path" ]; then
+        size_bytes="$(du -sb "$path" 2>/dev/null | awk '{print $1}')"
+        if ! [[ "$size_bytes" =~ ^[0-9]+$ ]]; then
+            size_bytes=0
+        fi
+        local max_bytes="${CRIAS_SNAPSHOT_MAX_BYTES:-2147483648}"
+        if [ "$size_bytes" -gt "$max_bytes" ]; then
+            print_warning "Snapshot de $rel pulado (${size_bytes} bytes > teto ${max_bytes}); rollback preservara o conteudo atual."
+            _snapshot_record "leave" "$rel"
+            return 0
+        fi
+    fi
+
+    # (AUDIT-A P1-2) Rels aninhados (ex.: config/serverconfig.txt) precisam
+    # do diretorio-pai criado no snapshot — sem isto o cp falhava e o modo
+    # fail-closed abortava TODA reinstalacao do Terraria.
+    local snap_target="$STACK_SNAPSHOT_DIR/$rel"
+    mkdir -p "$(dirname "$snap_target")"
+
+    if ! cp -a "$path" "$snap_target" 2>/dev/null || [ ! -e "$snap_target" ]; then
+        print_error "Falha ao fotografar artefato preexistente: $path"
+        print_error "Sem snapshot integro o rollback nao pode restaurar; abortando ANTES de modificar o sistema."
+        return 1
+    fi
+    _snapshot_record "restore" "$rel"
+}
 
 snapshot_stack_artifacts() {
     STACK_SNAPSHOT_DIR=""
+    STACK_SNAPSHOT_MANIFEST=""
+    STACK_SNAPSHOT_COMPLETE=false
 
     if [ "${STACK_SERVER_DIR_PREEXISTED:-false}" != "true" ]; then
         return 0
     fi
 
+    STACK_SNAPSHOT_MANIFEST="$(mktemp_crias_file)" || return 1
     STACK_SNAPSHOT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/crias-stack-snapshot.XXXXXX")" || {
         STACK_SNAPSHOT_DIR=""
-        return 0
+        print_error "Falha ao criar diretorio de snapshot (mktemp)."
+        return 1
     }
 
-    if [ -f "/etc/systemd/system/${STACK_NAME}.service" ]; then
-        cp -a "/etc/systemd/system/${STACK_NAME}.service" "$STACK_SNAPSHOT_DIR/service.unit" 2>/dev/null || true
-    fi
+    # Unit systemd (fora do diretorio do jogo — nome fixo no snapshot).
+    # NOTA: cada captura propaga falha explicitamente (`|| return 1`) — o
+    # caller invoca esta funcao em contexto condicional (`if ! ...`), o que
+    # desativa o errexit interno; sem o return explicito a falha do primeiro
+    # artefato nao abortaria os demais.
+    local service_unit="/etc/systemd/system/${STACK_NAME}.service"
+    _snapshot_capture "$service_unit" "service.unit" || return 1
 
     local artifact
     for artifact in runtime.env hardware-profile.env comandos.sh; do
-        if [ -f "$STACK_SERVER_DIR/$artifact" ]; then
-            cp -a "$STACK_SERVER_DIR/$artifact" "$STACK_SNAPSHOT_DIR/$artifact" 2>/dev/null || true
-        fi
+        _snapshot_capture "$STACK_SERVER_DIR/$artifact" "$artifact" || return 1
     done
 
     local script base
     for script in ${STACK_RUNTIME_SCRIPTS[@]+"${STACK_RUNTIME_SCRIPTS[@]}"}; do
         base="$(basename "$script")"
-        if [ -f "$STACK_SERVER_DIR/$base" ]; then
-            cp -a "$STACK_SERVER_DIR/$base" "$STACK_SNAPSHOT_DIR/$base" 2>/dev/null || true
-        fi
+        _snapshot_capture "$STACK_SERVER_DIR/$base" "$base" || return 1
     done
 
-    if [ -d "$STACK_SERVER_DIR/.shared" ]; then
-        cp -a "$STACK_SERVER_DIR/.shared" "$STACK_SNAPSHOT_DIR/.shared" 2>/dev/null || true
+    _snapshot_capture "$STACK_SERVER_DIR/.shared" ".shared" || return 1
+
+    # (CR-04) Extras declarados pelo stack: configs, jar do servidor,
+    # server/ do tModLoader, steamapps/... Tudo que o installer sobrescreve.
+    if declare -F stack_snapshot_extra_paths >/dev/null 2>&1; then
+        local extra extra_rel
+        while IFS= read -r extra; do
+            [ -z "$extra" ] && continue
+            # (AUDIT-A P3-11) Extras do stack vivem sob o prefixo extra/ no
+            # snapshot: nunca colidem com nomes reservados do manifesto
+            # (service.unit, runtime.env, ...). Caminho completo sob o server
+            # dir preservado; caminho externo vira nome plano.
+            extra_rel="${extra#"$STACK_SERVER_DIR"/}"
+            case "$extra_rel" in
+                "$extra")
+                    extra_rel="$(basename "$extra")"
+                    ;;
+            esac
+            _snapshot_capture "$extra" "extra/$extra_rel" || return 1
+        done < <(stack_snapshot_extra_paths)
     fi
+
+    # (AUDIT-A P2-3) Snapshot 100% concluido: todas as capturas OK. Se
+    # qualquer captura falhar, o return 1 acima deixa a flag false e o
+    # rollback vira NO-OP (esta execucao abortou antes de modificar algo).
+    STACK_SNAPSHOT_COMPLETE=true
+    return 0
 }
 
 # ---------------------------------------------------------------------------
-# Best-effort rollback. Restaura o snapshot quando disponivel (CR-08);
-# NUNCA apaga dados do usuario (mundos, mods/, configs) — so artefatos
-# gerados pelo installer.
+# Best-effort rollback orientado a manifesto (CR-04). Por artefato:
+#   restore -> devolve o estado pre-instalacao fotografado;
+#   remove  -> apaga (o artefato nao existia antes desta execucao);
+#   leave   -> preserva o atual (snapshot pulado; nunca apagar sem restauro).
 # ---------------------------------------------------------------------------
 rollback_stack_install() {
     local service_unit="/etc/systemd/system/${STACK_NAME}.service"
@@ -129,42 +217,49 @@ rollback_stack_install() {
         # Instalacao nova: o diretorio inteiro foi criado por esta execucao.
         rm -f "$service_unit" 2>/dev/null || true
         safe_remove_dir "$STACK_SERVER_DIR" || true
-    elif [ -n "${STACK_SNAPSHOT_DIR:-}" ] && [ -d "$STACK_SNAPSHOT_DIR" ]; then
-        # Diretorio preexistente COM snapshot: restaura o estado anterior
-        # (CR-08 — antes os artefatos eram apagados sem restauracao).
-        if [ -f "$STACK_SNAPSHOT_DIR/service.unit" ]; then
-            cp -a "$STACK_SNAPSHOT_DIR/service.unit" "$service_unit" 2>/dev/null || true
-        else
-            rm -f "$service_unit" 2>/dev/null || true
-        fi
+        systemctl daemon-reload >/dev/null 2>&1 || true
+        return 0
+    fi
 
-        local artifact
-        for artifact in runtime.env hardware-profile.env comandos.sh; do
-            if [ -f "$STACK_SNAPSHOT_DIR/$artifact" ]; then
-                cp -a "$STACK_SNAPSHOT_DIR/$artifact" "$STACK_SERVER_DIR/$artifact" 2>/dev/null || true
-            else
-                rm -f "$STACK_SERVER_DIR/$artifact" 2>/dev/null || true
-            fi
-        done
-
-        local script base
-        for script in ${STACK_RUNTIME_SCRIPTS[@]+"${STACK_RUNTIME_SCRIPTS[@]}"}; do
-            base="$(basename "$script")"
-            if [ -f "$STACK_SNAPSHOT_DIR/$base" ]; then
-                cp -a "$STACK_SNAPSHOT_DIR/$base" "$STACK_SERVER_DIR/$base" 2>/dev/null || true
-            else
-                rm -f "$STACK_SERVER_DIR/$base" 2>/dev/null || true
-            fi
-        done
-
-        if [ -d "$STACK_SNAPSHOT_DIR/.shared" ]; then
-            rm -rf "$STACK_SERVER_DIR/.shared" 2>/dev/null || true
-            cp -a "$STACK_SNAPSHOT_DIR/.shared" "$STACK_SERVER_DIR/" 2>/dev/null || true
-        else
-            rm -rf "$STACK_SERVER_DIR/.shared" 2>/dev/null || true
-        fi
+    if [ -n "${STACK_SNAPSHOT_MANIFEST:-}" ] && [ -f "$STACK_SNAPSHOT_MANIFEST" ] \
+        && [ -n "${STACK_SNAPSHOT_DIR:-}" ] && [ -d "$STACK_SNAPSHOT_DIR" ]; then
+        local action rel target
+        while read -r action rel; do
+            [ -z "${action:-}" ] || [ -z "${rel:-}" ] && continue
+            case "$rel" in
+                service.unit) target="$service_unit" ;;
+                # (AUDIT-A P3-11) Extras do stack: o prefixo extra/ e interno
+                # do snapshot — o alvo real e o caminho sem o prefixo.
+                extra/*) target="$STACK_SERVER_DIR/${rel#extra/}" ;;
+                *) target="$STACK_SERVER_DIR/$rel" ;;
+            esac
+            case "$action" in
+                restore)
+                    if [ -e "$STACK_SNAPSHOT_DIR/$rel" ]; then
+                        rm -rf -- "$target" 2>/dev/null || true
+                        cp -a "$STACK_SNAPSHOT_DIR/$rel" "$target" 2>/dev/null || true
+                    else
+                        rm -f -- "$target" 2>/dev/null || true
+                    fi
+                    ;;
+                remove)
+                    rm -rf -- "$target" 2>/dev/null || true
+                    ;;
+                leave)
+                    print_warning "Rollback preservou '$rel' (sem snapshot; conteudo atual mantido)."
+                    ;;
+            esac
+        done < "$STACK_SNAPSHOT_MANIFEST"
 
         rm -rf "$STACK_SNAPSHOT_DIR" 2>/dev/null || true
+    elif [ "${STACK_SNAPSHOT_COMPLETE:-false}" != "true" ]; then
+        # (AUDIT-A P2-3) Preexistente com snapshot INCOMPLETO: esta execucao
+        # abortou ANTES de modificar qualquer coisa (o snapshot roda primeiro)
+        # — o rollback e NO-OP. A limpeza legacy apagaria artefatos que nem
+        # chegaram a ser tocados.
+        print_warning "Snapshot pre-instalacao incompleto; rollback SEM acao (nada foi modificado por esta execucao)."
+        systemctl daemon-reload >/dev/null 2>&1 || true
+        return 0
     else
         # Preexistente SEM snapshot (execucao legacy): remove so artefatos do
         # installer, preservando dados do usuario.
@@ -183,18 +278,59 @@ rollback_stack_install() {
         rm -rf "$STACK_SERVER_DIR/.shared" 2>/dev/null || true
     fi
 
-    # Artefatos extras criados APENAS pelo installer (nunca dados do usuario:
-    # mundos, mods/ e configs ficam de fora por contrato — ver
-    # stack_rollback_extra_files nos stacks).
-    local extra_files=()
-    if declare -F stack_rollback_extra_files >/dev/null 2>&1; then
-        mapfile -t extra_files < <(stack_rollback_extra_files)
-    fi
-    if [ "${#extra_files[@]}" -gt 0 ]; then
-        rm -rf "${extra_files[@]}" 2>/dev/null || true
+    systemctl daemon-reload >/dev/null 2>&1 || true
+}
+
+# ---------------------------------------------------------------------------
+# (EXP-34) Ferramentas administrativas (managers + libs usadas por root)
+# vivem FORA do diretorio do jogo, em /usr/local/libexec/crias, root:root.
+# Dentro de STACK_SERVER_DIR elas eram gravaveis pelo usuario do jogo
+# (chown -R): um processo de jogo comprometido podia reescrever o manager
+# e o `. .shared/*.sh` — o proximo `sudo <manager>` executaria codigo
+# arbitrario como root. O diretorio do jogo guarda apenas o que o processo
+# do jogo precisa executar (start-server.sh, backup-cron.sh e o .shared de
+# runtime, rodando com o privilegio do propio jogo).
+# ---------------------------------------------------------------------------
+CRIS_LIBEXEC_DIR="/usr/local/libexec/crias"
+CRIS_LIBEXEC_LIB_DIR="$CRIS_LIBEXEC_DIR/lib"
+
+deploy_stack_admin_tools() {
+    print_step "Instalando ferramentas administrativas em $CRIS_LIBEXEC_DIR (root:root)..."
+
+    if dry_run_enabled; then
+        print_step "[DRY_RUN] Pulando deploy de ferramentas administrativas."
+        return 0
     fi
 
-    systemctl daemon-reload >/dev/null 2>&1 || true
+    mkdir -p "$CRIS_LIBEXEC_DIR" "$CRIS_LIBEXEC_LIB_DIR"
+
+    # Managers/scripts administrativos declarados pelo stack.
+    local admin_script base
+    for admin_script in ${STACK_ADMIN_SCRIPTS[@]+"${STACK_ADMIN_SCRIPTS[@]}"}; do
+        base="$(basename "$admin_script")"
+        if [ -f "$admin_script" ]; then
+            install -m 0755 -o root -g root "$admin_script" "$CRIS_LIBEXEC_DIR/$base"
+        else
+            print_error "Script administrativo nao encontrado: $admin_script"
+            return 1
+        fi
+    done
+
+    # Libs compartilhadas (sourced por managers executados como root).
+    local lib
+    for lib in ${STACK_SHARED_LIBS[@]+"${STACK_SHARED_LIBS[@]}"}; do
+        base="$(basename "$lib")"
+        install -m 0644 -o root -g root "$lib" "$CRIS_LIBEXEC_LIB_DIR/$base"
+    done
+
+    # Migracao de instalacoes legadas: remove as copias gravaveis pelo jogo.
+    # Managers e a lib manager-common.sh nao podem mais viver no diretorio
+    # do jogo (superficie de escalada root). setup-cron.sh tambem e
+    # administrativo (roda como root via manager) e muda de lugar junto.
+    rm -f "$STACK_SERVER_DIR/mc-manager.sh" \
+          "$STACK_SERVER_DIR/tt-manager.sh" \
+          "$STACK_SERVER_DIR/setup-cron.sh" \
+          "$STACK_SERVER_DIR/.shared/manager-common.sh" 2>/dev/null || true
 }
 
 # ---------------------------------------------------------------------------
@@ -251,6 +387,10 @@ deploy_stack_scripts() {
             return 1
         fi
     fi
+
+    # (EXP-34) Ferramentas administrativas fora da arvore do jogo, DEPOIS do
+    # chown -R (garante root:root mesmo que um arquivo legado seja migrado).
+    deploy_stack_admin_tools
 }
 
 # ---------------------------------------------------------------------------
@@ -297,9 +437,23 @@ install_stack_service() {
 
     # Write to tmpfile and move atomically. Validate with systemd-analyze
     # verify before rename to avoid loading a partial unit.
+    # (CR-01) O temporario precisa terminar em .service: o systemd-analyze
+    # verify rejeita arquivos sem extensao de unidade valida ("Failed to
+    # prepare filename ...: Invalid argument" no systemd 257) — o nome
+    # antigo (/tmp/crias.XXXXXX) fazia a validacao bloqueante falhar SEMPRE,
+    # derrubando toda instalacao nao-DRY_RUN.
+    # (EXP-59) O temporario vive no MESMO diretorio do destino para o rename
+    # ser atomico (rename(2) via mv -T): `install` copia por cima do destino
+    # — um corte no meio deixava a unit anterior truncada.
     local unit_target="/etc/systemd/system/${STACK_NAME}.service"
     local unit_tmp
-    unit_tmp="$(mktemp_crias_file)"
+    unit_tmp="$(mktemp --tmpdir=/etc/systemd/system --suffix=.service crias-unit.XXXXXX)" || {
+        print_error "Falha ao criar temporario da unit em /etc/systemd/system."
+        return 1
+    }
+    # Registrar no limpador de temporarios do common.sh (cobre caminhos de
+    # erro antecipados antes do rm -f explicito abaixo).
+    printf '%s\n' "$unit_tmp" >> "$CRIAS_TEMPS_FILE" 2>/dev/null || true
 
     if ! env SERVER_USER="$STACK_USER" SERVER_DIR="$STACK_SERVER_DIR" \
             MEMORY_MAX_MB="${STACK_SERVICE_MEMORY_MAX_MB:-2048}" SERVICE_NAME="$STACK_NAME" \
@@ -331,9 +485,15 @@ install_stack_service() {
         fi
     fi
 
-    # install does atomic copy (open + rename) with mode 0644.
-    install -m 0644 -o root -g root "$unit_tmp" "$unit_target"
-    rm -f "$unit_tmp"
+    # (EXP-59) Publicacao atomica: perms/owner no temporario + rename. A unit
+    # anterior so e substituida quando o novo conteudo ja foi validado.
+    chown root:root "$unit_tmp"
+    chmod 0644 "$unit_tmp"
+    if ! mv -T -- "$unit_tmp" "$unit_target"; then
+        print_error "Falha ao publicar a unit do ${STACK_NAME} (mv -T)."
+        rm -f "$unit_tmp"
+        return 1
+    fi
 
     systemctl daemon-reload
     # Habilitacao bloqueante (CR-25): falha aqui e falha da instalacao (o
@@ -396,19 +556,21 @@ run_stack_install() {
         STACK_SERVER_DIR_PREEXISTED=false
     fi
 
-    # Save prior EXIT trap state and install ours.
-    # Only track existence (not content) to avoid eval on captured trap strings.
-    local _had_prev_trap_exit=false
-    if [ -n "$(trap -p EXIT 2>/dev/null || true)" ]; then
-        _had_prev_trap_exit=true
-    fi
+    # (CR-21) O trap do common.sh (_crias_cleanup_temps) NAO pode ser
+    # descartado: esta funcao o substitui pelo rollback e, no sucesso,
+    # removia tudo com `trap - EXIT` — temporarios registrados vazavam em
+    # /tmp. Composicao: rollback (se falha) + limpeza de temporarios SEMPRE.
+    trap 'if [ "${STACK_INSTALL_SUCCEEDED:-false}" != "true" ]; then rollback_stack_install; fi; if declare -F _crias_cleanup_temps >/dev/null 2>&1; then _crias_cleanup_temps; fi' EXIT
 
-    trap 'if [ "${STACK_INSTALL_SUCCEEDED:-false}" != "true" ]; then rollback_stack_install; fi' EXIT
-
-    # Snapshot dos artefatos preexistentes (CR-08): captura ANTES de qualquer
-    # fase modificar o diretorio/unit, para o rollback poder restaurar.
+    # Snapshot dos artefatos preexistentes (CR-04): captura ANTES de qualquer
+    # fase modificar o diretorio/unit. Falha no snapshot de artefato
+    # preexistente ABORTA a instalacao (fail-closed) — sem foto integra nao
+    # existe rollback confiavel.
     if ! dry_run_enabled; then
-        snapshot_stack_artifacts
+        if ! snapshot_stack_artifacts; then
+            print_error "Snapshot pre-instalacao falhou; abortando sem modificar o sistema."
+            return 1
+        fi
     fi
 
     # Stack-specific validation hook (inputs, EULA, etc.).
@@ -474,13 +636,25 @@ run_stack_install() {
     # 9. Tuning de host (com skip em VPS/container)
     apply_stack_system_tuning
 
+    # 10. Finalizacao do stack (CR-17): modo strict pode transformar
+    # pendencias (mods que falharam) em falha da instalacao — ANTES de
+    # marcar sucesso, para o EXIT trap rodar o rollback.
+    if declare -F stack_install_finalize >/dev/null 2>&1; then
+        if ! stack_install_finalize; then
+            print_error "Finalizacao do stack ${STACK_NAME} falhou; acionando rollback."
+            return 1
+        fi
+    fi
+
     STACK_INSTALL_SUCCEEDED=true
     print_success "${STACK_NAME^^} instalado com sucesso em $STACK_SERVER_DIR"
 
-    # Clear our EXIT trap. Caller must reset prior trap explicitly if needed.
-    trap - EXIT
-    if [ "$_had_prev_trap_exit" = "true" ]; then
-        print_warning "Trap EXIT pré-existente foi removido por run_stack_install; reconfigure explicitamente se necessário."
+    # (CR-21) Reinstala o trap de limpeza de temporarios do common.sh em vez
+    # de remover todo o tratamento EXIT.
+    if declare -F _crias_cleanup_temps >/dev/null 2>&1; then
+        trap _crias_cleanup_temps EXIT
+    else
+        trap - EXIT
     fi
 
     # Sucesso: o snapshot pre-instalacao nao e mais necessario (so o rollback

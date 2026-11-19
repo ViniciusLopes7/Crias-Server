@@ -90,12 +90,12 @@ Após mudança de hardware (mais RAM, troca de disco, etc.) sem reinstalar:
 
 ```bash
 # Detectar novo hardware e reaplicar tuning
-sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware
-sudo /opt/terraria-server/tt-manager.sh reconfigure-hardware
+sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware
+sudo /usr/local/libexec/crias/tt-manager.sh reconfigure-hardware
 
 # Forçar tier específico
-sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware HIGH
-sudo /opt/terraria-server/tt-manager.sh reconfigure-hardware LOW
+sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware HIGH
+sudo /usr/local/libexec/crias/tt-manager.sh reconfigure-hardware LOW
 
 # Reiniciar para aplicar no runtime
 sudo systemctl restart minecraft

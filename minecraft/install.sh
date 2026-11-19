@@ -49,11 +49,31 @@ MINECRAFT_MODPACK_SOURCE="${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
 MINECRAFT_MODPACK_SLUG="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
 # mrpack-install version pin.
 MRPACK_INSTALL_VERSION="${MRPACK_INSTALL_VERSION:-v0.23.0}"
+# (CR-17) strict: pendencias de mods transformam-se em falha da instalacao.
+MINECRAFT_MODS_STRICT="${MINECRAFT_MODS_STRICT:-false}"
 FORCE_HARDWARE_TIER="${FORCE_HARDWARE_TIER:-}"
 APPLY_SYSTEM_TUNING="${APPLY_SYSTEM_TUNING:-true}"
 DRY_RUN="${DRY_RUN:-false}"
 MINECRAFT_SERVER_DIR_PREEXISTED="${MINECRAFT_SERVER_DIR_PREEXISTED:-false}"
 MINECRAFT_INSTALL_SUCCEEDED="${MINECRAFT_INSTALL_SUCCEEDED:-false}"
+
+# ---------------------------------------------------------------------------
+# (CR-18) "Sem modpack" = servidor base LIMPO: a escolha explicita de
+# MINECRAFT_INSTALL_MODPACK=false desliga QoL e extras — antes a flag so
+# pulava a base e os hooks seguintes instalavam mods de qualquer jeito,
+# contradizendo a leitura de "servidor apenas base". Para loader+mods SEM
+# modpack, use MINECRAFT_MODPACK_SOURCE=vanilla com INSTALL_MODPACK=true.
+# ---------------------------------------------------------------------------
+if ! is_true "$MINECRAFT_INSTALL_MODPACK"; then
+    if is_true "$MINECRAFT_INSTALL_QOL_MODS"; then
+        print_step "MINECRAFT_INSTALL_MODPACK=false: mods QoL desativados (servidor base limpo — CR-18)."
+        MINECRAFT_INSTALL_QOL_MODS="false"
+    fi
+    if [ -n "${MINECRAFT_EXTRA_MODS:-}" ]; then
+        print_step "MINECRAFT_INSTALL_MODPACK=false: mods extras desativados (servidor base limpo — CR-18)."
+        MINECRAFT_EXTRA_MODS=""
+    fi
+fi
 
 # ---------------------------------------------------------------------------
 # stack-installer framework config. Variables read by shared/lib/stack-installer.sh.
@@ -63,10 +83,16 @@ STACK_NAME="minecraft"
 STACK_USER="$MINECRAFT_USER"
 STACK_SERVER_DIR="$MINECRAFT_SERVER_DIR"
 STACK_SERVICE_TEMPLATE="$MODULE_DIR/minecraft.service"
+# (EXP-34) Scripts de RUNTIME ficam no diretorio do jogo (executam com o
+# privilegio do proprio jogo). Scripts ADMINISTRATIVOS (manager, setup-cron —
+# executados via sudo/root) vao para /usr/local/libexec/crias via
+# STACK_ADMIN_SCRIPTS; nunca mais no diretorio gravavel pelo jogo.
 STACK_RUNTIME_SCRIPTS=(
     "$MODULE_DIR/start-server.sh"
-    "$MODULE_DIR/mc-manager.sh"
     "$MODULE_DIR/backup-cron.sh"
+)
+STACK_ADMIN_SCRIPTS=(
+    "$MODULE_DIR/mc-manager.sh"
     "$MODULE_DIR/setup-cron.sh"
 )
 STACK_SHARED_LIBS=(
@@ -161,8 +187,15 @@ stack_install_dependencies() {
     fi
 
     print_step "Instalando dependencias do Minecraft..."
+
+    # (EXP-36) Java exigido pela versao do jogo: MC 26.x exige Java 25
+    # (anuncio oficial da Mojang para 26.1+); o pin anterior (jdk21) fazia o
+    # servidor padrao (26.3) falhar no boot com UnsupportedClassVersionError.
+    MINECRAFT_JAVA_MAJOR="$(required_java_major "$MINECRAFT_VERSION")"
+    local jdk_pkg="jdk${MINECRAFT_JAVA_MAJOR}-openjdk"
+    print_step "Java exigido para MC $MINECRAFT_VERSION: $MINECRAFT_JAVA_MAJOR ($jdk_pkg)"
     pacman -S --needed --noconfirm \
-        jdk21-openjdk \
+        "$jdk_pkg" \
         htop \
         iotop-c \
         nano \
@@ -188,10 +221,20 @@ install_mrpack_install() {
 
     print_step "Instalando mrpack-install (versao pinada: $MRPACK_INSTALL_VERSION)..."
 
+    # (EXP-41) O pin MRPACK_INSTALL_VERSION e um CONTRATO de CLI: so usa o
+    # pacote do repositorio se a versao BATER com o pin. Versao divergente no
+    # repo (atrasada/adiantada) pode ter CLI incompativel — nesse caso instala
+    # o .pkg.tar.zst da release pinada.
     if pacman -Si mrpack-install >/dev/null 2>&1; then
-        print_step "Pacote mrpack-install encontrado no repositorio. Instalando via pacman..."
-        pacman -S --needed --noconfirm mrpack-install
-        return 0
+        local repo_ver
+        repo_ver="$(pacman -Si mrpack-install 2>/dev/null | awk -F': ' '/^Version/{print $2; exit}')"
+        if [ "${repo_ver%%-*}" = "${MRPACK_INSTALL_VERSION#v}" ]; then
+            print_step "Pacote mrpack-install $repo_ver (bate com o pin). Instalando via pacman..."
+            pacman -S --needed --noconfirm mrpack-install
+            _verify_mrpack_version
+            return 0
+        fi
+        print_warning "mrpack-install do repo ($repo_ver) diverge do pin $MRPACK_INSTALL_VERSION; instalando versao pinada."
     fi
 
     local arch_pkg_url="https://github.com/nothub/mrpack-install/releases/download/${MRPACK_INSTALL_VERSION}/mrpack-install_${MRPACK_INSTALL_VERSION#v}_linux_amd64.pkg.tar.zst"
@@ -213,6 +256,23 @@ install_mrpack_install() {
     exit 1
 }
 
+# (EXP-41) Confere a versao do binario instalado contra o pin. Falhar aqui e
+# falhar a instalacao: CLI divergente do pin quebraria os comandos seguintes.
+_verify_mrpack_version() {
+    local installed_ver
+    installed_ver="$(mrpack-install version 2>/dev/null || mrpack-install --version 2>/dev/null || true)"
+    if [ -z "$installed_ver" ]; then
+        print_warning "Nao foi possivel consultar a versao do mrpack-install (comando version ausente?)."
+        return 0
+    fi
+    if ! printf '%s' "$installed_ver" | grep -Fq "${MRPACK_INSTALL_VERSION#v}"; then
+        print_error "mrpack-install instalado ($installed_ver) diverge do pin $MRPACK_INSTALL_VERSION."
+        print_error "Corrija MRPACK_INSTALL_VERSION em config.env ou remova o pacote divergente."
+        exit 1
+    fi
+    print_step "mrpack-install $installed_ver confere com o pin."
+}
+
 stack_download_and_install() {
     print_step "Instalando base do servidor Minecraft..."
 
@@ -231,18 +291,27 @@ stack_download_and_install() {
     # modpack da fonte selecionada era instalado de qualquer jeito.
     if ! is_true "$MINECRAFT_INSTALL_MODPACK"; then
         print_step "MINECRAFT_INSTALL_MODPACK=false: instalando apenas o servidor base (sem modpack)."
-        timeout 300 mrpack-install "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
+        _install_minecraft_server_base
         echo "eula=true" > "$MINECRAFT_SERVER_DIR/eula.txt"
         return 0
     fi
 
     # Modpack source selectable via config.
+    # (AUDIT-B N7) O nome do server-file deriva do loader em TODOS os ramos:
+    # Quilt usa mc.jar (o launcher interno do Quilt ocupa server.jar) —
+    # valendo tambem para packs quilt via source=modrinth.
+    local modpack_server_file="server.jar"
+    if [ "$MINECRAFT_LOADER" = "quilt" ]; then
+        modpack_server_file="mc.jar"
+    fi
+    MINECRAFT_SERVER_FILE="$modpack_server_file"
+
     case "$MINECRAFT_MODPACK_SOURCE" in
         adrenaline)
             if [ -n "$MINECRAFT_ADRENALINE_VERSION" ]; then
-                timeout 300 mrpack-install adrenaline "$MINECRAFT_ADRENALINE_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
+                timeout 300 mrpack-install adrenaline "$MINECRAFT_ADRENALINE_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
             else
-                timeout 300 mrpack-install adrenaline --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
+                timeout 300 mrpack-install adrenaline --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
             fi
             ;;
         modrinth)
@@ -253,13 +322,13 @@ stack_download_and_install() {
             # "mrpack-install <slug> [version]").
             local slug="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
             if [ -n "${MINECRAFT_ADRENALINE_VERSION:-}" ]; then
-                timeout 300 mrpack-install "$slug" "$MINECRAFT_ADRENALINE_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
+                timeout 300 mrpack-install "$slug" "$MINECRAFT_ADRENALINE_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
             else
-                timeout 300 mrpack-install "$slug" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
+                timeout 300 mrpack-install "$slug" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
             fi
             ;;
         vanilla)
-            timeout 300 mrpack-install "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
+            _install_minecraft_server_base
             ;;
         *)
             print_error "MINECRAFT_MODPACK_SOURCE invalido: $MINECRAFT_MODPACK_SOURCE (use: adrenaline, modrinth, vanilla)"
@@ -267,12 +336,124 @@ stack_download_and_install() {
             ;;
     esac
 
+    # (EXP-42 / AUDIT-B N4) Versao efetiva do jogo/loader: SOMENTE nos ramos
+    # de MODPACK (adrenaline/modrinth) — o mrpack-install escolhe a versao do
+    # PACK, que pode divergir da MINECRAFT_VERSION configurada. No ramo
+    # vanilla/no-modpack a base instalada E a versao configurada; consultar o
+    # slug default aqui sobrescreveria a versao correta com a do adrenaline.
+    if [ "$MINECRAFT_MODPACK_SOURCE" = "adrenaline" ] || [ "$MINECRAFT_MODPACK_SOURCE" = "modrinth" ]; then
+        _resolve_modpack_effective_versions
+        _reconcile_effective_java
+    fi
+
     echo "eula=true" > "$MINECRAFT_SERVER_DIR/eula.txt"
 }
+
+# (EXP-37/39) Instalacao do servidor base via subcomando `server` da CLI
+# v0.23.0: `mrpack-install server <loader> --minecraft-version <versao>`.
+# A forma antiga (`mrpack-install <loader> <versao>`) tratava o loader como
+# NOME DE MODPACK e falhava ou instalava o pack errado. Quilt usa
+# --server-file mc.jar: o launcher do Quilt ocupa server.jar internamente.
+_install_minecraft_server_base() {
+    local server_file="server.jar"
+    if [ "$MINECRAFT_LOADER" = "quilt" ]; then
+        server_file="mc.jar"
+    fi
+    timeout 300 mrpack-install server "$MINECRAFT_LOADER" \
+        --minecraft-version "$MINECRAFT_VERSION" \
+        --server-dir "$MINECRAFT_SERVER_DIR" \
+        --server-file "$server_file"
+    MINECRAFT_SERVER_FILE="$server_file"
+}
+
+# (AUDIT-B N5) A versao EFETIVA do pack alimenta o JDK e o runtime.env: se o
+# pack mira MC diferente da configurada (ex.: pack 26.x com config 1.21.1), o
+# jdk21 instalado pela versao configurada nao subiria o servidor
+# (UnsupportedClassVersionError — ressuscitaria o EXP-36 justamente no
+# cenario de divergencia). Instala o JDK exigido pela versao efetiva e
+# promove a efetiva a versao oficial do runtime.
+_reconcile_effective_java() {
+    if [ -z "${MC_EFFECTIVE_VERSION:-}" ] || [ "$MC_EFFECTIVE_VERSION" = "$MINECRAFT_VERSION" ]; then
+        return 0
+    fi
+    local required_major
+    required_major="$(required_java_major "$MC_EFFECTIVE_VERSION")"
+    if [ "$required_major" != "$MINECRAFT_JAVA_MAJOR" ]; then
+        print_warning "Pack mira MC $MC_EFFECTIVE_VERSION (Java $required_major); instalando jdk${required_major}-openjdk (configurado era $MINECRAFT_VERSION/Java $MINECRAFT_JAVA_MAJOR)."
+        if ! pacman -S --needed --noconfirm "jdk${required_major}-openjdk"; then
+            print_error "Falha ao instalar jdk${required_major}-openjdk exigido pelo modpack."
+            exit 1
+        fi
+        MINECRAFT_JAVA_MAJOR="$required_major"
+    fi
+    # A versao efetiva vira a versao oficial do servidor: runtime.env,
+    # start-server (validacao Java) e resumos passam a usa-la.
+    print_warning "MINECRAFT_VERSION promovida para a versao do pack: $MC_EFFECTIVE_VERSION."
+    MINECRAFT_VERSION="$MC_EFFECTIVE_VERSION"
+}
+
+# (EXP-42) Consulta a API do Modrinth pelo pack instalado e extrai a versao
+# real do jogo e o loader. Best-effort: sem rede/API a configuracao original
+# prevalece com aviso (o download do pack em si ja teria falhado antes).
+_resolve_modpack_effective_versions() {
+    MC_EFFECTIVE_VERSION="${MINECRAFT_VERSION}"
+    MC_EFFECTIVE_LOADER="${MINECRAFT_LOADER}"
+
+    local slug="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
+    local pack_version="${MINECRAFT_ADRENALINE_VERSION:-}"
+
+    command -v curl >/dev/null 2>&1 || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+
+    local resp
+    resp="$(curl -fsSL --connect-timeout 10 --max-time 30 \
+        "https://api.modrinth.com/v2/project/$slug/version" 2>/dev/null || true)"
+    [ -z "$resp" ] && return 0
+
+    local ver_json
+    ver_json="$(printf '%s' "$resp" | jq -c --arg v "$pack_version" '
+        if $v != "" then (map(select(.version_number == $v)) | .[0]) else .[0] end
+        | select(. != null) | {game_versions: .game_versions, loaders: .loaders}
+    ' 2>/dev/null || true)"
+    [ -z "$ver_json" ] || [ "$ver_json" = "null" ] && return 0
+
+    local eff_game eff_loader
+    eff_game="$(printf '%s' "$ver_json" | jq -r '.game_versions[-1] // empty' 2>/dev/null || true)"
+    eff_loader="$(printf '%s' "$ver_json" | jq -r '.loaders[0] // empty' 2>/dev/null || true)"
+
+    if [ -n "$eff_game" ] && [ "$eff_game" != "$MINECRAFT_VERSION" ]; then
+        print_warning "Modpack '$slug' mira MC $eff_game (configurado: $MINECRAFT_VERSION)."
+        print_warning "Mods QoL/extras usarao a versao do pack: $eff_game (EXP-42)."
+        MC_EFFECTIVE_VERSION="$eff_game"
+    fi
+    if [ -n "$eff_loader" ] && [ "$eff_loader" != "$MINECRAFT_LOADER" ]; then
+        print_warning "Modpack '$slug' usa loader '$eff_loader' (configurado: $MINECRAFT_LOADER) — verifique compatibilidade."
+        MC_EFFECTIVE_LOADER="$eff_loader"
+    fi
+}
+
+# (CR-17) Pendencias coletadas pelos hooks de mods; o modo strict decide o
+# que fazer com elas no final (stack_install_finalize).
+MINECRAFT_PENDING_MODS=()
 
 # QoL mods via CSV in config.env (MINECRAFT_QOL_MODS).
 stack_install_qol_mods() {
     install_minecraft_qol_mods
+}
+
+# (CR-17) Politica strict: com MINECRAFT_MODS_STRICT=true, mods pendentes
+# transformam a instalacao em FALHA (o stack-installer aciona o rollback).
+# Default (false) mantem o contrato best-effort com relatorio de pendencias.
+stack_install_finalize() {
+    if [ "${#MINECRAFT_PENDING_MODS[@]}" -gt 0 ]; then
+        print_warning "RESUMO — mods pendentes (${#MINECRAFT_PENDING_MODS[@]}): ${MINECRAFT_PENDING_MODS[*]}"
+        if is_true "$MINECRAFT_MODS_STRICT"; then
+            print_error "MINECRAFT_MODS_STRICT=true e ha mods pendentes; instalacao considerada FALHA (CR-17)."
+            return 1
+        fi
+        print_warning "MINECRAFT_MODS_STRICT=false: instalacao concluida em modo best-effort."
+    fi
+    return 0
 }
 
 # Mods individuais do usuário (MINECRAFT_EXTRA_MODS, CSV de slugs Modrinth),
@@ -319,7 +500,9 @@ stack_install_extra_mods() {
 
         # CR-21: falha nao mata a instalacao (best-effort), mas entra no
         # relatorio de pendencias em vez de passar em silencio.
-        if ! download_modrinth_mod "$slug" "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" "$MINECRAFT_SERVER_DIR/mods" "$slug"; then
+        # (EXP-42) downloads seguem a versao EFETIVA (pack pode divergir da
+        # configurada).
+        if ! download_modrinth_mod "$slug" "$MINECRAFT_LOADER" "${MC_EFFECTIVE_VERSION:-$MINECRAFT_VERSION}" "$MINECRAFT_SERVER_DIR/mods" "$slug"; then
             pending_mods+=("$slug")
         fi
     done
@@ -328,6 +511,7 @@ stack_install_extra_mods() {
     if [ "${#pending_mods[@]}" -gt 0 ]; then
         print_warning "Mods extras PENDENTES (download falhou): ${pending_mods[*]}"
         print_warning "Instale manualmente em $MINECRAFT_SERVER_DIR/mods/ ou reexecute o installer."
+        MINECRAFT_PENDING_MODS+=("${pending_mods[@]}")
     fi
 }
 
@@ -397,6 +581,7 @@ install_minecraft_qol_mods() {
     if [ "${#pending_qol[@]}" -gt 0 ]; then
         print_warning "Mods QoL PENDENTES (download falhou): ${pending_qol[*]}"
         print_warning "Instale manualmente em $MINECRAFT_SERVER_DIR/mods/ ou reexecute o installer."
+        MINECRAFT_PENDING_MODS+=("${pending_qol[@]}")
     fi
 }
 
@@ -411,8 +596,8 @@ download_qol_mod() {
     mod_sha_var="MOD_${file_name_norm^^}_SHA256"
 
     # CR-21: propaga a falha (o caller coleta pendencias); o warning
-    # especifico ja foi emitido dentro do helper.
-    if ! download_modrinth_mod "$slug" "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" "$MINECRAFT_SERVER_DIR/mods" "$file_name" "$mod_sha_var"; then
+    # especifico ja foi emitido dentro do helper. (EXP-42) versao efetiva.
+    if ! download_modrinth_mod "$slug" "$MINECRAFT_LOADER" "${MC_EFFECTIVE_VERSION:-$MINECRAFT_VERSION}" "$MINECRAFT_SERVER_DIR/mods" "$file_name" "$mod_sha_var"; then
         return 1
     fi
     return 0
@@ -529,35 +714,43 @@ stack_deploy_extra_assets() {
     fi
 }
 
+# (EXP-33/34) comandos.sh fica no diretorio do jogo como conveniencia para
+# o usuario do jogo — NINGUEM com privilegio faz source dele (o profile.d
+# recebe aliases estaticos gerados pelo install.sh). Os aliases apontam para
+# o manager root:root em /usr/local/libexec/crias.
 stack_generate_aliases() {
     cat << EOF
 #!/bin/bash
 # Generated by Crias-Server installer - do not edit manually
-## Generated aliases for Minecraft
+# Aliases de conveniencia. O perfil global (/etc/profile.d/crias-server.sh)
+# tem versao estatica destes mesmos aliases.
 alias mcstart='sudo systemctl start minecraft'
 alias mcstop='sudo systemctl stop minecraft'
 alias mcrestart='sudo systemctl restart minecraft'
-# Prefer concise status via manager for clarity
-alias mcstatus='sudo $MINECRAFT_SERVER_DIR/mc-manager.sh status'
+alias mcstatus='sudo /usr/local/libexec/crias/mc-manager.sh status'
 alias mclogs='sudo journalctl -u minecraft -f'
-# Run manager commands directly as the server user
-alias mcconsole='sudo $MINECRAFT_SERVER_DIR/mc-manager.sh console'
-alias mcbackup='sudo $MINECRAFT_SERVER_DIR/mc-manager.sh backup'
-alias mcsetupcron='sudo $MINECRAFT_SERVER_DIR/mc-manager.sh setup-cron'
+alias mcconsole='sudo /usr/local/libexec/crias/mc-manager.sh console'
+alias mcbackup='sudo /usr/local/libexec/crias/mc-manager.sh backup'
+alias mcsetupcron='sudo /usr/local/libexec/crias/mc-manager.sh setup-cron'
 alias mcdir='cd $MINECRAFT_SERVER_DIR'
 alias mcprops='sudo nano $MINECRAFT_SERVER_DIR/server.properties'
-alias mchw='sudo $MINECRAFT_SERVER_DIR/mc-manager.sh hardware-report'
-alias mcreconfig='sudo $MINECRAFT_SERVER_DIR/mc-manager.sh reconfigure-hardware'
+alias mchw='sudo /usr/local/libexec/crias/mc-manager.sh hardware-report'
+alias mcreconfig='sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware'
 EOF
 }
 
-# Artefatos criados apenas pelo installer que o rollback pode remover.
-# Scripts/unit/runtime.env ficam fora: sao restaurados via snapshot (CR-08).
-# mods/ NUNCA entra aqui: pode conter mods do usuario (MINECRAFT_EXTRA_MODS).
-stack_rollback_extra_files() {
+# (CR-04) Extras que o installer sobrescreve e o snapshot precisa fotografar
+# em reinstalacoes: config do servidor, jar do servidor, icone e EULA. O
+# rollback do stack-installer restaura/remova conforme o manifesto — nao
+# existe mais lista cega de remocao (o bug antigo apagava eula.txt e icone
+# pre-existentes mesmo em reinstalacao).
+stack_snapshot_extra_paths() {
     cat << EOF
 $MINECRAFT_SERVER_DIR/server-icon.png
 $MINECRAFT_SERVER_DIR/eula.txt
+$MINECRAFT_SERVER_DIR/server.properties
+$MINECRAFT_SERVER_DIR/server.jar
+$MINECRAFT_SERVER_DIR/mc.jar
 EOF
 }
 

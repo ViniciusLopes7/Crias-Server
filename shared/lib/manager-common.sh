@@ -28,6 +28,60 @@ manager_resolve_self() {
     fi
 }
 
+# (EXP-34) Um caminho e seguro para execuicao como root quando: pertence a
+# root:root E nao e gravavel por grupo/outros. Retorno: 0=seguro, 1=inseguro.
+manager_path_is_root_safe() {
+    local path="$1"
+    # (AUDIT-A P3-8) Resolve symlinks ANTES do stat: um symlink tem modo
+    # sempre 0777 e o stat sem -L rejeitaria qualquer manager invocado via
+    # link de conveniencia (ex.: /usr/local/bin/mc-manager). O ALVO e o que
+    # importa para a seguranca.
+    local resolved="$path"
+    if command -v readlink >/dev/null 2>&1; then
+        resolved="$(readlink -f "$path" 2>/dev/null || echo "$path")"
+    fi
+    local stat_out
+    stat_out="$(stat -c '%U:%G %a' "$resolved" 2>/dev/null)" || return 1
+    local owner="${stat_out%% *}"
+    local perms="${stat_out##* }"
+    if [ "$owner" != "root:root" ]; then
+        return 1
+    fi
+    # group-write (g+w) ou other-write (o+w) => inseguro.
+    if [ "$(( 8#${perms} & 8#022 ))" -ne 0 ]; then
+        return 1
+    fi
+    return 0
+}
+
+# (EXP-34) Guarda de escalada: recusa executar como root qualquer manager ou
+# lib que seja gravavel por nao-root. O jogo (usuario minecraft/terraria)
+# escreve no diretorio do servidor; se os scripts administrativos vivessem
+# la, um jogo comprometido ganharia execução arbitrária como root no proximo
+# `sudo <manager>`. Bypass explicito para desenvolvimento:
+# CRIS_MANAGER_ALLOW_UNSAFE=1 (nao use em producao).
+manager_assert_root_safe() {
+    if [ "$(id -u)" -ne 0 ]; then
+        return 0
+    fi
+    if [ "${CRIS_MANAGER_ALLOW_UNSAFE:-}" = "1" ]; then
+        echo "[AVISO] CRIS_MANAGER_ALLOW_UNSAFE=1: verificação de ownership desativada (apenas desenvolvimento)." >&2
+        return 0
+    fi
+    local path
+    for path in "$@"; do
+        [ -n "$path" ] || continue
+        [ -e "$path" ] || continue
+        if ! manager_path_is_root_safe "$path"; then
+            echo "[ERRO] Recusa de execução como root: '$path' não é root:root ou é gravável por grupo/outros." >&2
+            echo "[ERRO] Managers/libs administrativos devem vir de /usr/local/libexec/crias (instalador) — nunca do diretório do jogo." >&2
+            echo "[ERRO] Desenvolvimento: CRIS_MANAGER_ALLOW_UNSAFE=1 desativa esta verificação." >&2
+            return 1
+        fi
+    done
+    return 0
+}
+
 manager_need_root() {
     local self_path="$1"
     shift || true

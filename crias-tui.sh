@@ -21,10 +21,25 @@ else
     CYAN=''; GREEN=''; YELLOW=''; NC=''
 fi
 
+# (AUDIT-A P2-4) Deteccao via systemd units + manager no libexec: as copias
+# em /opt/<stack>-server/ foram REMOVIDAS pela migracao EXP-34 (eram
+# gravaveis pelo usuario do jogo) — o TUI nao detectava mais nenhum stack.
 detect_stack() {
-    if [ -d /opt/minecraft-server ] && [ -f /opt/minecraft-server/mc-manager.sh ]; then
+    local manager_dir="/usr/local/libexec/crias"
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl list-unit-files 2>/dev/null | grep -Fq "minecraft.service"; then
+            echo "minecraft"
+            return 0
+        fi
+        if systemctl list-unit-files 2>/dev/null | grep -Fq "terraria.service"; then
+            echo "terraria"
+            return 0
+        fi
+    fi
+    # Fallback sem systemd: manager presente no libexec.
+    if [ -x "$manager_dir/mc-manager.sh" ]; then
         echo "minecraft"
-    elif [ -d /opt/terraria-server ] && [ -f /opt/terraria-server/tt-manager.sh ]; then
+    elif [ -x "$manager_dir/tt-manager.sh" ]; then
         echo "terraria"
     else
         echo ""
@@ -34,9 +49,9 @@ detect_stack() {
 get_manager_script() {
     local stack="$1"
     if [ "$stack" = "minecraft" ]; then
-        echo "/opt/minecraft-server/mc-manager.sh"
+        echo "/usr/local/libexec/crias/mc-manager.sh"
     elif [ "$stack" = "terraria" ]; then
-        echo "/opt/terraria-server/tt-manager.sh"
+        echo "/usr/local/libexec/crias/tt-manager.sh"
     else
         echo ""
     fi

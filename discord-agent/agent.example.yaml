@@ -26,7 +26,7 @@ agent:
 server:
   stack: "minecraft"  # "minecraft" | "terraria"
   service_name: "minecraft"
-  manager_script: "/opt/minecraft-server/mc-manager.sh"
+  manager_script: "/usr/local/libexec/crias/mc-manager.sh"
   server_dir: "/opt/minecraft-server"
   server_port: 25565  # porta do servidor de jogo (25565 MC, 7777 TT) — usado em /mc health
   hardware_tier: "HIGH"  # LOW/MID/HIGH — replicado do install.sh para /mc status
@@ -45,3 +45,9 @@ features:
   health_check:
     interval_seconds: 300  # 5 min
     passive: true  # só notifica, não reinicia automaticamente
+  console:
+    # EXP-47: tempo máximo de vida de cada sessão /mc console (StreamConsole).
+    # Ao expirar, o agente emite a linha "[crias-agent] console stream deadline
+    # reached (Ns); reconnect to continue" e fecha o stream — o bot reconecta
+    # automaticamente. Default 300 (5 min); range válido 60–86400.
+    stream_deadline_seconds: 300

@@ -80,7 +80,7 @@ agent:
 server:
   stack: "minecraft"              # ou "terraria"
   service_name: "minecraft"
-  manager_script: "/opt/minecraft-server/mc-manager.sh"
+  manager_script: "/usr/local/libexec/crias/mc-manager.sh"
   server_dir: "/opt/minecraft-server"
   rcon:
     enabled: true
@@ -112,13 +112,13 @@ crias-agent ALL=(root) NOPASSWD: /usr/bin/systemctl start minecraft, \
                                    /usr/bin/systemctl status minecraft, \
                                    /usr/bin/systemctl is-active minecraft
 crias-agent ALL=(minecraft) NOPASSWD: /opt/minecraft-server/backup-cron.sh, \
-                                      /opt/minecraft-server/mc-manager.sh start, \
-                                      /opt/minecraft-server/mc-manager.sh stop, \
-                                      /opt/minecraft-server/mc-manager.sh restart, \
-                                      /opt/minecraft-server/mc-manager.sh status, \
-                                      /opt/minecraft-server/mc-manager.sh backup, \
-                                      /opt/minecraft-server/mc-manager.sh health, \
-                                      /opt/minecraft-server/mc-manager.sh hardware-report
+                                      /usr/local/libexec/crias/mc-manager.sh start, \
+                                      /usr/local/libexec/crias/mc-manager.sh stop, \
+                                      /usr/local/libexec/crias/mc-manager.sh restart, \
+                                      /usr/local/libexec/crias/mc-manager.sh status, \
+                                      /usr/local/libexec/crias/mc-manager.sh backup, \
+                                      /usr/local/libexec/crias/mc-manager.sh health, \
+                                      /usr/local/libexec/crias/mc-manager.sh hardware-report
 ```
 
 Gerado automaticamente pelo `install.sh` quando `INSTALL_AGENT=true`.

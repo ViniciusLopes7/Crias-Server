@@ -6,8 +6,8 @@ Documentação específica do stack Minecraft. Para visão geral, veja [../READM
 
 | Arquivo | Função |
 |---------|--------|
-| `/opt/minecraft-server/start-server.sh` | Launcher runtime (JAVA_OPTS como array, valida Java 21+) |
-| `/opt/minecraft-server/mc-manager.sh` | CLI de gerenciamento (start/stop/status/console/backup/health/...) |
+| `/opt/minecraft-server/start-server.sh` | Launcher runtime (JAVA_OPTS como array; valida o Java exigido pela versão do jogo: 25 p/ 26.x, 21 p/ 1.20.5–1.21.x) |
+| `/usr/local/libexec/crias/mc-manager.sh` | CLI de gerenciamento (start/stop/status/console/backup/health/...) — root:root, fora da árvore gravável pelo jogo (EXP-34) |
 | `/opt/minecraft-server/backup-cron.sh` | Backup com RCON save-lock + zstd + flock |
 | `/opt/minecraft-server/setup-cron.sh` | Configura timer systemd de backup |
 | `/opt/minecraft-server/minecraft.service` | Unit systemd (gerada via envsubst com hardening) |
@@ -26,13 +26,13 @@ sudo systemctl start minecraft                              # iniciar
 sudo systemctl stop minecraft                               # parar (graceful)
 sudo systemctl restart minecraft                            # reiniciar
 sudo systemctl status minecraft                             # status systemd
-sudo /opt/minecraft-server/mc-manager.sh status             # status + hardware
-sudo /opt/minecraft-server/mc-manager.sh console            # console RCON interativo
-sudo /opt/minecraft-server/mc-manager.sh backup             # backup imediato
-sudo /opt/minecraft-server/mc-manager.sh health             # porta + RCON
-sudo /opt/minecraft-server/mc-manager.sh hardware-report    # perfil aplicado
-sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware        # recalibrar tier
-sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware HIGH   # forçar tier
+sudo /usr/local/libexec/crias/mc-manager.sh status             # status + hardware
+sudo /usr/local/libexec/crias/mc-manager.sh console            # console RCON interativo
+sudo /usr/local/libexec/crias/mc-manager.sh backup             # backup imediato
+sudo /usr/local/libexec/crias/mc-manager.sh health             # porta + RCON
+sudo /usr/local/libexec/crias/mc-manager.sh hardware-report    # perfil aplicado
+sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware        # recalibrar tier
+sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware HIGH   # forçar tier
 sudo /opt/minecraft-server/setup-cron.sh                    # configurar timer de backup
 ```
 
@@ -85,7 +85,14 @@ Para garantir backups consistentes com servidor online, o `backup-cron.sh` usa R
 
 ### Pré-requisitos: mcrcon
 
-`mcrcon` não está nos repositórios oficiais do Arch Linux. Instale via AUR:
+`mcrcon` não está nos repositórios oficiais do Arch Linux. Instale via AUR.
+
+> **Backup consistente (CR-06):** por padrão o backup roda best-effort —
+> sem `mcrcon`/RCON ele avisa e copia o mundo sem `save-off`/`save-all`.
+> Para EXIGIR consistência (abortar sem RCON), sete
+> `BACKUP_REQUIRE_CONSISTENT=true` no `config.env`. A instalação do agente
+> Discord também oferece ativar o RCON com senha forte automaticamente
+> (EXP-43).
 
 ```bash
 yay -S mcrcon
@@ -160,7 +167,7 @@ grep MINECRAFT_QOL_MODS config.env
 
 ```bash
 sudo journalctl -u minecraft -n 50 --no-pager
-sudo /opt/minecraft-server/mc-manager.sh health
+sudo /usr/local/libexec/crias/mc-manager.sh health
 ```
 
 Causas comuns:
@@ -173,7 +180,7 @@ Causas comuns:
 Heap está em `/opt/minecraft-server/runtime.env` (`MIN_RAM`, `MAX_RAM`). Reduza via `reconfigure-hardware`:
 
 ```bash
-sudo /opt/minecraft-server/mc-manager.sh reconfigure-hardware LOW
+sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware LOW
 sudo systemctl restart minecraft
 ```
 
@@ -181,7 +188,7 @@ sudo systemctl restart minecraft
 
 ```bash
 # Verificar se RCON está respondendo
-sudo /opt/minecraft-server/mc-manager.sh health
+sudo /usr/local/libexec/crias/mc-manager.sh health
 
 # Verificar último backup
 ls -lh /opt/minecraft-server/backups/

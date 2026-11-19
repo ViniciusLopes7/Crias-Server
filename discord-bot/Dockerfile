@@ -80,8 +80,13 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Run as non-root user.
 USER crias
 
-# Healthcheck simples: tenta importar grpc e discord (valida venv + PYTHONPATH).
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import grpc, discord; print('ok')" || exit 1
+# CR-22: healthcheck real — o bot escreve /tmp/crias-bot-heartbeat a cada 30s
+# (tarefa heartbeat em bot.py, só quando logado no gateway); o script valida
+# que o arquivo está fresco (<120s), provando que o bot está rodando e o
+# event loop vivo — não apenas que os imports funcionam.
+# Nota: o módulo vive em src/crias_bot/healthcheck.py (copiado via /app/src)
+# e usa apenas stdlib, sem dependência de discord/grpc.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD ["python", "-m", "crias_bot.healthcheck"]
 
 CMD ["python", "-m", "crias_bot"]

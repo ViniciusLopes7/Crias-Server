@@ -45,7 +45,12 @@ assert_grep 'visudo -cf' "$ROOT_DIR/install.sh"
 # 5. sshd drop-in em /etc/ssh/sshd_config.d/10-crias.conf
 assert_grep '/etc/ssh/sshd_config.d/10-crias.conf' "$ROOT_DIR/install.sh"
 assert_grep 'PermitRootLogin no' "$ROOT_DIR/install.sh"
-assert_grep 'PasswordAuthentication yes' "$ROOT_DIR/install.sh"
+# (EXP-65) O drop-in agora PRESERVA a politica de senha do host: a linha
+# usa a variavel $password_auth (yes quando o host permite, no quando o
+# admin desativou senha). O contrato e a logica, nao o literal.
+assert_grep 'PasswordAuthentication \$password_auth' "$ROOT_DIR/install.sh"
+assert_grep 'sshd -T' "$ROOT_DIR/install.sh"
+assert_grep 'sshd -t' "$ROOT_DIR/install.sh"
 assert_grep 'PubkeyAuthentication yes' "$ROOT_DIR/install.sh"
 
 # 6. useradd -m -s /bin/bash (cria home + bash shell) + chpasswd (set password) + usermod -aG wheel

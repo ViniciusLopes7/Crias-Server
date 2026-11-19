@@ -218,6 +218,36 @@ detect_hardware_profile() {
         HW_AVAILABLE_RAM_MB=0
         HW_SWAP_MB=0
     fi
+    # (EXP-60) Limite de memoria do cgroup: em container a cota pode ser
+    # menor que a RAM fisica do host; heap/MemoryMax calculados sobre a RAM
+    # fisica estourariam a cota e o jogo morreria por OOM do cgroup. Usa o
+    # MINIMO entre fisico e limite efetivo (v2 memory.max; v1 limit_in_bytes).
+    local cg_limit_mb=""
+    local cg_bytes=""
+    if [ -r /sys/fs/cgroup/memory.max ]; then
+        cg_bytes="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || true)"
+        case "$cg_bytes" in
+            ""|max) ;;
+            *[!0-9]*) ;;
+            *) if [ "$cg_bytes" -gt 0 ]; then cg_limit_mb=$((cg_bytes / 1048576)); fi ;;
+        esac
+    elif [ -r /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
+        cg_bytes="$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || true)"
+        case "$cg_bytes" in
+            ""|*[!0-9]*) ;;
+            *) if [ "$cg_bytes" -gt 0 ] && [ "$cg_bytes" -lt 4611686018427387904 ]; then
+                   cg_limit_mb=$((cg_bytes / 1048576))
+               fi ;;
+        esac
+    fi
+    if [ -n "$cg_limit_mb" ] && [ "$cg_limit_mb" -gt 0 ] \
+        && [ "$HW_TOTAL_RAM_MB" -gt 0 ] && [ "$cg_limit_mb" -lt "$HW_TOTAL_RAM_MB" ]; then
+        if command -v print_warning >/dev/null 2>&1; then
+            print_warning "Limite de cgroup (${cg_limit_mb}MB) menor que a RAM fisica (${HW_TOTAL_RAM_MB}MB); tuning usa a cota (EXP-60)."
+        fi
+        HW_TOTAL_RAM_MB="$cg_limit_mb"
+    fi
+
     HW_CPU_CORES=$(nproc 2>/dev/null)
     HW_CPU_THREADS=$(grep -c '^processor' /proc/cpuinfo 2>/dev/null)
     HW_DISK_TYPE=$(detect_disk_type_for_path "$target_path")

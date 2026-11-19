@@ -84,20 +84,49 @@ write_terraria_server_config() {
     local motd="$4"
     local world_name="$5"
 
-    write_file_or_dry_run "Gerando serverconfig.txt do Terraria em $file_path" "$file_path" << EOF
-worldpath=$world_path
-autocreate=$TT_WORLD_AUTOCREATE
-worldname=$world_name
-maxplayers=$TT_MAX_PLAYERS
-port=$server_port
-password=
-motd=$motd
-secure=1
-upnp=0
-npcstream=$TT_NPC_STREAM
-priority=$TT_PRIORITY
-language=pt-BR
-EOF
+    # (CR-03) Merge seletivo: so as chaves de tuning sao gerenciadas. A senha
+    # (password=) e qualquer chave personalizada do operador sao
+    # PRESERVADAS — antes o arquivo era recriado inteiro com password= vazio,
+    # e um reconfigure-hardware apagava a senha do servidor. NUNCA geramos
+    # password= (nem vazio): quem nao tem senha mantem o que tinha.
+    local managed_keys='^(worldpath|autocreate|worldname|maxplayers|port|motd|secure|upnp|npcstream|priority|language)='
+
+    if dry_run_enabled; then
+        print_step "[DRY_RUN] Gerando serverconfig.txt do Terraria em $file_path"
+        return 0
+    fi
+
+    local tmp_new
+    tmp_new="$(mktemp_crias_file)"
+    {
+        printf 'worldpath=%s\n' "$world_path"
+        printf 'autocreate=%s\n' "$TT_WORLD_AUTOCREATE"
+        printf 'worldname=%s\n' "$world_name"
+        printf 'maxplayers=%s\n' "$TT_MAX_PLAYERS"
+        printf 'port=%s\n' "$server_port"
+        printf 'motd=%s\n' "$motd"
+        printf 'secure=1\n'
+        printf 'upnp=0\n'
+        printf 'npcstream=%s\n' "$TT_NPC_STREAM"
+        printf 'priority=%s\n' "$TT_PRIORITY"
+        printf 'language=pt-BR\n'
+    } > "$tmp_new"
+
+    if [ -f "$file_path" ]; then
+        cp -a "$file_path" "${file_path}.crias-bak"
+        local tmp_merged
+        tmp_merged="$(mktemp_crias_file)"
+        {
+            cat "$tmp_new"
+            awk -v re="$managed_keys" '$0 !~ re' "$file_path"
+        } > "$tmp_merged"
+        cat "$tmp_merged" > "$file_path"
+        rm -f "$tmp_merged"
+    else
+        cat "$tmp_new" > "$file_path"
+    fi
+
+    rm -f "$tmp_new"
 }
 
 write_terraria_runtime_env() {
@@ -119,9 +148,21 @@ write_terraria_runtime_env() {
             ;;
     esac
 
-    write_file_or_dry_run "Gerando runtime.env do Terraria em $file_path" "$file_path" << EOF
-BACKUP_RETENTION_DAYS="$TT_BACKUP_RETENTION_DAYS"
-BACKUP_ZSTD_LEVEL="$TT_BACKUP_ZSTD_LEVEL"
+    # (CR-13) Precedencia: ambiente (config.env) > runtime.env existente >
+    # auto-tuning por tier (config.env vazio = automatico).
+    local backup_retention="${BACKUP_RETENTION_DAYS:-$(env_file_read_value "$file_path" BACKUP_RETENTION_DAYS)}"
+    if [ -z "$backup_retention" ]; then
+        backup_retention="$TT_BACKUP_RETENTION_DAYS"
+    fi
+    local backup_zstd="${BACKUP_ZSTD_LEVEL:-$(env_file_read_value "$file_path" BACKUP_ZSTD_LEVEL)}"
+    if [ -z "$backup_zstd" ]; then
+        backup_zstd="$TT_BACKUP_ZSTD_LEVEL"
+    fi
+
+    # (CR-08) runtime.env com segredos (webhook): 0600.
+    write_file_or_dry_run "Gerando runtime.env do Terraria em $file_path" "$file_path" 0600 << EOF
+BACKUP_RETENTION_DAYS="$backup_retention"
+BACKUP_ZSTD_LEVEL="$backup_zstd"
 TERRARIA_USE_TMODLOADER="${TERRARIA_USE_TMODLOADER:-false}"
 BACKUP_REMOTE_PATH="$backup_remote"
 BACKUP_NOTIFY_WEBHOOK="$backup_webhook"

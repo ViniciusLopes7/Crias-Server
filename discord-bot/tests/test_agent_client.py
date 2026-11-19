@@ -10,6 +10,9 @@ Cobertura (TST-005):
   - send_rcon_command: sucesso e falha.
   - get_health: sucesso.
   - Reconexão com backoff exponencial (connect() com alvo inalcançável).
+  - ensure_connected com timeout (CR-09): retorno imediato, sucesso a tempo,
+    timeout rápido com AgentOfflineError, cliente fechado.
+  - Invalidação do cache de status após lifecycle RPCs (EXP-63).
   - _status_to_dict: mapeamento de campos.
 
 Path setup é feito pelo conftest.py no diretório tests/.
@@ -18,6 +21,7 @@ Path setup é feito pelo conftest.py no diretório tests/.
 from __future__ import annotations
 
 import asyncio
+import time
 from unittest.mock import AsyncMock, MagicMock
 
 import grpc
@@ -25,7 +29,12 @@ import pytest
 
 # Tenta importar; skipa se grpc_gen não gerado.
 try:
-    from crias_bot.agent_client import AgentClient, AgentClientError, _status_to_dict
+    from crias_bot.agent_client import (
+        AgentClient,
+        AgentClientError,
+        AgentOfflineError,
+        _status_to_dict,
+    )
     from crias_bot.grpc_gen import crias_pb2
 except ImportError as e:
     pytest.skip(f"Não foi possível importar AgentClient: {e}", allow_module_level=True)
@@ -179,6 +188,14 @@ class TestAgentClientError:
     def test_agent_client_error_message(self):
         err = AgentClientError("something failed")
         assert str(err) == "something failed"
+
+    def test_agent_offline_error_is_agent_client_error(self):
+        """CR-09: handlers com `except AgentClientError` também pegam AgentOfflineError."""
+        assert issubclass(AgentOfflineError, AgentClientError)
+
+    def test_agent_offline_error_message(self):
+        err = AgentOfflineError("sem conexão após 5s")
+        assert "sem conexão" in str(err)
 
 
 # ---------------------------------------------------------------------------
@@ -592,36 +609,96 @@ class TestConnectBackoff:
 
 
 class TestEnsureConnected:
-    def test_ensure_connected_skips_when_stubs_set(self):
+    """CR-09: ensure_connected(timeout) — caminho de comando com espera limitada."""
+
+    def test_returns_immediately_when_stubs_set(self):
         c = _make_client()
 
         async def run():
-            # Stub já está setado — não deve chamar connect().
-            await c._ensure_connected()
-            # Se chegou aqui sem hangar/erro, OK.
+            # Stub já está setado — não deve esperar nem conectar.
+            await c.ensure_connected(timeout=5.0)
 
+        # Se tentasse conectar de verdade, o teste levaria 5s (timeout).
         asyncio.run(run())
 
-    def test_ensure_connected_calls_connect_when_stubs_none(self, monkeypatch):
+    def test_returns_when_connect_succeeds_in_time(self, monkeypatch):
+        """Reconexão em background conclui dentro do timeout — sem exceção."""
         c = AgentClient(host="localhost:1", token="x")
-        # stubs são None inicialmente.
-
-        connect_called = False
 
         async def fake_connect():
-            nonlocal connect_called
-            connect_called = True
-            # Simula que connect conseguiu stub.
+            await asyncio.sleep(0.05)
             c._stub = MagicMock()
             c._event_stub = MagicMock()
 
         monkeypatch.setattr(c, "connect", fake_connect)
 
         async def run():
-            await c._ensure_connected()
+            await c.ensure_connected(timeout=2.0)
 
         asyncio.run(run())
-        assert connect_called
+
+    def test_times_out_fast_when_channel_never_connects(self, monkeypatch):
+        """CR-09: agente offline — AgentOfflineError rápido, sem travar no
+        retry infinito do connect()."""
+        c = AgentClient(host="localhost:1", token="x")
+
+        class FakeChannel:
+            async def channel_ready(self):
+                raise TimeoutError("never ready")
+
+            async def close(self):
+                pass
+
+        monkeypatch.setattr(
+            "crias_bot.agent_client.grpc_aio.insecure_channel",
+            lambda target, **kwargs: FakeChannel(),
+        )
+
+        async def run():
+            t0 = time.monotonic()
+            with pytest.raises(AgentOfflineError) as exc_info:
+                await c.ensure_connected(timeout=0.5)
+            elapsed = time.monotonic() - t0
+            # Falhou rápido (timeout + margem), não após o retry infinito.
+            assert elapsed < 2.0, f"ensure_connected demorou {elapsed:.1f}s"
+            assert "offline" in str(exc_info.value)
+            # Nada foi conectado.
+            assert c._stub is None
+            # Limpa a task de reconexão em background (evita warning de
+            # task pendente ao fechar o loop).
+            await c.close()
+
+        asyncio.run(run())
+
+    def test_raises_promptly_when_client_closed(self):
+        """Cliente fechado — falha imediatamente, sem esperar o timeout."""
+        c = AgentClient(host="localhost:1", token="x")
+
+        async def run():
+            await c.close()
+            t0 = time.monotonic()
+            with pytest.raises(AgentOfflineError):
+                await c.ensure_connected(timeout=5.0)
+            assert time.monotonic() - t0 < 1.0
+
+        asyncio.run(run())
+
+    def test_rpc_uses_bounded_ensure_connected(self, monkeypatch):
+        """Os wrappers RPC devem usar ensure_connected (limitado), não o
+        connect() infinito."""
+        c = AgentClient(host="localhost:1", token="x")
+
+        async def fake_ensure(self, timeout=5.0):
+            # Simula agente offline: levanta a exceção dedicada.
+            raise AgentOfflineError("agente remoto offline")
+
+        monkeypatch.setattr(AgentClient, "ensure_connected", fake_ensure)
+
+        async def run():
+            with pytest.raises(AgentOfflineError):
+                await c.get_status(use_cache=False)
+
+        asyncio.run(run())
 
 
 class TestClose:
@@ -672,11 +749,11 @@ class TestRpcWhenStubIsNone:
     def test_start_server_raises_when_disconnected(self, monkeypatch):
         c = self._make_disconnected_client()
 
-        async def fake_ensure(self_):
+        async def fake_ensure(self, timeout=5.0):
             # Não faz nada — stubs continuam None.
             pass
 
-        monkeypatch.setattr(AgentClient, "_ensure_connected", fake_ensure)
+        monkeypatch.setattr(AgentClient, "ensure_connected", fake_ensure)
 
         async def run():
             with pytest.raises(AgentClientError) as exc_info:
@@ -688,14 +765,114 @@ class TestRpcWhenStubIsNone:
     def test_get_status_raises_when_disconnected(self, monkeypatch):
         c = self._make_disconnected_client()
 
-        async def fake_ensure(self_):
+        async def fake_ensure(self, timeout=5.0):
             pass
 
-        monkeypatch.setattr(AgentClient, "_ensure_connected", fake_ensure)
+        monkeypatch.setattr(AgentClient, "ensure_connected", fake_ensure)
 
         async def run():
             with pytest.raises(AgentClientError) as exc_info:
                 await c.get_status(use_cache=False)
             assert "não conectado" in str(exc_info.value)
+
+        asyncio.run(run())
+
+
+# ---------------------------------------------------------------------------
+# Invalidação do cache de status (EXP-63).
+# ---------------------------------------------------------------------------
+
+
+class TestStatusCacheInvalidation:
+    """EXP-63: lifecycle RPCs devem invalidar o cache de GetStatus."""
+
+    def test_start_server_invalidates_status_cache(self):
+        c = _make_client()
+        c._stub.GetStatus = AsyncMock(return_value=_make_status_response())
+        c._stub.StartServer = AsyncMock(
+            return_value=crias_pb2.StartResponse(ok=True, message="ok", service_name="minecraft")
+        )
+
+        async def run():
+            await c.get_status()  # popula o cache
+            assert c._status_cache is not None
+            await c.start_server()  # lifecycle RPC com sucesso
+            assert c._status_cache is None  # EXP-63: invalidado
+            await c.get_status()  # precisa fazer chamada fresca
+            assert c._stub.GetStatus.await_count == 2
+
+        asyncio.run(run())
+
+    def test_stop_server_invalidates_status_cache(self):
+        c = _make_client()
+        c._stub.GetStatus = AsyncMock(return_value=_make_status_response())
+        c._stub.StopServer = AsyncMock(
+            return_value=crias_pb2.StopResponse(ok=True, message="ok", service_name="minecraft")
+        )
+
+        async def run():
+            await c.get_status()
+            assert c._status_cache is not None
+            await c.stop_server()
+            assert c._status_cache is None
+            await c.get_status()
+            assert c._stub.GetStatus.await_count == 2
+
+        asyncio.run(run())
+
+    def test_restart_server_invalidates_status_cache(self):
+        c = _make_client()
+        c._stub.GetStatus = AsyncMock(return_value=_make_status_response())
+        c._stub.RestartServer = AsyncMock(
+            return_value=crias_pb2.RestartResponse(
+                ok=True, message="ok", service_name="minecraft"
+            )
+        )
+
+        async def run():
+            await c.get_status()
+            assert c._status_cache is not None
+            await c.restart_server()
+            assert c._status_cache is None
+            await c.get_status()
+            assert c._stub.GetStatus.await_count == 2
+
+        asyncio.run(run())
+
+    def test_send_rcon_command_invalidates_status_cache(self):
+        """RCON whitelistado pode mudar estado (ex.: stop) — invalida também."""
+        c = _make_client()
+        c._stub.GetStatus = AsyncMock(return_value=_make_status_response())
+        c._stub.SendRconCommand = AsyncMock(
+            return_value=crias_pb2.SendRconCommandResponse(ok=True, output="ok", error="")
+        )
+
+        async def run():
+            await c.get_status()
+            assert c._status_cache is not None
+            await c.send_rcon_command("list")
+            assert c._status_cache is None
+            await c.get_status()
+            assert c._stub.GetStatus.await_count == 2
+
+        asyncio.run(run())
+
+    def test_failed_lifecycle_rpc_keeps_cache(self):
+        """RPC que falha (exceção) não mudou estado — cache permanece."""
+        c = _make_client()
+        c._stub.GetStatus = AsyncMock(return_value=_make_status_response())
+
+        def raise_rpc(*a, **kw):
+            raise grpc.RpcError("unavailable")
+
+        c._stub.StartServer = AsyncMock(side_effect=raise_rpc)
+
+        async def run():
+            await c.get_status()
+            assert c._status_cache is not None
+            with pytest.raises(AgentClientError):
+                await c.start_server()
+            # Cache não foi invalidado (RPC não teve sucesso).
+            assert c._status_cache is not None
 
         asyncio.run(run())

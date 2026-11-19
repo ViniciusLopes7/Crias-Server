@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,11 +23,24 @@ type Client struct {
 	password string
 	enabled  bool
 
-	// mu protects conn and lastUse from data races.
+	// mu guards conn and lastUse. It is NEVER held during dial or command
+	// I/O (CR-27): a goroutine stuck in I/O must not keep other callers
+	// from reading/replacing the shared connection.
 	mu       sync.Mutex
 	conn     *rcon.Conn
 	lastUse  time.Time
 	cacheTTL time.Duration
+
+	// ioMu serializes send/receive on the shared connection. It CAN be held
+	// while blocked in I/O, but only briefly: on Execute timeout the shared
+	// connection is closed (abandonConn), which unblocks the reader and
+	// releases ioMu (CR-27).
+	ioMu sync.Mutex
+
+	// dialMu serializes connection establishment so concurrent callers don't
+	// open multiple connections. The dial itself runs OUTSIDE mu/ioMu and is
+	// bounded by the dialer's internal deadlines (CR-27).
+	dialMu sync.Mutex
 
 	// Hooks for tests (can be replaced).
 	dialer func(host string, port int, password string) (*rcon.Conn, error)
@@ -50,45 +64,40 @@ var ErrRCONDisabled = fmt.Errorf("rcon desabilitado na configuração")
 
 // defaultDialer opens a real RCON connection.
 //
-// A short net.DialTimeout (5s) pre-flight bounds the TCP connect step so a
-// hung dial (firewall drop, unreachable host) can't hold executeLocked's
-// mutex for gorcon's full internal timeout. Without this bound, the 10s
-// backstop in Execute can block on c.mu.Lock() for the dial duration,
-// pushing the effective cap to ~15s instead of the declared 10s (G6).
+// Every step is bounded by a deadline so a hung server (e.g. accepts TCP but
+// never answers the auth handshake) can't stall the dialer forever (CR-27):
+// net.Dialer{Timeout} bounds the TCP connect, and rcon.Open runs the
+// handshake under gorcon's per-op deadlines (rcon.DefaultDeadline = 5s per
+// read/write). Since the dial now happens outside the shared locks (see
+// connForCommand), the pre-flight probe dial from the G6 fix is no longer
+// needed — the TCP connect itself is bounded.
 //
-// Errors are returned unwrapped — executeLocked adds the "conectar rcon:"
-// prefix consistently for both probe and rcon.Dial failures.
+// Errors are returned unwrapped — connForCommand adds the "conectar rcon:"
+// prefix consistently for both connect and auth failures.
 func defaultDialer(host string, port int, password string) (*rcon.Conn, error) {
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
-	probe, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	d := net.Dialer{Timeout: 10 * time.Second}
+	nc, err := d.Dial("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
-	_ = probe.Close()
-	return rcon.Dial(addr, password)
+	// Explicit deadline: don't rely on gorcon's DefaultSettings staying at 5s.
+	return rcon.Open(nc, password, rcon.SetDeadline(rcon.DefaultDeadline))
 }
 
 // Execute runs an RCON command with the caller's ctx plus a 10s backstop timeout.
 //
-// The I/O runs in a goroutine so concurrent callers don't block on the mutex
-// if the RCON server hangs (gorcon v1.3.5 has no context support). On ctx
-// cancellation or the 10s backstop the current connection is closed to unblock
-// the goroutine holding c.mu mid-I/O; the next caller dials a fresh connection.
-//
-// The mutex is still held inside executeLocked during dial/Execute I/O; full
-// decoupling is non-trivial with gorcon v1.3.5 and left for a future fix.
-// Respecting ctx.Done() ensures gRPC handler cancellation always breaks out
-// of the select even if the underlying goroutine can't be interrupted.
+// The work runs in a goroutine so concurrent callers don't block if the RCON
+// server hangs (gorcon has no context support). On ctx cancellation or the
+// 10s backstop, the CURRENT shared connection is closed and cleared
+// (abandonConn) — this unblocks a goroutine stuck mid-I/O holding ioMu, and
+// the next caller dials a fresh connection (CR-27). Unlike the old code, the
+// connection is re-read at abandon time: the worker may have dialed one after
+// Execute started, and that connection must also be reclaimable.
 func (c *Client) Execute(ctx context.Context, command string) (string, error) {
 	if !c.enabled {
 		return "", ErrRCONDisabled
 	}
-
-	// Capture the current connection so we can close it on timeout, unblocking
-	// the goroutine holding c.mu mid-I/O.
-	c.mu.Lock()
-	currentConn := c.conn
-	c.mu.Unlock()
 
 	type result struct {
 		resp string
@@ -96,7 +105,7 @@ func (c *Client) Execute(ctx context.Context, command string) (string, error) {
 	}
 	resultCh := make(chan result, 1)
 	go func() {
-		resp, err := c.executeLocked(command)
+		resp, err := c.perform(command)
 		resultCh <- result{resp, err}
 	}()
 
@@ -104,15 +113,8 @@ func (c *Client) Execute(ctx context.Context, command string) (string, error) {
 	case r := <-resultCh:
 		return r.resp, r.err
 	case <-ctx.Done():
-		// Cancellation: close the connection to unblock the goroutine holding the mutex.
-		if currentConn != nil {
-			_ = currentConn.Close()
-		}
-		c.mu.Lock()
-		if c.conn == currentConn {
-			c.conn = nil
-		}
-		c.mu.Unlock()
+		// Cancellation: abandon the shared connection to unblock the worker.
+		c.abandonConn()
 		// Best-effort: warn if the goroutine doesn't return shortly after cancellation.
 		go func() {
 			select {
@@ -123,121 +125,197 @@ func (c *Client) Execute(ctx context.Context, command string) (string, error) {
 		}()
 		return "", ctx.Err()
 	case <-time.After(10 * time.Second):
-		// Timeout backstop: close the connection to unblock the goroutine holding the mutex.
-		if currentConn != nil {
-			_ = currentConn.Close()
-		}
-		// Invalidate the cache so the next caller dials fresh.
-		c.mu.Lock()
-		if c.conn == currentConn {
-			c.conn = nil
-		}
-		c.mu.Unlock()
+		// Timeout backstop: abandon the shared connection and invalidate the
+		// cache so the next caller dials fresh.
+		c.abandonConn()
 		return "", fmt.Errorf("rcon timeout (10s) executando %q", command)
 	}
 }
 
-// executeLocked does the actual work of Execute while holding c.mu.
-// Reuses a cached connection if valid; on connection error, dials a new one and retries once.
-func (c *Client) executeLocked(command string) (string, error) {
+// abandonConn closes whatever connection the client currently holds and
+// clears it. Closing the conn interrupts any blocked read/write on it, which
+// releases ioMu and lets the abandoned worker goroutine finish (CR-27).
+func (c *Client) abandonConn() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	conn := c.conn
+	c.conn = nil
+	c.mu.Unlock()
+	if conn != nil {
+		_ = conn.Close()
+	}
+}
 
-	// Reuse the connection if used within the last cacheTTL seconds.
-	if c.conn != nil && time.Since(c.lastUse) < c.cacheTTL {
-		c.lastUse = time.Now()
-		out, err := c.conn.Execute(command)
+// perform executes the command, reusing the cached connection when possible
+// and retrying once on a fresh connection when the cached one dies mid-I/O
+// (same retry semantics as the old executeLocked).
+func (c *Client) perform(command string) (string, error) {
+	cached := c.cachedConn()
+	if cached != nil {
+		out, err := c.execOnConn(cached, command)
 		if err == nil {
 			return out, nil
 		}
-		// Connection died — close and reconnect.
-		_ = c.conn.Close()
-		c.conn = nil
+		// Cached connection died — fall through and retry once on a fresh one.
+		conn, derr := c.connForCommand()
+		if derr != nil {
+			return "", derr
+		}
+		return c.execOnConn(conn, command)
 	}
 
-	conn, err := c.dialer(c.host, c.port, c.password)
+	conn, err := c.connForCommand()
 	if err != nil {
-		return "", fmt.Errorf("conectar rcon: %w", err)
+		return "", err
 	}
-	c.conn = conn
-	c.lastUse = time.Now()
+	return c.execOnConn(conn, command)
+}
 
+// execOnConn runs a single command on conn under ioMu. On I/O error the conn
+// is closed and invalidated (if still the current one) so the next caller
+// dials fresh instead of reusing a dead conn (G8).
+func (c *Client) execOnConn(conn *rcon.Conn, command string) (string, error) {
+	c.ioMu.Lock()
 	out, err := conn.Execute(command)
+	c.ioMu.Unlock()
 	if err != nil {
-		// Close and clear the broken connection so the next caller dials fresh
-		// instead of reusing a dead conn on its first attempt (G8).
-		_ = c.conn.Close()
-		c.conn = nil
+		_ = conn.Close()
+		c.mu.Lock()
+		if c.conn == conn {
+			c.conn = nil
+		}
+		c.mu.Unlock()
 		return "", fmt.Errorf("executar rcon %q: %w", command, err)
 	}
 	return out, nil
 }
 
+// cachedConn returns the shared connection if it was used within cacheTTL
+// (refreshing its last-use timestamp); nil otherwise.
+func (c *Client) cachedConn() *rcon.Conn {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.conn != nil && time.Since(c.lastUse) < c.cacheTTL {
+		c.lastUse = time.Now()
+		return c.conn
+	}
+	return nil
+}
+
+// connForCommand returns a usable connection: the cached one if fresh, or a
+// freshly dialed one. Dialing happens OUTSIDE mu/ioMu, bounded by the
+// dialer's internal deadlines, so a hung dial can't wedge the client (CR-27).
+func (c *Client) connForCommand() (*rcon.Conn, error) {
+	if conn := c.cachedConn(); conn != nil {
+		return conn, nil
+	}
+
+	// Serialize dialing so concurrent callers don't open multiple connections.
+	// Blocking here is bounded: the dialer itself is deadline-bounded.
+	c.dialMu.Lock()
+	defer c.dialMu.Unlock()
+
+	// Re-check: another goroutine may have dialed while we waited on dialMu.
+	if conn := c.cachedConn(); conn != nil {
+		return conn, nil
+	}
+
+	conn, err := c.dialer(c.host, c.port, c.password)
+	if err != nil {
+		return nil, fmt.Errorf("conectar rcon: %w", err)
+	}
+	c.mu.Lock()
+	c.conn = conn
+	c.lastUse = time.Now()
+	c.mu.Unlock()
+	return conn, nil
+}
+
 // Close closes the RCON connection if open. Safe for concurrent use.
 func (c *Client) Close() error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.conn != nil {
-		err := c.conn.Close()
-		c.conn = nil
-		return err
+	conn := c.conn
+	c.conn = nil
+	c.mu.Unlock()
+	if conn != nil {
+		return conn.Close()
 	}
 	return nil
 }
 
 // PlayerList queries the RCON "list" command and parses the response.
 // Typical Minecraft response: "There are 2 of a max of 20 players online: player1, player2"
-// Returns (players, max_players, error).
+// Returns (players, max_players, error). A parse error means the player count
+// is UNKNOWN — callers must NOT treat it as "0 players" (EXP-45).
 func (c *Client) PlayerList(ctx context.Context) ([]string, int, error) {
 	out, err := c.Execute(ctx, "list")
 	if err != nil {
 		return nil, 0, err
 	}
-	return parseListResponse(out), parseMaxPlayers(out), nil
+	return parseListResponse(out)
 }
 
-// parseListResponse extracts the player list from the RCON "list" response.
-// Format: "There are N of a max of M players online: p1, p2, p3"
-// Empty case: "There are 0 of a max of M players online: "
-func parseListResponse(raw string) []string {
+// listCountPattern matches the count/max pair of the English "list" response:
+// "There are 2 of a max of 20 players: ..." → "2 of a max of 20".
+var listCountPattern = regexp.MustCompile(`(\d+)\s+of a max of\s+(\d+)`)
+
+// intPattern extracts standalone integers — fallback for localized "list"
+// responses that keep the same "count ... max ...:" shape (EXP-45).
+var intPattern = regexp.MustCompile(`\d+`)
+
+// parseListResponse extracts the player list and max players from the RCON
+// "list" response, STRICTLY (EXP-45).
+//
+// Accepted formats (vanilla Java, across versions/locales):
+//   - "There are 2 of a max of 20 players: Steve, Alex"   (1.13+)
+//   - "There are 0 of a max of 20 players: "              (empty server)
+//   - "There are 2 of a max of 20 players online: Steve, Alex"  (1.12-)
+//   - localized variants with the same "count ... max ...:" shape.
+//
+// The declared count must match the number of parsed names. Anything that
+// doesn't fit the format returns an ERROR (never an empty list with nil
+// error) so callers treat the player count as UNKNOWN instead of "0 players"
+// — the old behavior could stop a busy server via auto-shutdown.
+func parseListResponse(raw string) ([]string, int, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, 0, fmt.Errorf("resposta 'list' vazia")
+	}
 	idx := strings.LastIndex(raw, ":")
 	if idx < 0 {
-		return []string{}
+		return nil, 0, fmt.Errorf("resposta 'list' sem separador ':': %q", raw)
 	}
-	rest := strings.TrimSpace(raw[idx+1:])
-	if rest == "" {
-		return []string{}
-	}
-	parts := strings.Split(rest, ",")
-	players := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			players = append(players, p)
+	head := raw[:idx]
+	tail := strings.TrimSpace(raw[idx+1:])
+
+	// Player names after the separator (comma-separated).
+	players := []string{}
+	if tail != "" {
+		for _, p := range strings.Split(tail, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				players = append(players, p)
+			}
 		}
 	}
-	return players
-}
 
-// parseMaxPlayers extracts the max player count from the "list" response.
-func parseMaxPlayers(raw string) int {
-	// Look for "max of N players".
-	idx := strings.Index(raw, "max of ")
-	if idx < 0 {
-		return 0
+	// Declared count + max: primary English pattern, else the first two
+	// integers of the head (localized variants keep count before max).
+	var declared, max int
+	if m := listCountPattern.FindStringSubmatch(head); m != nil {
+		declared, _ = strconv.Atoi(m[1])
+		max, _ = strconv.Atoi(m[2])
+	} else if nums := intPattern.FindAllString(head, -1); len(nums) >= 2 {
+		declared, _ = strconv.Atoi(nums[0])
+		max, _ = strconv.Atoi(nums[1])
+	} else {
+		return nil, 0, fmt.Errorf("resposta 'list' em formato desconhecido: %q", raw)
 	}
-	rest := raw[idx+7:]
-	end := strings.Index(rest, " ")
-	if end < 0 {
-		return 0
+
+	// Count coherence: the declared count must match the listed names.
+	// (A truncated multi-packet RCON response also lands here — failing
+	// closed is the safe direction.)
+	if declared != len(players) {
+		return nil, 0, fmt.Errorf("resposta 'list' incoerente: declara %d players mas lista %d nomes: %q", declared, len(players), raw)
 	}
-	numStr := rest[:end]
-	var n int
-	_, err := fmt.Sscanf(numStr, "%d", &n)
-	if err != nil {
-		return 0
-	}
-	return n
+	return players, max, nil
 }
 
 // whitelistedCommands is a package-level immutable map to avoid reallocation on each IsCommandAllowed call.
