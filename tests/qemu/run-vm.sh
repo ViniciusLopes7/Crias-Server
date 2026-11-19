@@ -10,8 +10,8 @@ cleanup() {
 trap cleanup EXIT
 base=https://fastly.mirror.pkgbuild.com/images/latest
 image=Arch-Linux-x86_64-cloudimg.qcow2
-curl -fsSL --retry 3 "$base/$image" -o "$tmp/$image"
-curl -fsSL --retry 3 "$base/$image.SHA256" -o "$tmp/$image.SHA256"
+curl -fsSL --retry 3 --connect-timeout 20 --max-time 900 "$base/$image" -o "$tmp/$image"
+curl -fsSL --retry 3 --connect-timeout 20 --max-time 900 "$base/$image.SHA256" -o "$tmp/$image.SHA256"
 (cd "$tmp" && sha256sum -c "$image.SHA256")
 qemu-img resize "$tmp/$image" 12G
 ssh-keygen -q -t ed25519 -N '' -f "$tmp/key"

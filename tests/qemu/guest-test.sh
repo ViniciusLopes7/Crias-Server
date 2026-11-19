@@ -3,7 +3,7 @@
 set -euo pipefail
 root="${1:?repository path required}"
 [ "$(ps -p 1 -o comm=)" = systemd ] || { echo 'systemd is not PID 1' >&2; exit 1; }
-pacman -Syu --noconfirm --needed bash coreutils gettext jq tar zstd jdk21-openjdk
+pacman -Syu --noconfirm --needed bash coreutils gettext jq tar zstd zip unzip jdk21-openjdk
 cd "$root"
 bash tests/crias-bootstrap-test.sh
 bash tests/backup-integrity-test.sh
