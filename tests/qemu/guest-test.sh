@@ -30,9 +30,19 @@ jar --create --file "$server/server.jar" --main-class Probe -C "$server" Probe.c
 printf 'server-port=0\n' > "$server/server.properties"
 printf 'MINECRAFT_VERSION=1.21.1\nMINECRAFT_LOADER=vanilla\nMIN_RAM=128M\nMAX_RAM=256M\n' > "$server/runtime.env"
 chown -R criasvm:criasvm "$server"
-env SERVER_USER=criasvm SERVER_DIR="$server" MEMORY_MAX_MB=512 envsubst '${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB}' < minecraft/minecraft.service > /etc/systemd/system/minecraft.service
+# Exercise the actual installer routine, including unit validation and enable.
+# shellcheck source=/dev/null
+source "$root/shared/lib/common.sh"
+# shellcheck source=/dev/null
+source "$root/shared/lib/stack-installer.sh"
+STACK_NAME=minecraft
+STACK_USER=criasvm
+STACK_SERVER_DIR="$server"
+STACK_SERVICE_TEMPLATE="$root/minecraft/minecraft.service"
+STACK_SERVICE_MEMORY_MAX_MB=512
+DRY_RUN=false
+install_stack_service
 systemd-analyze verify /etc/systemd/system/minecraft.service
-systemctl daemon-reload
 systemctl start minecraft.service
 for i in $(seq 1 30); do
     journalctl -u minecraft.service --no-pager | grep -q CRIAS_VM_PROBE_STARTED && break
