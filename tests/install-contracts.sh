@@ -337,6 +337,7 @@ run_modpack_version_passthrough_contract() {
     local server_dir="$TMP_TEST_DIR/mc-modpack-server"
 
     mkdir -p "$bin_dir" "$server_dir"
+    printf '%s\n' '{"schema":1,"dependencies":{"minecraft":"26.3","fabric-loader":"0.1"},"server-file":{"path":"server.jar"}}' > "$server_dir/packstate.json"
 
     # Stub de mrpack-install: registra os argumentos recebidos (um por linha).
     cat > "$bin_dir/mrpack-install" << EOF

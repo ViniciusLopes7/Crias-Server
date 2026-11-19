@@ -343,7 +343,7 @@ stack_download_and_install() {
     # vanilla/no-modpack a base instalada E a versao configurada; consultar o
     # slug default aqui sobrescreveria a versao correta com a do adrenaline.
     if [ "$MINECRAFT_MODPACK_SOURCE" = "adrenaline" ] || [ "$MINECRAFT_MODPACK_SOURCE" = "modrinth" ]; then
-        _resolve_modpack_effective_versions
+        _resolve_modpack_effective_versions || return 1
         _reconcile_effective_java
     fi
 
@@ -393,44 +393,34 @@ _reconcile_effective_java() {
     MINECRAFT_VERSION="$MC_EFFECTIVE_VERSION"
 }
 
-# (EXP-42) Consulta a API do Modrinth pelo pack instalado e extrai a versao
-# real do jogo e o loader. Best-effort: sem rede/API a configuracao original
-# prevalece com aviso (o download do pack em si ja teria falhado antes).
+# mrpack-install v0.23 writes packstate.json from the actual installed archive.
+# Never infer the installed loader or game version from unrelated API ordering.
 _resolve_modpack_effective_versions() {
-    MC_EFFECTIVE_VERSION="${MINECRAFT_VERSION}"
-    MC_EFFECTIVE_LOADER="${MINECRAFT_LOADER}"
-
-    local slug="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
-    local pack_version="${MINECRAFT_ADRENALINE_VERSION:-}"
-
-    command -v curl >/dev/null 2>&1 || return 0
-    command -v jq >/dev/null 2>&1 || return 0
-
-    local resp
-    resp="$(curl -fsSL --connect-timeout 10 --max-time 30 \
-        "https://api.modrinth.com/v2/project/$slug/version" 2>/dev/null || true)"
-    [ -z "$resp" ] && return 0
-
-    local ver_json
-    ver_json="$(printf '%s' "$resp" | jq -c --arg v "$pack_version" '
-        if $v != "" then (map(select(.version_number == $v)) | .[0]) else .[0] end
-        | select(. != null) | {game_versions: .game_versions, loaders: .loaders}
-    ' 2>/dev/null || true)"
-    [ -z "$ver_json" ] || [ "$ver_json" = "null" ] && return 0
-
-    local eff_game eff_loader
-    eff_game="$(printf '%s' "$ver_json" | jq -r '.game_versions[-1] // empty' 2>/dev/null || true)"
-    eff_loader="$(printf '%s' "$ver_json" | jq -r '.loaders[0] // empty' 2>/dev/null || true)"
-
-    if [ -n "$eff_game" ] && [ "$eff_game" != "$MINECRAFT_VERSION" ]; then
-        print_warning "Modpack '$slug' mira MC $eff_game (configurado: $MINECRAFT_VERSION)."
-        print_warning "Mods QoL/extras usarao a versao do pack: $eff_game (EXP-42)."
-        MC_EFFECTIVE_VERSION="$eff_game"
+    local state="$MINECRAFT_SERVER_DIR/packstate.json" version loader_count loader server_file
+    if [ ! -f "$state" ] || ! command -v jq >/dev/null 2>&1; then
+        print_error "Nao foi possivel confirmar as dependencias do modpack instalado ($state)."
+        return 1
     fi
-    if [ -n "$eff_loader" ] && [ "$eff_loader" != "$MINECRAFT_LOADER" ]; then
-        print_warning "Modpack '$slug' usa loader '$eff_loader' (configurado: $MINECRAFT_LOADER) — verifique compatibilidade."
-        MC_EFFECTIVE_LOADER="$eff_loader"
+    version="$(jq -er '.dependencies.minecraft | select(type == "string" and length > 0)' "$state")" || return 1
+    if ! [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+[a-z0-9]*)?$|^[0-9]+w[0-9]+[a-z]$ ]]; then
+        print_error "Versao Minecraft invalida no packstate: $version"
+        return 1
     fi
+    loader_count="$(jq -er '[.dependencies | .["fabric-loader"], .["quilt-loader"], .forge, .neoforge | select(type == "string" and length > 0)] | length' "$state")" || return 1
+    if [ "$loader_count" -gt 1 ]; then
+        print_error "Modpack possui multiplos loaders; nao e possivel decidir com seguranca."
+        return 1
+    fi
+    loader="$(jq -r '.dependencies | if (.["fabric-loader"] // "") != "" then "fabric" elif (.["quilt-loader"] // "") != "" then "quilt" elif (.forge // "") != "" then "forge" elif (.neoforge // "") != "" then "neoforge" else "vanilla" end' "$state")" || return 1
+    server_file="$(jq -r '.["server-file"].path // empty' "$state")" || return 1
+    if [ -n "$server_file" ]; then
+        case "$server_file" in */*|.*|-*) print_error "Caminho de servidor invalido no packstate."; return 1 ;; esac
+        MINECRAFT_SERVER_FILE="$server_file"
+    fi
+    MC_EFFECTIVE_VERSION="$version"
+    MC_EFFECTIVE_LOADER="$loader"
+    MINECRAFT_LOADER="$loader"
+    print_step "Modpack instalado: Minecraft $version, loader $loader."
 }
 
 # (CR-17) Pendencias coletadas pelos hooks de mods; o modo strict decide o
