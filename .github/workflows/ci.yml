@@ -226,6 +226,25 @@ jobs:
           bash tests/arch-smoke.sh
           bash tests/arch-dry-install.sh
 
+  test-minecraft-jvm:
+    name: Minecraft launcher (Java ${{ matrix.java }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['21', '25']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - name: Exercise launcher with real JVM
+        env:
+          TEST_JAVA_MAJOR: ${{ matrix.java }}
+        run: bash tests/minecraft-real-jvm-test.sh
+
   test-go:
     name: Test Go (race)
     runs-on: ubuntu-22.04
@@ -319,7 +338,7 @@ jobs:
   build-agent:
     name: Build Agent (${{ matrix.goos }}/${{ matrix.goarch }})
     needs: [lint-go, test-go]
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     strategy:
@@ -383,7 +402,7 @@ jobs:
   build-bot:
     name: Build Bot (Docker)
     needs: [lint-python, test-python]
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
@@ -420,7 +439,7 @@ jobs:
     # Antes: needs=[build-agent, build-bot] e os builds nao dependiam de
     # lint-shell/test-shell/test-shell-arch — uma release podia ser publicada
     # com a pipeline geral vermelha (testes Shell falhos).
-    needs: [build-agent, build-bot, lint-shell, test-shell, test-shell-arch]
+    needs: [build-agent, build-bot, lint-shell, test-shell, test-shell-arch, test-minecraft-jvm]
     if: |
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.create_release)
