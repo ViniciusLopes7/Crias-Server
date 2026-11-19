@@ -59,7 +59,7 @@ source "$root/minecraft/install.sh"
 DRY_RUN=false
 MRPACK_INSTALL_VERSION=v0.23.0
 install_mrpack_install
-for loader in vanilla fabric; do
+for loader in vanilla fabric quilt forge neoforge; do
     real_server="/opt/crias-real-${loader}"
     mkdir -p "$real_server/.shared"
     cp "$root"/shared/lib/*.sh "$real_server/.shared/"
