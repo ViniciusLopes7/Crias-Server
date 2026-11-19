@@ -13,6 +13,16 @@ O projeto **não** abre portas automaticamente. Se o servidor estiver em rede p�
 
 ### Exemplo: restringir acesso à interface Tailscale (nftables)
 
+> **AVISO (CR-27)**: aplicar `policy drop` sem as regras de estado/ICMP abaixo
+> pode cortar o seu próprio acesso SSH (sessões fora de `tailscale0`, respostas
+> de conexões iniciadas pelo host). Aplique SEMPRE com um plano de rollback
+> (console físico, out-of-band, ou um job agendado que reverte o firewall):
+>
+> ```bash
+> # Exemplo de rollback temporizado — reverte em 3 min se você não confirmar:
+> sudo sh -c 'echo "systemctl stop nftables" | at now + 3 minutes'
+> ```
+
 ```nft
 # /etc/nftables.conf
 table inet filter {
@@ -22,18 +32,31 @@ table inet filter {
         # Loopback
         iifname "lo" accept
 
-        # Tailscale
+        # Conexões já estabelecidas/relacionadas (sem isto, respostas de
+        # conexões INICIADAS pelo host são descartadas e o host "perde" rede)
+        ct state established,related accept
+
+        # ICMP/ICMPv6 — essenciais (PMTUD, NDP; sem IPv6-ND o host perde
+        # conectividade v6 inteira)
+        ip protocol icmp accept
+        ip6 nexthdr ipv6-icmp accept
+
+        # Tailscale (interface VPN — tráfego de confiança)
         iifname "tailscale0" tcp dport 25565 accept comment "Minecraft"
         iifname "tailscale0" tcp dport 7777 accept comment "Terraria"
 
-        # SSH (ajuste porta se necessário — libere só interfaces confiáveis)
+        # SSH admin — ajuste a interface/porta para a SUA topologia antes de
+        # aplicar. Se você administra por uma interface que não é a tailscale0,
+        # libere-a AQUI, senão perde o acesso no momento em que o firewall sobe.
         iifname "tailscale0" tcp dport 22 accept comment "SSH via Tailscale"
     }
 }
 ```
 
 ```bash
+# Aplique com rollback armado (ver AVISO acima) e confira o acesso ANTES:
 sudo systemctl enable --now nftables
+# Nova sessão SSH em outro terminal para validar; só então cancele o rollback.
 ```
 
 ## SSH (v1.2.0)

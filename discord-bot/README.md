@@ -70,10 +70,20 @@ CRIAS_AGENT_TOKEN=<64_hex_chars_gerados_pelo_install_sh>
 ```bash
 # Opção A: conectar repo do GitHub no painel do Railway
 # Railway detecta o Dockerfile automaticamente.
+```
 
 ### 3. Sincronizar slash commands
 
-Na primeira execução, o bot sincroniza slash commands automaticamente:
+> **Importante (DOC-04)**: a sincronização NÃO é automática por padrão. Ela
+> ocorre apenas na primeira execução **com `FORCE_SYNC_COMMANDS=true`** no
+> ambiente (chave ausente do `.env.example`; agora documentada aqui).
+> Sem essa chave, comandos podem não aparecer — veja o log do bot.
+
+```bash
+# Exemplo: forçar o sync no próximo boot (Railway: variável de ambiente)
+FORCE_SYNC_COMMANDS=true
+```
+
 - Se `DISCORD_GUILD_ID` estiver definido: sync imediato no guild (1-2s).
 - Caso contrário: sync global (pode levar até 1h para aparecer no Discord).
 

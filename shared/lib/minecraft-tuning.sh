@@ -135,6 +135,27 @@ compute_minecraft_tuning() {
 write_minecraft_runtime_env() {
     local file_path="$1"
 
+    # Configuracao de backup (CR-15): BACKUP_REMOTE_PATH/BACKUP_NOTIFY_WEBHOOK
+    # vindas do config.env sao propagadas ao runtime.env (o backup-cron le o
+    # runtime.env via backup_init). Valores ja existentes no arquivo sao
+    # preservados quando o ambiente nao os define (reconfigure-hardware roda
+    # sem elas e nao pode apaga-las).
+    local backup_remote="${BACKUP_REMOTE_PATH:-$(env_file_read_value "$file_path" BACKUP_REMOTE_PATH)}"
+    local backup_webhook="${BACKUP_NOTIFY_WEBHOOK:-$(env_file_read_value "$file_path" BACKUP_NOTIFY_WEBHOOK)}"
+    local backup_include_mods="${BACKUP_INCLUDE_MODS:-$(env_file_read_value "$file_path" BACKUP_INCLUDE_MODS)}"
+
+    # runtime.env e carregado com `source` pelo backup-cron: valores com ",
+    # $, ` ou newline entre aspas duplas quebrariam/expandiriam no parse.
+    # Chaves com esses caracteres nao sao persistidas (admin pode editar o
+    # runtime.env manualmente).
+    case "$backup_remote$backup_webhook" in
+        *'"'*|*'$'*|*'`'*|*$'\n'*)
+            print_warning "BACKUP_REMOTE_PATH/BACKUP_NOTIFY_WEBHOOK contem caracteres nao suportados (\$ \" \`) — chaves nao serao persistidas no runtime.env."
+            backup_remote=""
+            backup_webhook=""
+            ;;
+    esac
+
     write_file_or_dry_run "Gerando runtime.env do Minecraft em $file_path" "$file_path" << EOF
 MIN_RAM="$MC_MIN_RAM"
 MAX_RAM="$MC_MAX_RAM"
@@ -143,6 +164,9 @@ G1_REGION_SIZE="$MC_G1_REGION_SIZE"
 BACKUP_RETENTION_DAYS="$MC_BACKUP_RETENTION_DAYS"
 BACKUP_ZSTD_LEVEL="$MC_BACKUP_ZSTD_LEVEL"
 MINECRAFT_LOADER="${MINECRAFT_LOADER:-fabric}"
+BACKUP_REMOTE_PATH="$backup_remote"
+BACKUP_NOTIFY_WEBHOOK="$backup_webhook"
+BACKUP_INCLUDE_MODS="$backup_include_mods"
 EOF
 }
 
@@ -152,10 +176,19 @@ write_minecraft_server_properties() {
     local online_mode="$3"
     local motd="${4:-§6§l🏰 REINO DOS CRIAS 🏰\\n§eAdrenaline + QoL §7| §aA resenha nunca morre...§r}"
 
+    # Chaves gerenciadas pelo Crias (CR-09): qualquer outra chave existente
+    # (enable-rcon, rcon.password, whitelist, level-name, op-levels,
+    # comentarios...) e PRESERVADA por merge — reconfigure-hardware nao pode
+    # apagar a configuracao do administrador (antes: truncava o arquivo).
+    local managed_keys='^(server-port|server-ip|online-mode|motd|max-players|network-compression-threshold|prevent-proxy-connections|view-distance|simulation-distance|max-tick-time|max-world-size|sync-chunk-writes|enable-jmx-monitoring|enable-status|entity-broadcast-range-percentage|spawn-animals|spawn-monsters|spawn-npcs|spawn-protection)='
+
     if dry_run_enabled; then
         print_step "[DRY_RUN] Gerando server.properties do Minecraft em $file_path"
         return 0
     fi
+
+    local tmp_new
+    tmp_new="$(mktemp_crias_file)"
 
     {
         printf '%s\n' '# Minecraft server properties'
@@ -181,7 +214,31 @@ write_minecraft_server_properties() {
         printf '%s\n' 'spawn-monsters=true'
         printf '%s\n' 'spawn-npcs=true'
         printf '%s\n' 'spawn-protection=0'
-    } > "$file_path"
+    } > "$tmp_new"
+
+    if [ -f "$file_path" ]; then
+        # Backup do estado pre-merge (ultima versao pre-instalacao).
+        cp -a "$file_path" "${file_path}.crias-bak"
+
+        # Merge: bloco gerenciado novo + tudo que NAO e chave gerenciada do
+        # arquivo atual (comentarios, chaves do admin). O jogo le a ULTIMA
+        # ocorrencia de cada chave — as gerenciadas antigas sao descartadas
+        # e as novas (no topo) prevalecem. ATENCAO: escrever em tmp e copiar
+        # por cima — redirecionar `> file` direto truncaria o arquivo ANTES
+        # do awk te-lo lido.
+        local tmp_merged
+        tmp_merged="$(mktemp_crias_file)"
+        {
+            cat "$tmp_new"
+            awk -v re="$managed_keys" '$0 !~ re' "$file_path"
+        } > "$tmp_merged"
+        cat "$tmp_merged" > "$file_path"
+        rm -f "$tmp_merged"
+    else
+        cat "$tmp_new" > "$file_path"
+    fi
+
+    rm -f "$tmp_new"
     chmod 0640 "$file_path"
 }
 

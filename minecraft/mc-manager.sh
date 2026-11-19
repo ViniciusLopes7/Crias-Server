@@ -57,7 +57,10 @@ fi
 source "$MANAGER_COMMON_LIB"
 
 # SELF precisa ser setado após source do manager-common (que define manager_resolve_self).
-SELF="$(manager_resolve_self)"
+# BASH_SOURCE[0] no top-level do manager = o PROPRIO manager (na funcao da lib
+# seria a lib — CR-10); passado explicitamente para a auto-elevacao reinovocar
+# o manager certo.
+SELF="$(manager_resolve_self "${BASH_SOURCE[0]}")"
 
 if [ -f "$COMMON_LIB" ]; then
     # shellcheck source=/dev/null

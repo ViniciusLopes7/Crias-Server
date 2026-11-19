@@ -40,9 +40,27 @@ BACKUP_SERVICE_NAME="${BACKUP_SERVICE_NAME:-terraria}"
 # Diretórios de backup: worlds/ + config/ sempre; Mods/ + Worlds/ se tModLoader.
 BACKUP_DIRS=("worlds" "config")
 
-# Detecta tModLoader: se server/LaunchUtils/ScriptCaller.sh existe, inclui Mods/ e Worlds/.
-if [ -x "$BACKUP_SERVER_DIR/server/LaunchUtils/ScriptCaller.sh" ]; then
-    BACKUP_DIRS+=("Mods" "Worlds")
+# Modo tML (CR-12): chave explicita do runtime.env com prioridade sobre a
+# deteccao por artefato — mesma regra do start-terraria.sh.
+TT_RUNTIME_MODE=""
+if [ -f "$BACKUP_SERVER_DIR/runtime.env" ]; then
+    TT_RUNTIME_MODE="$(grep -E '^TERRARIA_USE_TMODLOADER=' "$BACKUP_SERVER_DIR/runtime.env" | tail -1 | cut -d= -f2- | tr -d '"' || true)"
+fi
+TT_IS_TML="false"
+if [ "$TT_RUNTIME_MODE" = "true" ] || [ "$TT_RUNTIME_MODE" = "false" ]; then
+    TT_IS_TML="$TT_RUNTIME_MODE"
+elif [ -x "$BACKUP_SERVER_DIR/server/LaunchUtils/ScriptCaller.sh" ]; then
+    TT_IS_TML="true"
+fi
+
+# tML: Worlds/ sao mundos (dados — sempre incluir); Mods/ sao jars
+# re-baixaveis via SteamCMD (inclusos por padrao, opt-out via
+# BACKUP_INCLUDE_MODS=false no runtime.env).
+if [ "$TT_IS_TML" = "true" ]; then
+    BACKUP_DIRS+=("Worlds")
+    if is_true "${BACKUP_INCLUDE_MODS:-true}"; then
+        BACKUP_DIRS+=("Mods")
+    fi
 fi
 
 # Inherit legacy variables (backward compat).
@@ -54,4 +72,7 @@ BACKUP_REQUIRE_ACTIVE_SERVICE="${BACKUP_REQUIRE_ACTIVE_SERVICE:-true}"
 # Terraria has no RCON, so no pre/post hooks (just lock + tar).
 # backup_pre_hook and backup_post_hook are not defined; engine skips both.
 
-backup_run
+# Guard de execução direta: permite `source` em testes sem disparar backup.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    backup_run
+fi

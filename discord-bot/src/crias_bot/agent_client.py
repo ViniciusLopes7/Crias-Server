@@ -37,6 +37,11 @@ class AgentClientError(Exception):
 
 # Default unary RPC timeout (seconds).
 DEFAULT_RPC_TIMEOUT: float = 10.0
+# Stop/restart can take as long as the unit's graceful shutdown allows
+# (TimeoutStopSec=120 in minecraft.service/terraria.service) plus margin —
+# the previous 10s default made /mc stop fail with a deadline error while
+# systemd was still saving chunks (CR-28).
+STOP_RPC_TIMEOUT: float = 130.0
 
 
 def _is_localhost(host: str) -> bool:
@@ -298,7 +303,7 @@ class AgentClient:
             resp = await self._stub.StopServer(
                 crias_pb2.StopRequest(),
                 metadata=self._metadata(),
-                timeout=DEFAULT_RPC_TIMEOUT,
+                timeout=STOP_RPC_TIMEOUT,
             )
             return {"ok": resp.ok, "message": resp.message, "service": resp.service_name}
         except grpc.RpcError as e:
@@ -313,7 +318,7 @@ class AgentClient:
             resp = await self._stub.RestartServer(
                 crias_pb2.RestartRequest(),
                 metadata=self._metadata(),
-                timeout=DEFAULT_RPC_TIMEOUT,
+                timeout=STOP_RPC_TIMEOUT,
             )
             return {"ok": resp.ok, "message": resp.message, "service": resp.service_name}
         except grpc.RpcError as e:

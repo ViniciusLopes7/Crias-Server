@@ -7,7 +7,7 @@
 | Documento | Descrição |
 |-----------|-----------|
 | [../README.md](../README.md) | Visão geral + quick start + controle remoto Discord |
-| [tutorial.md](tutorial.md) | Fluxo completo: instalar (ISO ou git clone) → operar → troubleshoot |
+| [tutorial.md](tutorial.md) | Fluxo completo: instalar (bootstrap curl ou git clone) → operar → troubleshoot |
 | [../CHANGELOG.md](../CHANGELOG.md) | Histórico de versões |
 | [../ROADMAP.md](../ROADMAP.md) | Status de implementação e próximos passos |
 
@@ -48,7 +48,7 @@
 
 ## CI/CD
 
-Workflow único: [../.github/workflows/ci.yml](../.github/workflows/ci.yml) — 12 jobs em paralelo + release consolidada.
+Workflow único: [../.github/workflows/ci.yml](../.github/workflows/ci.yml) — 10 jobs (3 lint, 4 test, 2 build, 1 release consolidada).
 
 ### Lint + Test (paralelos, rodam em todo push/PR)
 
@@ -73,7 +73,7 @@ Workflow único: [../.github/workflows/ci.yml](../.github/workflows/ci.yml) — 
 
 | Job | Função |
 |-----|--------|
-| `release` | Em tag `v*.*.*` ou `workflow_dispatch` com `create_release=true`: cria UMA release com ISO + binários Go + Docker bot + source archives + checksums SHA256 |
+| `release` | Em tag `v*.*.*` ou `workflow_dispatch` com `create_release=true`: cria UMA release com binários Go + zip do bot + source archives + checksums SHA256 (sem ISO — o pipeline de ISO foi descontinuado) |
 
 ## Testes
 
@@ -91,6 +91,6 @@ bash tests/mutation-test.sh
 bash shared/lib/tui.sh selftest
 bash shared/lib/mc-manifests.sh selftest
 
-# Testes que requerem ISO construída
+# Testes que requerem artefatos de release construídos (legado; sem ISO no pipeline atual)
 ISO_PATH=/path/to/crias.iso bash tests/run-all.sh
 ```

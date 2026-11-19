@@ -884,8 +884,14 @@ write_stack_env_file() {
         printf 'FORCE_HARDWARE_TIER=%q\n' "$FORCE_HARDWARE_TIER"
         printf 'APPLY_SYSTEM_TUNING=%q\n' "$APPLY_SYSTEM_TUNING"
         printf 'SYSTEM_TUNING_SCOPE=%q\n' "$SYSTEM_TUNING_SCOPE"
+        printf 'VIRT_TUNING_BEHAVIOR=%q\n' "${VIRT_TUNING_BEHAVIOR:-auto}"
         printf 'DRY_RUN=%q\n' "$DRY_RUN"
         printf 'NON_INTERACTIVE=%q\n' "$NON_INTERACTIVE"
+        # Backup (CR-15): configuracao de backup remoto/webhook do config.env
+        # precisa alcancar o runtime.env escrito pelo stack installer.
+        printf 'BACKUP_REMOTE_PATH=%q\n' "${BACKUP_REMOTE_PATH:-}"
+        printf 'BACKUP_NOTIFY_WEBHOOK=%q\n' "${BACKUP_NOTIFY_WEBHOOK:-}"
+        printf 'BACKUP_INCLUDE_MODS=%q\n' "${BACKUP_INCLUDE_MODS:-true}"
         # Hardware tier thresholds.
         printf 'HW_LOW_TIER_MAX_RAM_MB=%q\n' "${HW_LOW_TIER_MAX_RAM_MB:-3072}"
         printf 'HW_LOW_TIER_MAX_CPU_CORES=%q\n' "${HW_LOW_TIER_MAX_CPU_CORES:-2}"
@@ -951,7 +957,6 @@ run_selected_stack_installer() {
     local env_file
     local target_script
     local entry_function
-    local exit_code
 
     env_file="$(write_stack_env_file)"
 
@@ -963,7 +968,13 @@ run_selected_stack_installer() {
         entry_function="run_terraria_install"
     fi
 
+    # O trap EXIT no subshell garante a limpeza do env_file em sucesso OU
+    # falha. A funcao NAO captura o exit code com `||`/`if !` (CR-04): contexto
+    # condicional desativa o errexit do subshell INTEIRO e falhas internas
+    # (download, pacman, envsubst...) eram engolidas — produzindo
+    # "instalacao concluida" falsa. Sem captura, o set -e do caller propaga.
     (
+        trap 'rm -f "$env_file"' EXIT
         set -euo pipefail
         # shellcheck disable=SC1090
         source "$env_file"
@@ -972,10 +983,6 @@ run_selected_stack_installer() {
         source "$target_script"
         "$entry_function"
     )
-
-    exit_code=$?
-    rm -f "$env_file"
-    return "$exit_code"
 }
 
 cleanup_stack_by_type() {
@@ -1002,6 +1009,18 @@ cleanup_stack_by_type() {
     if systemctl list-unit-files | grep -Fq "${service_name}.service"; then
         systemctl stop "$service_name" >/dev/null 2>&1 || true
         systemctl disable "$service_name" >/dev/null 2>&1 || true
+    fi
+
+    # Timer de backup da stack removida (CR-07): crontab e .timer sao
+    # mecanismos independentes — remover o cron legado nao desativa o timer
+    # systemd, que continuaria disparando backups (e, em units legadas com
+    # Requires=, poderia ligar o jogo) apos a troca de stack.
+    if systemctl list-unit-files 2>/dev/null | grep -Fq "${service_name}-backup.timer"; then
+        systemctl disable --now "${service_name}-backup.timer" >/dev/null 2>&1 || true
+        print_step "Timer de backup ${service_name}-backup.timer desativado."
+    fi
+    if systemctl list-unit-files 2>/dev/null | grep -Fq "${service_name}-backup.service"; then
+        systemctl stop "${service_name}-backup.service" >/dev/null 2>&1 || true
     fi
 
     systemctl daemon-reload >/dev/null 2>&1 || true
@@ -1431,6 +1450,27 @@ install_crias_agent_if_enabled() {
         return 1
     fi
 
+    # Verifica o SHA256 do binario contra o asset .sha256 da MESMA release
+    # (CR-18): HTTPS protege a transmissao, nao o conteudo do asset. Sem
+    # verificacao, um binario adulterado seria instalado em /opt com 755.
+    local agent_sha_url="${agent_url}.sha256"
+    local agent_sha_local="${agent_tmp_dir}/crias-agent.sha256"
+    if ! _curl_with_retry "$agent_sha_url" "$agent_sha_local"; then
+        print_error "Falha ao baixar o checksum do agente: $agent_sha_url"
+        print_error "Sem verificacao de integridade o binario NAO sera instalado."
+        return 1
+    fi
+    local agent_expected_sha agent_actual_sha
+    agent_expected_sha="$(awk '{print $1}' "$agent_sha_local" 2>/dev/null || true)"
+    agent_actual_sha="$(sha256sum "$agent_local" 2>/dev/null | awk '{print $1}' || true)"
+    if [ -z "$agent_expected_sha" ] || [ "$agent_expected_sha" != "$agent_actual_sha" ]; then
+        print_error "Checksum do crias-agent divergente; binario NAO instalado."
+        print_error "  Esperado: ${agent_expected_sha:-<vazio>}"
+        print_error "  Obtido:   ${agent_actual_sha:-<vazio>}"
+        return 1
+    fi
+    print_step "Checksum do crias-agent verificado (SHA256 OK)."
+
     install -m 755 -o root -g root "$agent_local" /opt/crias-agent/crias-agent
 
     # 4. Gera token aleatório (32 bytes hex = 64 chars).
@@ -1573,7 +1613,12 @@ RestartSec=5
 MemoryMax=128M
 CPUQuota=10%
 PrivateTmp=yes
-NoNewPrivileges=yes
+# Sem NoNewPrivileges/RestrictSUIDSGID (CR-06): o agente invoca
+# /usr/bin/sudo (setuid) para systemctl; com NoNewPrivileges=yes o systemd
+# nega a elevacao e TODO controle remoto (start/stop/restart) falha em
+# silencio. A fronteira de privilegio e o sudoers allowlist abaixo (apenas
+# systemctl no servico do jogo + comandos do manager); o restante do
+# hardening permanece.
 ProtectSystem=strict
 ProtectHome=yes
 ReadWritePaths=/opt/crias-agent /var/log/crias-agent
@@ -1583,7 +1628,6 @@ ProtectKernelLogs=yes
 ProtectControlGroups=yes
 ProtectClock=yes
 ProtectHostname=yes
-RestrictSUIDSGID=yes
 RestrictRealtime=yes
 RestrictNamespaces=yes
 RemoveIPC=yes
@@ -1800,9 +1844,12 @@ main() {
         fi
     fi
 
-    if ! run_selected_stack_installer; then
-        exit 1
-    fi
+    # Chamada SEM contexto condicional (CR-04): `if ! f; then` desativa o
+    # errexit dentro de f (e do subshell inteiro) — falhas intermediarias do
+    # installer eram silenciadas e a instalacao reportava sucesso. Com a
+    # chamada direta, o set -e do install.sh + o ERR trap abaixo abortam com
+    # diagnostico correto.
+    run_selected_stack_installer
     configure_alias_autoload_for_selected_stack
     cleanup_other_stack_if_needed
 

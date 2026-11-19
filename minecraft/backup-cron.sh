@@ -108,7 +108,25 @@ backup_pre_hook() {
         RCON_SAVE_LOCK_ACTIVE=true
         RCON_PASSWORD="$rcon_pass"
         backup_log "Saves pausados via RCON. Aguardando flush..."
-        MCRCON_PASS="$rcon_pass" mcrcon -H "$MCRCON_HOST" -P "$MCRCON_PORT" "save-all" >/dev/null 2>&1 || true
+
+        # save-all fail-closed (CR-16): sem flush confirmado o tar nao e
+        # confiavel. Duas tentativas; falhou -> aborta o backup (o EXIT trap
+        # do engine restaura save-on). Antes: `|| true` prosseguia com o tar
+        # sem garantia de consistencia.
+        local flush_ok=false
+        local flush_attempt=1
+        while [ "$flush_attempt" -le 2 ]; do
+            if MCRCON_PASS="$rcon_pass" mcrcon -H "$MCRCON_HOST" -P "$MCRCON_PORT" "save-all" >/dev/null 2>&1; then
+                flush_ok=true
+                break
+            fi
+            flush_attempt=$((flush_attempt + 1))
+            [ "$flush_attempt" -le 2 ] && sleep 2
+        done
+        if [ "$flush_ok" != "true" ]; then
+            backup_log "ERRO: save-all falhou apos $((flush_attempt - 1)) tentativa(s); abortando backup (saves serao reativados)."
+            return 1
+        fi
         sleep 3
     fi
 
@@ -142,6 +160,22 @@ backup_post_hook() {
     return 1
 }
 
+# ---------------------------------------------------------------------------
+# Escopo do backup (CR-13/CR-14): resolve o mundo efetivo via level-name do
+# server.properties (mundos customizados nunca eram backupeados) e inclui
+# configuracao essencial. Mods entram por padrao; desative com
+# BACKUP_INCLUDE_MODS=false no runtime.env se os backups ficarem grandes.
+# ---------------------------------------------------------------------------
+MC_LEVEL_NAME="$(read_server_property "level-name" 2>/dev/null || true)"
+MC_LEVEL_NAME="${MC_LEVEL_NAME:-world}"
+BACKUP_DIRS=("$MC_LEVEL_NAME" "${MC_LEVEL_NAME}_nether" "${MC_LEVEL_NAME}_the_end" "server.properties" "config")
+if is_true "${BACKUP_INCLUDE_MODS:-true}"; then
+    BACKUP_DIRS+=("mods")
+fi
+
 # Compat: função is_service_active_or_skip e backup_log() herdadas da backup-engine.
 
-backup_run
+# Guard de execução direta: permite `source` em testes sem disparar backup.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    backup_run
+fi

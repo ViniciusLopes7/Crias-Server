@@ -92,6 +92,11 @@ JAVA_OPTS+=("-XX:+ParallelRefProcEnabled")
 JAVA_OPTS+=("-XX:MaxGCPauseMillis=${GC_MAX_PAUSE}")
 JAVA_OPTS+=("-XX:+DisableExplicitGC")
 JAVA_OPTS+=("-XX:G1HeapRegionSize=${G1_REGION_SIZE}")
+# G1NewSizePercent/G1MaxNewSizePercent são flags EXPERIMENTAIS: sem o unlock
+# antes delas a JVM 21 encerra com "VM option ... is experimental" (exit 1) e
+# o servidor nunca sobe. UnlockExperimentalVMOptions é aceito desde o JDK 8 e
+# inofensivo quando as flags virarem product flags no futuro.
+JAVA_OPTS+=("-XX:+UnlockExperimentalVMOptions")
 JAVA_OPTS+=("-XX:G1NewSizePercent=30")
 JAVA_OPTS+=("-XX:G1MaxNewSizePercent=40")
 JAVA_OPTS+=("-XX:G1ReservePercent=20")

@@ -21,12 +21,26 @@ fi
 SERVER_DIR="${SERVER_DIR:-$DEFAULT_SERVER_DIR}"
 CONFIG_FILE="${CONFIG_FILE:-$SERVER_DIR/config/serverconfig.txt}"
 
+# Modo tML vs vanilla (CR-12): a chave explicita do runtime.env (escrita pelo
+# installer) TEM prioridade sobre a deteccao por artefato. Sem ela
+# (instalacoes legacy), vale a deteccao via ScriptCaller.sh. Isso corrige a
+# migracao tModLoader -> vanilla no mesmo diretorio: o marcador legado
+# continuaria presente e a deteccao sozinha escolheria tML para sempre.
+RUNTIME_ENV_FILE="$SERVER_DIR/runtime.env"
+TML_RUNTIME_MODE=""
+if [ -f "$RUNTIME_ENV_FILE" ]; then
+    TML_RUNTIME_MODE="$(grep -E '^TERRARIA_USE_TMODLOADER=' "$RUNTIME_ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '"' || true)"
+fi
+
 # tModLoader detection: se server/LaunchUtils/ScriptCaller.sh existe, usa tML.
 TML_SCRIPT_CALLER="$SERVER_DIR/server/LaunchUtils/ScriptCaller.sh"
 USE_TMODLOADER="false"
-if [ -x "$TML_SCRIPT_CALLER" ]; then
+if [ "$TML_RUNTIME_MODE" = "true" ] || [ "$TML_RUNTIME_MODE" = "false" ]; then
+    USE_TMODLOADER="$TML_RUNTIME_MODE"
+elif [ -x "$TML_SCRIPT_CALLER" ]; then
     USE_TMODLOADER="true"
-else
+fi
+if [ "$USE_TMODLOADER" != "true" ]; then
     SERVER_BIN="${SERVER_BIN:-$SERVER_DIR/TerrariaServer.bin.x86_64}"
 fi
 

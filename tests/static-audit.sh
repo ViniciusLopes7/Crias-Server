@@ -80,6 +80,45 @@ else
   echo "Note: perl não disponível, pulando verificação de gum 2>/dev/null." >&2
 fi
 
+echo "Checking CR-04: run_selected_stack_installer must NOT be called in conditional context..."
+# `if ! run_selected_stack_installer` desativa o errexit do subshell interno:
+# falhas de download/pacman/envsubst eram engolidas e a instalacao reportava
+# sucesso. O contrato agora e chamada direta (set -e do caller propaga).
+if grep -qE '(if !|&&|\|\|) *run_selected_stack_installer' install.sh; then
+  echo "ERROR: install.sh chama run_selected_stack_installer em contexto condicional (CR-04 regressão)." >&2
+  grep -nE '(if !|&&|\|\|) *run_selected_stack_installer' install.sh >&2
+  errors=$((errors+1))
+fi
+
+echo "Checking CR-05: backup service unit must NOT use Requires= on the game..."
+# Requires= coloca o jogo na transacao de start do backup: timer disparando
+# com o jogo desligado LIGARIA o servidor. O skip offline e feito em runtime
+# pelo backup-engine (is_service_active_or_skip).
+if grep -Fq 'Requires=${SETUP_CRON_SERVICE_NAME}' shared/lib/setup-cron.sh; then
+  echo "ERROR: setup-cron.sh geraria backup unit com Requires= do jogo (CR-05 regressão)." >&2
+  errors=$((errors+1))
+fi
+
+echo "Checking CR-07: stack cleanup must disable the backup timer..."
+# Trocar de stack sem desativar o timer da antiga deixa backups orfaos
+# disparando (e, em units legadas com Requires=, ligando o jogo errado).
+if ! grep -q 'backup.timer' install.sh; then
+  echo "ERROR: cleanup_stack_by_type não desativa <stack>-backup.timer (CR-07 regressão)." >&2
+  errors=$((errors+1))
+fi
+
+echo "Checking CR-06: agent unit must allow privilege acquisition (sudo)..."
+# A unit do agente invoca /usr/bin/sudo; NoNewPrivileges=yes a quebraria em
+# silencio. (As units dos JOGOS legitimamente usam NoNewPrivileges=yes —
+# este check mira apenas o bloco da unit do agente em install.sh.)
+agent_unit_block=$(awk '/Description=Crias Agent/,/^EOF/' install.sh 2>/dev/null || true)
+# Diretiva em linha propria (^NoNewPrivileges=yes) — comentarios de
+# explicacao dentro da unit podem citar a diretiva sem usa-la.
+if [ -n "$agent_unit_block" ] && printf '%s\n' "$agent_unit_block" | grep -Eq '^[[:space:]]*NoNewPrivileges=yes'; then
+  echo "ERROR: unit do crias-agent contem NoNewPrivileges=yes (CR-06: sudo do agente ficaria bloqueado)." >&2
+  errors=$((errors+1))
+fi
+
 if [ "$errors" -ne 0 ]; then
   echo "Static audit found issues (errors=$errors)." >&2
   exit 1

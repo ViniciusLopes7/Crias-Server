@@ -99,7 +99,11 @@ write_service_unit() {
     cat > "$target_service" <<EOF
 [Unit]
 Description=${SETUP_CRON_STACK_NAME^} Backup Service
-Requires=${SETUP_CRON_SERVICE_NAME}.service
+# SEM Requires= do jogo (CR-05): Requires= colocaria o servico do jogo na
+# transacao de start do backup — um timer disparando com o jogo desligado
+# LIGARIA o servidor. O skip de jogo offline e feito em runtime pelo
+# is_service_active_or_skip do backup-engine. After= so ordena quando ambos
+# estao na mesma transacao (ex.: boot).
 After=${SETUP_CRON_SERVICE_NAME}.service
 After=network-online.target
 Wants=network-online.target

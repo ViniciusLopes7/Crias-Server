@@ -45,18 +45,38 @@ def main() -> None:
 
 
 async def _run(bot: CriasBot, token: str) -> None:
-    """Connect to gRPC agent first, then start the Discord bot."""
+    """Start the Discord bot first; connect to the gRPC agent in background.
+
+    O bot DEVE ficar online mesmo com o agente indisponivel (CR-11): o
+    connect() antigo era awaited antes do bot.start e, como ele retry-a
+    forever para falhas transitórias, um agente offline mantinha o bot fora
+    do Discord indefinidamente. Comandos que dependem do agente reportam
+    "agente offline" ate a conexao estabelecer (stub None guard).
+    """
+    log = logging.getLogger("crias-bot")
+
+    log.info("Iniciando bot Discord ...")
+    async with bot:
+        agent_task = asyncio.create_task(_connect_agent_forever(bot))
+        try:
+            await bot.start(token)
+        finally:
+            agent_task.cancel()
+            try:
+                await agent_task
+            except asyncio.CancelledError:
+                pass
+
+
+async def _connect_agent_forever(bot: CriasBot) -> None:
+    """Supervised agent connection; connect() itself retries with backoff."""
     log = logging.getLogger("crias-bot")
     log.info("Conectando ao agente em %s ...", bot.config.agent_host)
     try:
         await bot.agent.connect()
-    except Exception as e:
-        log.error("Não foi possível conectar ao agente: %s", e)
-        log.warning("Bot vai iniciar mesmo assim; vai tentar reconectar em background.")
-
-    log.info("Iniciando bot Discord ...")
-    async with bot:
-        await bot.start(token)
+        log.info("Conectado ao agente.")
+    except Exception as e:  # pragma: no cover - defensive: connect() should retry
+        log.error("Conexao com o agente terminou com erro: %s", e)
 
 
 if __name__ == "__main__":

@@ -59,12 +59,19 @@ HW_MID_TIER_MAX_CPU_CORES=6
 
 Se `systemd-detect-virt` detectar container (docker/lxc/containerd/kubepods), o tuning de host é **pulado automaticamente** para evitar conflito com o hypervisor.
 
-Para forçar tuning mesmo em container (não recomendado):
+**Override efetivo (CR-24)**: apenas `VIRT_TUNING_BEHAVIOR="force"` ignora o
+auto-skip (implementado em `apply_stack_system_tuning`). `SYSTEM_TUNING_SCOPE`
+é lido por `apply_common_system_tuning` (escopo do que o tuning toca) e **não**
+desativa o skip por virtualização — não confunda as duas chaves:
+
+| Chave | Onde age | Efeito |
+|---|---|---|
+| `VIRT_TUNING_BEHAVIOR=force` | `apply_stack_system_tuning` | Roda o tuning mesmo em container/VPS (não recomendado) |
+| `SYSTEM_TUNING_SCOPE=host` | `apply_common_system_tuning` | Escopo das operações de tuning quando ele roda |
 
 ```bash
 # Em config.env
-SYSTEM_TUNING_SCOPE="host"
-VIRT_TUNING_BEHAVIOR="force"
+VIRT_TUNING_BEHAVIOR="force"   # ignora o auto-skip de virtualização
 ```
 
 ## Override manual de tier

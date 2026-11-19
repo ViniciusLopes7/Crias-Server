@@ -21,15 +21,15 @@
 | **Loaders** | ✅ (v1.2.0) | `fabric | quilt | vanilla | forge | neoforge` — `paper` **removido** |
 | **Refactoring shell** | ✅ | 3 novas libs compartilhadas (`stack-installer.sh`, `backup-engine.sh`, `setup-cron.sh`) + `tui.sh` + `mc-manifests.sh` |
 | **Hardening systemd** | ✅ | `envsubst` em templates `.service`, `CapabilityBoundingSet=`, `SystemCallFilter=@system-service`, etc. |
-| **Supply chain** | ⚠️ | SHA256 dos artefatos de release gerado no CI; install.sh não verifica checksums em runtime |
+| **Supply chain** | ✅ (código) / ⚠️ (E2E) | Bootstrap verifica SHA256 fail-closed (CR-17); install.sh verifica SHA256 do binário do agente contra o asset .sha256 (CR-18). Validação em host real pendente |
 | **Tuning por hardware** | ✅ | Detecção RAM/CPU/disco → tier LOW/MID/HIGH; skip automático em container/VPS |
-| **Backup com RCON save-lock** | ✅ | Engine unificado com hooks pre/post; `save-off`+`save-all` antes, `save-on` depois; trap EXIT |
+| **Backup com RCON save-lock** | ✅ (código) / ⚠️ (E2E) | Engine unificado; `save-on` restaurado no sucesso E em erro/sinal (CR-02, idempotente); `save-all` fail-closed com 2 tentativas (CR-16); escopo inclui config+mods com `level-name` dinâmico (CR-13/14). Ensaio com RCON real pendente |
 | **Agente Go** (`discord-agent/`) | ✅ | gRPC `ServerControl` (7 RPCs) + `EventBus`, PlayerMonitor, HealthMonitor, AutoShutdown |
 | **Bot Discord** (`discord-bot/`) | ✅ | discord.py 2.x, slash commands `/mc start|stop|restart|status|players|say|console|health` |
 | **Eventos push** | ✅ | `ServerStarted`/`Stopped`, `PlayerJoined`/`Left`, `HealthWarning` → bot posta em `#controle` |
 | **Streaming console** | ✅ | `StreamConsole` RPC (journalctl -f) → bot posta em `#console` |
-| **CI/CD** | ✅ | Workflow único `ci.yml` com 12 jobs paralelos + release unificado |
-| **Testes** | ✅ | Bateria de testes bash (incl. `tui-fallback-test`, `mc-manifests-test`, `crias-bootstrap-test`) + Python + Go (ver `tests/run-all.sh` para o total atual) |
+| **CI/CD** | ✅ | Workflow único `ci.yml` com 10 jobs; release gated por TODOS os testes (CR-19) |
+| **Testes** | ✅ (unitário/contrato) / ⚠️ (integração) | Bateria bash + Python + Go. Sem E2E em VM com systemd real, RCON real, SteamCMD ou restore em host limpo — coberturas mockadas não substituem homologação |
 
 ### Decisões arquiteturais finais
 
@@ -80,8 +80,8 @@
 
 - [ ] **Dependabot/Renovate** — auto-update de deps Go e Python.
 - [ ] **Refatorar `MINECRAFT_MOTD` default** para constante única.
-- [ ] **Backup remoto via rsync** — `BACKUP_REMOTE_PATH` já declarado mas não implementado.
-- [ ] **Webhook de notificação de backup** — `BACKUP_NOTIFY_WEBHOOK` já declarado.
+- [x] **Backup remoto via rsync** — implementado no `backup-engine.sh`; config propagada do `config.env` ao `runtime.env` (CR-15).
+- [x] **Webhook de notificação de backup** — idem; falha de rsync notifica "local OK, remoto falhou".
 
 ---
 
@@ -90,7 +90,7 @@
 | Suíte | Tests | Status |
 |-------|-------|--------|
 | `tests/run-all.sh` (orquestrador) | Bateria de testes bash + Python + Go (total atual em `run-all.sh`) | ✅ Todos PASS |
-| `tests/tui-fallback-test.sh` (novo v1.2.0) | 13 checks (caminho fallback sem gum) | ✅ Todos PASS |
+| `tests/tui-fallback-test.sh` | 20 checks (fallback sem gum + fake-gum shadowing) | ✅ Todos PASS |
 | `tests/mc-manifests-test.sh` (novo v1.2.0) | 28 checks (parsing + sugestão, com fixtures) | ✅ Todos PASS |
 | `tests/install-contracts.sh` | 7 contratos (incl. rejeição de `paper`) | ✅ Todos PASS |
 | `discord-bot/tests/` (pytest) | Testes Python (discord.py, config, agent_client, embeds) | ✅ Todos PASS |

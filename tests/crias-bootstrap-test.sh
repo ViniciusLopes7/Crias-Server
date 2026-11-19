@@ -141,19 +141,19 @@ if crias_verify_sha256 "$fake_zip" "$sha_bad" "test.zip" >/dev/null 2>&1; then
 fi
 echo "  OK: hash incorreto → falha"
 
-# Sha file ausente → avisa mas passa (return 0)
-if ! crias_verify_sha256 "$fake_zip" "$WORK_DIR/inexistente.sha" "test.zip" >/dev/null 2>&1; then
-    echo "FAIL: verify_sha256 deveria passar com sha ausente (apenas avisa)." >&2
+# Sha file ausente → FALHA (CR-17: fail-closed — antes "avisa + passa")
+if crias_verify_sha256 "$fake_zip" "$WORK_DIR/inexistente.sha" "test.zip" >/dev/null 2>&1; then
+    echo "FAIL: verify_sha256 deveria FALHAR com sha ausente (fail-closed CR-17)." >&2
     exit 1
 fi
-echo "  OK: sha ausente → avisa + passa"
+echo "  OK: sha ausente → falha (fail-closed)"
 
-# Asset name não encontrado no sha file → avisa mas passa
-if ! crias_verify_sha256 "$fake_zip" "$sha_file" "outro-nome.zip" >/dev/null 2>&1; then
-    echo "FAIL: verify_sha256 deveria passar com asset não listado no sha." >&2
+# Asset name não encontrado no sha file → FALHA (CR-17: fail-closed)
+if crias_verify_sha256 "$fake_zip" "$sha_file" "outro-nome.zip" >/dev/null 2>&1; then
+    echo "FAIL: verify_sha256 deveria FALHAR com asset não listado no sha (fail-closed CR-17)." >&2
     exit 1
 fi
-echo "  OK: asset não listado no sha → avisa + passa"
+echo "  OK: asset não listado no sha → falha (fail-closed)"
 
 echo "[crias-bootstrap-test] 6. crias_extract_to..."
 # Cria zip real com dir top-level (como GitHub release zip)

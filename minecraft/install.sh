@@ -225,6 +225,17 @@ stack_download_and_install() {
 
     cd "$MINECRAFT_SERVER_DIR" || exit 1
 
+    # MINECRAFT_INSTALL_MODPACK=false honrado (CR-20): instala apenas o
+    # servidor base (loader + versao do jogo), equivalente a source=vanilla —
+    # antes a flag era lida na validacao mas ignorada na instalacao, e o
+    # modpack da fonte selecionada era instalado de qualquer jeito.
+    if ! is_true "$MINECRAFT_INSTALL_MODPACK"; then
+        print_step "MINECRAFT_INSTALL_MODPACK=false: instalando apenas o servidor base (sem modpack)."
+        timeout 300 mrpack-install "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file server.jar
+        echo "eula=true" > "$MINECRAFT_SERVER_DIR/eula.txt"
+        return 0
+    fi
+
     # Modpack source selectable via config.
     case "$MINECRAFT_MODPACK_SOURCE" in
         adrenaline)
@@ -289,6 +300,7 @@ stack_install_extra_mods() {
 
     local entry slug
     local IFS=','
+    local pending_mods=()
     set -f
     for entry in $MINECRAFT_EXTRA_MODS; do
         slug="${entry#"${entry%%[![:space:]]*}"}"
@@ -305,9 +317,18 @@ stack_install_extra_mods() {
             continue
         fi
 
-        download_modrinth_mod "$slug" "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" "$MINECRAFT_SERVER_DIR/mods" "$slug" || true
+        # CR-21: falha nao mata a instalacao (best-effort), mas entra no
+        # relatorio de pendencias em vez de passar em silencio.
+        if ! download_modrinth_mod "$slug" "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" "$MINECRAFT_SERVER_DIR/mods" "$slug"; then
+            pending_mods+=("$slug")
+        fi
     done
     set +f
+
+    if [ "${#pending_mods[@]}" -gt 0 ]; then
+        print_warning "Mods extras PENDENTES (download falhou): ${pending_mods[*]}"
+        print_warning "Instale manualmente em $MINECRAFT_SERVER_DIR/mods/ ou reexecute o installer."
+    fi
 }
 
 # Legacy name kept for tests/quick-script-tests.sh compatibility.
@@ -326,18 +347,17 @@ install_minecraft_qol_mods() {
         return 0
     fi
 
-    if [ -d "$MINECRAFT_SERVER_DIR/mods" ] && [ -n "$(ls -A "$MINECRAFT_SERVER_DIR/mods" 2>/dev/null || true)" ]; then
-        print_warning "Diretorio mods/ ja existe e contem arquivos. Pulando QoL para evitar conflitos."
-        print_warning "Se quiser reinstalar QoL, limpe os .jar manualmente antes de rodar novamente."
-        return 0
-    fi
-
+    # (CR-21) Sem skip coletivo do diretorio mods/: a checagem e POR SLUG.
+    # O modpack pode popular mods/ e mesmo assim um mod QoL ausente deve ser
+    # baixado; o skip antigo ("mods/ nao-vazio -> pula tudo") deixava a lista
+    # divergir silenciosamente do que o usuario pediu.
     print_step "Instalando mods QoL..."
     mkdir -p "$MINECRAFT_SERVER_DIR/mods"
 
     # Parse CSV "file_name:slug,file_name:slug,...".
     # set -f prevents glob expansion (defensive).
     local entry file_name slug
+    local pending_qol=()
     local IFS=','
     set -f
     for entry in $MINECRAFT_QOL_MODS; do
@@ -351,8 +371,7 @@ install_minecraft_qol_mods() {
         # Validate file_name and slug against path traversal.
         # Sem check de NUL: variáveis bash não carregam NUL (descartado no
         # assignment) e o padrão *$'\0'* expande para ** (casa com TUDO) —
-        # rejeitava qualquer mod. Bug mascarado: com modpack o QoL pula todo
-        # (mods/ não-vazio), então ninguém via em produção.
+        # rejeitava qualquer mod.
         local _bad_part=""
         if [[ "$file_name" == *..* ]] || [[ "$file_name" == */* ]]; then
             _bad_part="file_name='$file_name'"
@@ -364,9 +383,21 @@ install_minecraft_qol_mods() {
             continue
         fi
 
-        download_qol_mod "$file_name" "$slug"
+        if [ -f "$MINECRAFT_SERVER_DIR/mods/${slug}.jar" ]; then
+            print_step "Mod QoL ja presente: ${slug}.jar (pulando)."
+            continue
+        fi
+
+        if ! download_qol_mod "$file_name" "$slug"; then
+            pending_qol+=("$slug")
+        fi
     done
     set +f
+
+    if [ "${#pending_qol[@]}" -gt 0 ]; then
+        print_warning "Mods QoL PENDENTES (download falhou): ${pending_qol[*]}"
+        print_warning "Instale manualmente em $MINECRAFT_SERVER_DIR/mods/ ou reexecute o installer."
+    fi
 }
 
 # Legacy name kept for tests/quick-script-tests.sh compatibility.
@@ -379,9 +410,12 @@ download_qol_mod() {
     file_name_norm="${file_name//-/_}"
     mod_sha_var="MOD_${file_name_norm^^}_SHA256"
 
+    # CR-21: propaga a falha (o caller coleta pendencias); o warning
+    # especifico ja foi emitido dentro do helper.
     if ! download_modrinth_mod "$slug" "$MINECRAFT_LOADER" "$MINECRAFT_VERSION" "$MINECRAFT_SERVER_DIR/mods" "$file_name" "$mod_sha_var"; then
-        return 0  # warning already emitted inside helper
+        return 1
     fi
+    return 0
 }
 
 stack_configure_runtime() {
@@ -517,12 +551,11 @@ alias mcreconfig='sudo $MINECRAFT_SERVER_DIR/mc-manager.sh reconfigure-hardware'
 EOF
 }
 
+# Artefatos criados apenas pelo installer que o rollback pode remover.
+# Scripts/unit/runtime.env ficam fora: sao restaurados via snapshot (CR-08).
+# mods/ NUNCA entra aqui: pode conter mods do usuario (MINECRAFT_EXTRA_MODS).
 stack_rollback_extra_files() {
     cat << EOF
-$MINECRAFT_SERVER_DIR/start-server.sh
-$MINECRAFT_SERVER_DIR/mc-manager.sh
-$MINECRAFT_SERVER_DIR/backup-cron.sh
-$MINECRAFT_SERVER_DIR/setup-cron.sh
 $MINECRAFT_SERVER_DIR/server-icon.png
 $MINECRAFT_SERVER_DIR/eula.txt
 EOF

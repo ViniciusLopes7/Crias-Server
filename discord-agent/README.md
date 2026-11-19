@@ -221,20 +221,20 @@ sudo ./install.sh
 
 O `install.sh`:
 1. Cria usuário `crias-agent`
-2. Baixa binário do último release `agent-*` do GitHub
+2. Baixa binário `crias-agent-linux-amd64` da última release do GitHub (verificando o SHA256 do asset .sha256 da mesma release)
 3. Gera token aleatório (32 bytes hex)
 4. Lê RCON config de `server.properties`
 5. Gera `/etc/crias/agent.yaml`
 6. Configura sudoers `/etc/sudoers.d/crias-agent`
 7. Instala systemd unit
 8. Habilita e inicia `crias-agent.service`
-9. Imprime token + instruções para configurar no Railway
+9. Grava o token em arquivo protegido (`/etc/crias/agent.token`, modo 0600) + instruções para consultar e configurar no Railway — o token NÃO é impresso no terminal
 
 ### Via release GitHub (manual)
 
 ```bash
-# Baixar binário da última release agent-*
-curl -L https://github.com/ViniciusLopes7/Crias-Server/releases/download/agent-latest/crias-agent-linux-amd64 \
+# Baixar binário da última release (releases/latest/download — a tag agent-latest não existe)
+curl -L https://github.com/ViniciusLopes7/Crias-Server/releases/latest/download/crias-agent-linux-amd64 \
     -o /opt/crias-agent/crias-agent
 chmod 755 /opt/crias-agent/crias-agent
 

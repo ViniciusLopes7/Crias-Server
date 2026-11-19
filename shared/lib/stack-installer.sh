@@ -68,7 +68,53 @@ create_stack_user_and_dirs() {
 }
 
 # ---------------------------------------------------------------------------
-# Best-effort rollback. Does not abort on individual failures.
+# Snapshot dos artefatos preexistentes (CR-08): captura unit, runtime.env,
+# scripts e .shared ANTES de o installer sobrescrever, para que o rollback
+# RESTAURE o estado anterior em vez de apagar. So captura diretorio
+# preexistente (instalacao nova nao tem o que preservar).
+# ---------------------------------------------------------------------------
+STACK_SNAPSHOT_DIR=""
+
+snapshot_stack_artifacts() {
+    STACK_SNAPSHOT_DIR=""
+
+    if [ "${STACK_SERVER_DIR_PREEXISTED:-false}" != "true" ]; then
+        return 0
+    fi
+
+    STACK_SNAPSHOT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/crias-stack-snapshot.XXXXXX")" || {
+        STACK_SNAPSHOT_DIR=""
+        return 0
+    }
+
+    if [ -f "/etc/systemd/system/${STACK_NAME}.service" ]; then
+        cp -a "/etc/systemd/system/${STACK_NAME}.service" "$STACK_SNAPSHOT_DIR/service.unit" 2>/dev/null || true
+    fi
+
+    local artifact
+    for artifact in runtime.env hardware-profile.env comandos.sh; do
+        if [ -f "$STACK_SERVER_DIR/$artifact" ]; then
+            cp -a "$STACK_SERVER_DIR/$artifact" "$STACK_SNAPSHOT_DIR/$artifact" 2>/dev/null || true
+        fi
+    done
+
+    local script base
+    for script in ${STACK_RUNTIME_SCRIPTS[@]+"${STACK_RUNTIME_SCRIPTS[@]}"}; do
+        base="$(basename "$script")"
+        if [ -f "$STACK_SERVER_DIR/$base" ]; then
+            cp -a "$STACK_SERVER_DIR/$base" "$STACK_SNAPSHOT_DIR/$base" 2>/dev/null || true
+        fi
+    done
+
+    if [ -d "$STACK_SERVER_DIR/.shared" ]; then
+        cp -a "$STACK_SERVER_DIR/.shared" "$STACK_SNAPSHOT_DIR/.shared" 2>/dev/null || true
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Best-effort rollback. Restaura o snapshot quando disponivel (CR-08);
+# NUNCA apaga dados do usuario (mundos, mods/, configs) — so artefatos
+# gerados pelo installer.
 # ---------------------------------------------------------------------------
 rollback_stack_install() {
     local service_unit="/etc/systemd/system/${STACK_NAME}.service"
@@ -78,18 +124,51 @@ rollback_stack_install() {
     fi
 
     print_warning "Instalacao do ${STACK_NAME^^} falhou; executando rollback best-effort."
-    rm -f "$service_unit" 2>/dev/null || true
-
-    # Allow stack to provide a list of extra files to clean.
-    local extra_files=()
-    if declare -F stack_rollback_extra_files >/dev/null 2>&1; then
-        mapfile -t extra_files < <(stack_rollback_extra_files)
-    fi
 
     if [ "${STACK_SERVER_DIR_PREEXISTED:-false}" = "false" ]; then
+        # Instalacao nova: o diretorio inteiro foi criado por esta execucao.
+        rm -f "$service_unit" 2>/dev/null || true
         safe_remove_dir "$STACK_SERVER_DIR" || true
+    elif [ -n "${STACK_SNAPSHOT_DIR:-}" ] && [ -d "$STACK_SNAPSHOT_DIR" ]; then
+        # Diretorio preexistente COM snapshot: restaura o estado anterior
+        # (CR-08 — antes os artefatos eram apagados sem restauracao).
+        if [ -f "$STACK_SNAPSHOT_DIR/service.unit" ]; then
+            cp -a "$STACK_SNAPSHOT_DIR/service.unit" "$service_unit" 2>/dev/null || true
+        else
+            rm -f "$service_unit" 2>/dev/null || true
+        fi
+
+        local artifact
+        for artifact in runtime.env hardware-profile.env comandos.sh; do
+            if [ -f "$STACK_SNAPSHOT_DIR/$artifact" ]; then
+                cp -a "$STACK_SNAPSHOT_DIR/$artifact" "$STACK_SERVER_DIR/$artifact" 2>/dev/null || true
+            else
+                rm -f "$STACK_SERVER_DIR/$artifact" 2>/dev/null || true
+            fi
+        done
+
+        local script base
+        for script in ${STACK_RUNTIME_SCRIPTS[@]+"${STACK_RUNTIME_SCRIPTS[@]}"}; do
+            base="$(basename "$script")"
+            if [ -f "$STACK_SNAPSHOT_DIR/$base" ]; then
+                cp -a "$STACK_SNAPSHOT_DIR/$base" "$STACK_SERVER_DIR/$base" 2>/dev/null || true
+            else
+                rm -f "$STACK_SERVER_DIR/$base" 2>/dev/null || true
+            fi
+        done
+
+        if [ -d "$STACK_SNAPSHOT_DIR/.shared" ]; then
+            rm -rf "$STACK_SERVER_DIR/.shared" 2>/dev/null || true
+            cp -a "$STACK_SNAPSHOT_DIR/.shared" "$STACK_SERVER_DIR/" 2>/dev/null || true
+        else
+            rm -rf "$STACK_SERVER_DIR/.shared" 2>/dev/null || true
+        fi
+
+        rm -rf "$STACK_SNAPSHOT_DIR" 2>/dev/null || true
     else
-        # Server preexisted: clean only installer artifacts.
+        # Preexistente SEM snapshot (execucao legacy): remove so artefatos do
+        # installer, preservando dados do usuario.
+        rm -f "$service_unit" 2>/dev/null || true
         local scripts_to_clean=()
         # ${arr[@]+"${arr[@]}"} expands to nothing when array is empty (set -u safe).
         for script in ${STACK_RUNTIME_SCRIPTS[@]+"${STACK_RUNTIME_SCRIPTS[@]}"}; do
@@ -100,9 +179,19 @@ rollback_stack_install() {
             "$STACK_SERVER_DIR/runtime.env"
             "$STACK_SERVER_DIR/hardware-profile.env"
         )
-        scripts_to_clean+=("${extra_files[@]}")
         rm -f "${scripts_to_clean[@]}" 2>/dev/null || true
         rm -rf "$STACK_SERVER_DIR/.shared" 2>/dev/null || true
+    fi
+
+    # Artefatos extras criados APENAS pelo installer (nunca dados do usuario:
+    # mundos, mods/ e configs ficam de fora por contrato — ver
+    # stack_rollback_extra_files nos stacks).
+    local extra_files=()
+    if declare -F stack_rollback_extra_files >/dev/null 2>&1; then
+        mapfile -t extra_files < <(stack_rollback_extra_files)
+    fi
+    if [ "${#extra_files[@]}" -gt 0 ]; then
+        rm -rf "${extra_files[@]}" 2>/dev/null || true
     fi
 
     systemctl daemon-reload >/dev/null 2>&1 || true
@@ -177,11 +266,12 @@ install_stack_service() {
     fi
 
     # Variables the template can use via ${VAR}.
-    # Empty defaults so envsubst does not fail with -u.
-    local SERVER_USER="$STACK_USER"
-    local SERVER_DIR="$STACK_SERVER_DIR"
-    local MEMORY_MAX_MB="${STACK_SERVICE_MEMORY_MAX_MB:-2048}"
-    local SERVICE_NAME="$STACK_NAME"
+    # Valida ANTES de gerar a unit: campo vazio aqui vira User= / MemoryMax=M
+    # no arquivo final (modo de falha do CR-03).
+    if [ -z "$STACK_USER" ] || [ -z "$STACK_SERVER_DIR" ] || [ -z "${STACK_SERVICE_MEMORY_MAX_MB:-}" ]; then
+        print_error "install_stack_service: STACK_USER/STACK_SERVER_DIR/STACK_SERVICE_MEMORY_MAX_MB nao podem ser vazios."
+        return 1
+    fi
 
     # Allow stack to provide extra variables.
     if declare -F stack_service_extra_env >/dev/null 2>&1; then
@@ -191,9 +281,16 @@ install_stack_service() {
 
     # envsubst reads stdin, substitutes ${VAR}, writes stdout.
     # Use explicit var list to avoid substituting embedded ${1} etc.
+    # Valores passados via env do COMANDO (CR-03): `local` nao exporta, e o
+    # envsubst (binario externo) lia ambiente sem as variaveis — gerando
+    # User=, ExecStart=/start-server.sh e MemoryMax=M. O prefixo `env` so
+    # exporta para o envsubst, sem vazar globais no installer.
+    local _envsubst_vars='${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB} ${SERVICE_NAME}'
     if dry_run_enabled; then
         print_step "[DRY_RUN] Gerando unidade systemd do ${STACK_NAME^^} em /etc/systemd/system/${STACK_NAME}.service (nao sera escrita)"
-        envsubst '${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB} ${SERVICE_NAME}' \
+        env SERVER_USER="$STACK_USER" SERVER_DIR="$STACK_SERVER_DIR" \
+            MEMORY_MAX_MB="${STACK_SERVICE_MEMORY_MAX_MB:-2048}" SERVICE_NAME="$STACK_NAME" \
+            envsubst "$_envsubst_vars" \
             < "$STACK_SERVICE_TEMPLATE" > /dev/null
         return 0
     fi
@@ -204,17 +301,33 @@ install_stack_service() {
     local unit_tmp
     unit_tmp="$(mktemp_crias_file)"
 
-    if ! envsubst '${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB} ${SERVICE_NAME}' \
+    if ! env SERVER_USER="$STACK_USER" SERVER_DIR="$STACK_SERVER_DIR" \
+            MEMORY_MAX_MB="${STACK_SERVICE_MEMORY_MAX_MB:-2048}" SERVICE_NAME="$STACK_NAME" \
+            envsubst "$_envsubst_vars" \
             < "$STACK_SERVICE_TEMPLATE" > "$unit_tmp"; then
         print_error "envsubst falhou ao gerar unit file para ${STACK_NAME}."
+        rm -f "$unit_tmp"
         return 1
     fi
 
-    # Optionally validate with systemd-analyze before moving.
+    # Defesa em profundidade (CR-03): recusa campos criticos vazios mesmo com
+    # a validacao de entrada acima.
+    if grep -qE '^(User|Group|WorkingDirectory|ExecStart)=$' "$unit_tmp" \
+        || grep -q '^MemoryMax=M$' "$unit_tmp"; then
+        print_error "Unit do ${STACK_NAME} gerada com campos criticos vazios; abortando."
+        rm -f "$unit_tmp"
+        return 1
+    fi
+
+    # Validacao bloqueante (CR-25): unit rejeitada pelo systemd-analyze nao
+    # pode ser instalada. A saida e impressa para diagnostico.
     if command -v systemd-analyze >/dev/null 2>&1; then
-        if ! systemd-analyze verify "$unit_tmp" >/dev/null 2>&1; then
-            print_warning "systemd-analyze verify reportou problemas em $unit_tmp; verifique antes de prosseguir."
-            # Don't abort — some warnings are benign.
+        local verify_out
+        if ! verify_out="$(systemd-analyze verify "$unit_tmp" 2>&1)"; then
+            print_error "systemd-analyze verify rejeitou a unit do ${STACK_NAME}:"
+            printf '%s\n' "$verify_out" >&2
+            rm -f "$unit_tmp"
+            return 1
         fi
     fi
 
@@ -223,7 +336,12 @@ install_stack_service() {
     rm -f "$unit_tmp"
 
     systemctl daemon-reload
-    systemctl enable "$STACK_NAME" >/dev/null 2>&1 || true
+    # Habilitacao bloqueante (CR-25): falha aqui e falha da instalacao (o
+    # rollback do EXIT trap remove a unit). Antes: `|| true` mascarava.
+    if ! systemctl enable "$STACK_NAME" >/dev/null 2>&1; then
+        print_error "Falha ao habilitar o servico ${STACK_NAME} (systemctl enable)."
+        return 1
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -239,8 +357,12 @@ apply_stack_system_tuning() {
         return 0
     fi
 
-    # Auto-skip in container/VPS.
-    if is_virtualized; then
+    # Auto-skip em container/VPS — exceto com override explicito (CR-24):
+    # VIRT_TUNING_BEHAVIOR=force e o contrato documentado em
+    # docs/hardware-tuning.md (antes: variavel lida em lugar nenhum e a
+    # mensagem sugeria SYSTEM_TUNING_SCOPE, que tambem nao e consultada
+    # neste branch).
+    if is_virtualized && [ "${VIRT_TUNING_BEHAVIOR:-auto}" != "force" ]; then
         local virt_type=""
         if command_exists systemd-detect-virt; then
             virt_type="$(systemd-detect-virt 2>/dev/null || echo unknown)"
@@ -248,7 +370,7 @@ apply_stack_system_tuning() {
             virt_type="container"
         fi
         print_warning "Virtualizacao detectada ($virt_type); skip de tuning de host (sysctl/zram/scheduler/cpupower)."
-        print_warning "Defina SYSTEM_TUNING_SCOPE=host explicitamente se quiser forcar tuning mesmo em container."
+        print_warning "Defina VIRT_TUNING_BEHAVIOR=force (veja docs/hardware-tuning.md) se quiser forcar tuning mesmo em container."
         return 0
     fi
 
@@ -282,6 +404,12 @@ run_stack_install() {
     fi
 
     trap 'if [ "${STACK_INSTALL_SUCCEEDED:-false}" != "true" ]; then rollback_stack_install; fi' EXIT
+
+    # Snapshot dos artefatos preexistentes (CR-08): captura ANTES de qualquer
+    # fase modificar o diretorio/unit, para o rollback poder restaurar.
+    if ! dry_run_enabled; then
+        snapshot_stack_artifacts
+    fi
 
     # Stack-specific validation hook (inputs, EULA, etc.).
     if declare -F stack_validate_inputs >/dev/null 2>&1; then
@@ -353,5 +481,13 @@ run_stack_install() {
     trap - EXIT
     if [ "$_had_prev_trap_exit" = "true" ]; then
         print_warning "Trap EXIT pré-existente foi removido por run_stack_install; reconfigure explicitamente se necessário."
+    fi
+
+    # Sucesso: o snapshot pre-instalacao nao e mais necessario (so o rollback
+    # o usava). Limpo DEPOIS de desarmar o trap — se o rm falhar aqui, nao ha
+    # mais caminho de rollback para corromper. Sem isto o mktemp -d vaza em
+    # /tmp a cada reinstalacao bem-sucedida.
+    if [ -n "${STACK_SNAPSHOT_DIR:-}" ] && [ -d "$STACK_SNAPSHOT_DIR" ]; then
+        rm -rf "$STACK_SNAPSHOT_DIR" 2>/dev/null || true
     fi
 }

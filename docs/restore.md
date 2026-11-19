@@ -2,6 +2,22 @@
 
 Runbook para restaurar mundos e configuração a partir de backups gerados pelo `backup-cron.sh`.
 
+## Escopo do backup
+
+O conteúdo do arquivo depende da versão que o gerou:
+
+- **Backups atuais (CR-14)**: mundos + `server.properties` + `config/` + `mods/`
+  (Minecraft) ou `worlds/` + `config/` + `Worlds/` + `Mods/` (Terraria com
+  tModLoader). `mods/` e `Mods/` podem ser excluídos com `BACKUP_INCLUDE_MODS=false`
+  no `runtime.env`.
+- **Backups legados**: apenas os diretórios de mundo (`world/`, `world_nether/`,
+  `world_the_end/` para Minecraft; `worlds/` + `config/` para Terraria).
+
+**Nunca presuma que uma entrada existe**: liste o conteúdo do archive primeiro
+(passo 4) e restaure apenas o que estiver presente. Backups antigos podem não
+ter `world_nether/`; servidores vanilla guardam as dimensões dentro do próprio
+`world/` e não têm pastas separadas.
+
 ## Pré-requisitos
 
 - Acesso SSH ao host com permissão `sudo`
@@ -29,23 +45,40 @@ ls -lh /opt/minecraft-server/backups/
 # minecraft-backup-YYYYMMDD-HHMMSS.tar.zst
 ```
 
-### 4. Extrair backup em diretório temporário
+### 4. Extrair backup em diretório temporário E listar o conteúdo
 
 ```bash
 tmpdir=$(mktemp -d)
 sudo tar -I "zstd -d" -xf /opt/minecraft-server/backups/minecraft-backup-YYYYMMDD-HHMMSS.tar.zst -C "$tmpdir"
 ls -la "$tmpdir"
-# deve mostrar: world/ world_nether/ world_the_end/
 ```
 
-### 5. Substituir mundos
+O `ls` decide o que o passo 5 vai restaurar: **só restaure entradas que
+existem no archive** (CR-26 — o fluxo antigo copiava `world_nether/` e
+`world_the_end/` incondicionalmente e falhava em backups sem essas pastas).
+
+### 5. Substituir APENAS as entradas presentes no backup
 
 ```bash
 # ATENÇÃO: --delete remove arquivos não presentes no backup
 sudo rsync -a --delete "$tmpdir/world/" /opt/minecraft-server/world/
+
+# Dimensões separadas existem apenas em servidores Bukkit/Spigot/Paper-like;
+# restaure SOMENTE se apareceram no ls do passo 4:
 sudo rsync -a --delete "$tmpdir/world_nether/" /opt/minecraft-server/world_nether/
 sudo rsync -a --delete "$tmpdir/world_the_end/" /opt/minecraft-server/world_the_end/
+
+# Configuração (presente em backups atuais; opcional em legados):
+sudo rsync -a --delete "$tmpdir/config/" /opt/minecraft-server/config/
+sudo cp -a "$tmpdir/server.properties" /opt/minecraft-server/server.properties
+
+# Mods (presente em backups atuais com BACKUP_INCLUDE_MODS=true):
+sudo rsync -a --delete "$tmpdir/mods/" /opt/minecraft-server/mods/
 ```
+
+> **Nota**: mundos com `level-name` customizado têm pastas com o nome
+> correspondente (ex.: `reino/`, `reino_nether/`) — o backup usa o nome
+> efetivo lido de `server.properties`.
 
 ### 6. Ajustar permissões
 
@@ -80,10 +113,15 @@ sudo cp -a /opt/terraria-server /opt/terraria-server.pre-restore-$(date +%Y%m%d-
 
 tmpdir=$(mktemp -d)
 sudo tar -I "zstd -d" -xf /opt/terraria-server/backups/terraria-backup-YYYYMMDD-HHMMSS.tar.zst -C "$tmpdir"
+ls -la "$tmpdir"
 
-# Terraria tem worlds/ e config/
+# Restaure apenas o que aparecer no ls acima:
 sudo rsync -a --delete "$tmpdir/worlds/" /opt/terraria-server/worlds/
 sudo rsync -a --delete "$tmpdir/config/" /opt/terraria-server/config/
+
+# tModLoader (presente apenas quando o servidor usa tML):
+sudo rsync -a --delete "$tmpdir/Worlds/" /opt/terraria-server/Worlds/
+sudo rsync -a --delete "$tmpdir/Mods/" /opt/terraria-server/Mods/
 
 sudo chown -R terraria:terraria /opt/terraria-server
 sudo systemctl start terraria
@@ -108,8 +146,9 @@ rsync -avz user@origem:/path/backups/ /opt/minecraft-server/backups/
 
 - **`DRY_RUN`**: backups gerados em modo `DRY_RUN=true` (CI) **não são válidos** para restore em produção — são apenas simulações.
 - **Teste de restore**: deve ser parte do plano de manutenção (periodicidade recomendada: mensal).
-- **RCON save-lock**: backups do Minecraft com RCON habilitado são consistentes (sem chunks parcialmente salvos). Backups sem RCON são best-effort.
+- **RCON save-lock**: backups do Minecraft com RCON habilitado são consistentes (sem chunks parcialmente salvos). Backups sem RCON são best-effort. Se um backup falhar no meio, o `save-on` é restaurado automaticamente (EXIT trap), mas o arquivo `.tar.zst` do ciclo falho não é publicado como consistente.
 - **Permissões**: sempre ajuste `chown` após extrair — o backup preserva permissões mas o `rsync` pode não aplicar corretamente se o usuário mudou.
+- **Backup não é imagem completa do host**: o archive cobre mundos + configuração essencial + mods, não o binário do servidor (re-baixável pelo installer) nem unidades systemd.
 
 ## Veja também
 

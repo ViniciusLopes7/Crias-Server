@@ -153,13 +153,15 @@ create_backup() {
     local dir
 
     for dir in ${BACKUP_DIRS[@]+"${BACKUP_DIRS[@]}"}; do
-        if [ -d "$BACKUP_SERVER_DIR/$dir" ]; then
+        # -e (nao -d): entradas podem ser arquivos (server.properties) alem
+        # de diretorios — o escopo do backup inclui configuracao (CR-14).
+        if [ -e "$BACKUP_SERVER_DIR/$dir" ]; then
             backup_dirs+=("$dir")
         fi
     done
 
     if [ ${#backup_dirs[@]} -eq 0 ]; then
-        backup_log "ERRO: Nenhum diretorio de mundo encontrado em $BACKUP_SERVER_DIR."
+        backup_log "ERRO: Nenhuma entrada de backup encontrada em $BACKUP_SERVER_DIR."
         return 1
     fi
 
@@ -175,13 +177,21 @@ create_backup() {
         return 0
     fi
 
-    # Pre hook (RCON save-lock for Minecraft; no-op for Terraria).
-    # Install EXIT trap to guarantee save-on is restored even if killed.
-    if declare -F backup_pre_hook >/dev/null 2>&1; then
-        backup_pre_hook
-    fi
+    # O trap de restauracao precisa estar armado ANTES do pre-hook: se o
+    # pre-hook falhar depois de um save-off bem-sucedido (ex.: save-all
+    # falhando), o EXIT trap ainda restaura save-on (CR-02/CR-16).
     if declare -F backup_post_hook >/dev/null 2>&1; then
         trap 'backup_post_hook' EXIT INT TERM
+    fi
+
+    # Pre hook (RCON save-lock para Minecraft; no-op para Terraria).
+    # Falha do pre-hook aborta o backup (fail-closed): sem flush confirmado
+    # o tar nao e confiavel. O trap acima garante save-on na saida.
+    if declare -F backup_pre_hook >/dev/null 2>&1; then
+        if ! backup_pre_hook; then
+            backup_log "ERRO: pre-hook do backup falhou; abortando (saves serao reativados pelo trap)."
+            return 1
+        fi
     fi
 
     if ! command -v zstd >/dev/null 2>&1; then
@@ -192,9 +202,17 @@ create_backup() {
     if ionice -c2 -n7 tar -I "zstd ${BACKUP_ZSTD_LEVEL}" -cf "$BACKUP_DIR/$BACKUP_NAME" "${backup_dirs[@]}"; then
         adopt_backup_ownership "$BACKUP_DIR/$BACKUP_NAME"
         backup_log "Backup criado: $BACKUP_DIR/$BACKUP_NAME"
-        # Limpa o trap EXIT apos sucesso para nao re-executar backup_post_hook
-        # quando o processo caller terminar.
-        trap - EXIT INT TERM
+        # Reativa saves explicitamente no sucesso (CR-02): o trap so cobre
+        # erro/sinal, e o caminho de sucesso limpava o trap sem chamar o
+        # post-hook — deixando o servidor com save-off apos backup OK.
+        # backup_post_hook e idempotente (guard RCON_SAVE_LOCK_ACTIVE), entao
+        # o EXIT trap no fim do processo vira no-op apos o sucesso aqui.
+        if declare -F backup_post_hook >/dev/null 2>&1; then
+            if ! backup_post_hook; then
+                backup_log "ERRO: backup criado, mas save-on falhou; tratando backup como FALHO (autosave pode estar off)."
+                return 1
+            fi
+        fi
         return 0
     fi
 
@@ -290,8 +308,16 @@ backup_run() {
     fi
 
     if create_backup; then
-        cleanup_old_backups
-        backup_remote_sync
+        # Limpeza e best-effort por design: falha aqui nao invalida o backup.
+        cleanup_old_backups || backup_log "AVISO: limpeza de backups antigos falhou."
+        # Distingue "local OK, remoto falhou": notifica falha e sai com erro
+        # para o cron/journal refletir a pendencia (antes: set -e matava o
+        # processo sem nenhuma notificacao).
+        if ! backup_remote_sync; then
+            backup_notify_webhook "failure"
+            backup_log "ERRO: backup local concluido, mas a sincronizacao remota falhou."
+            exit 1
+        fi
         backup_notify_webhook "success"
         backup_log "Backup concluido com sucesso."
     else

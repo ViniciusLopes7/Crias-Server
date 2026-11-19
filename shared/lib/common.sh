@@ -173,6 +173,17 @@ config_read_value() {
     fi
 }
 
+# Like config_read_value, but strips one layer of surrounding double quotes
+# (runtime.env writers emit KEY="value"). Used to preserve settings across
+# rewrites of generated env files (CR-15).
+env_file_read_value() {
+    local value
+    value="$(config_read_value "$1" "$2")"
+    value="${value#\"}"
+    value="${value%\"}"
+    printf '%s\n' "$value"
+}
+
 # ---------------------------------------------------------------------------
 # Run helpers with DRY_RUN support.
 # ---------------------------------------------------------------------------

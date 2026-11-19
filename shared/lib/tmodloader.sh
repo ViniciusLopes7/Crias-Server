@@ -135,6 +135,17 @@ tml_extract_mod_internal_name() {
 # SteamCMD: download de mods via Workshop.
 # ===========================================================================
 
+# Verifica se um Workshop ID tem conteudo fisicamente baixado no diretorio
+# do steamcmd (CR-22: separa "solicitado" de "instalado" — enabled.json so
+# pode declarar mods que existem em disco).
+# Uso: tml_workshop_item_installed <steamcmd_install_dir> <workshop_id>
+tml_workshop_item_installed() {
+    local install_dir="$1"
+    local workshop_id="$2"
+    local item_dir="$install_dir/steamapps/workshop/content/${TML_STEAM_APP_ID}/$workshop_id"
+    [ -d "$item_dir" ] && [ -n "$(ls -A "$item_dir" 2>/dev/null || true)" ]
+}
+
 # Verifica se steamcmd está instalado.
 tml_steamcmd_available() {
     command -v steamcmd >/dev/null 2>&1

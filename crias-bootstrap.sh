@@ -1,20 +1,20 @@
 #!/bin/bash
 # crias-bootstrap.sh
 #
-# Bootstrap mínimo embutido na ISO do Crias-Server. Baixa a release do GitHub,
-# verifica SHA256, extrai e (se no host instalado) roda install.sh.
+# Bootstrap mínimo do Crias-Server. Baixa a release do GitHub, verifica SHA256
+# (fail-closed), extrai e (se no host instalado) roda install.sh.
 #
-# Fluxo primário (live ISO):
-#   1. Boot da ISO → root autologin no tty1 (drop-in getty@tty1.service.d)
-#   2. archinstall (instala Arch no disco em /mnt)
-#   3. crias-bootstrap          # este script: baixa+verifica+extrai em /mnt/opt/
-#   4. reboot
-#   5. login com usuário criado no archinstall
-#   6. sudo /opt/crias-server/install.sh   # "o comando ao final"
-#
-# Fluxo fallback (host já instalado, sem ISO):
+# NOTA (DOC-09): a ISO customizada foi descontinuada — o caminho com /mnt abaixo
+# é compatibilidade com mídias antigas que ainda embutem este script. O fluxo
+# suportado atualmente é o fallback em host já instalado:
 #   curl -fsSL https://raw.githubusercontent.com/ViniciusLopes7/Crias-Server/main/crias-bootstrap.sh | sudo bash
 #   # detecta target=/ , extrai em /opt/crias-server/ e roda install.sh
+#
+# Fluxo legado (live ISO antiga, se /mnt montado por archinstall):
+#   1. Boot da ISO → root autologin no tty1
+#   2. archinstall (instala Arch no disco em /mnt)
+#   3. crias-bootstrap          # este script: baixa+verifica+extrai em /mnt/opt/
+#   4. reboot e seguir o fallback acima
 #
 # Variáveis de ambiente:
 #   CRIAS_REPO          default: ViniciusLopes7/Crias-Server
@@ -102,21 +102,28 @@ crias_fetch_release_urls() {
 
 # Verifica SHA256 do zip contra sha256sums.txt.
 # Formato do sha256sums.txt: "<hash>  <filename>"
+# Fail-closed (CR-17): checksum ausente/nao listado/ferramenta indisponivel
+# ABORTEM o bootstrap — antes cada um desses casos virava `warn + return 0`
+# e o zip nao-verificado era extraido e executado. HTTPS protege a
+# transmissao, nao a integridade do asset publicado.
 crias_verify_sha256() {
     local zip_file="$1" sha_file="$2" asset_name="$3"
     if [ ! -f "$sha_file" ]; then
-        warn "sha256sums.txt ausente; pulando verificação de integridade."
-        return 0
+        err "sha256sums.txt ausente; a integridade do download NAO pode ser verificada."
+        err "Verifique a release manualmente em https://github.com/$CRIAS_REPO/releases"
+        return 1
     fi
     local expected_hash actual_hash
     expected_hash=$(grep -E "[[:space:]]+(\./)?${asset_name}\$" "$sha_file" | awk '{print $1}' | head -n1 || true)
     if [ -z "$expected_hash" ]; then
-        warn "Hash de '$asset_name' não encontrado em sha256sums.txt; pulando verificação."
-        return 0
+        err "Hash de '$asset_name' não encontrado em sha256sums.txt."
+        err "A release publicada pode estar incompleta. Abortando."
+        return 1
     fi
     if ! command -v sha256sum >/dev/null 2>&1; then
-        warn "sha256sum não encontrado; pulando verificação."
-        return 0
+        err "sha256sum não encontrado no sistema; nao e possivel verificar a integridade."
+        err "Instale coreutils (ou equivalente) e rode o bootstrap novamente."
+        return 1
     fi
     actual_hash=$(sha256sum "$zip_file" | awk '{print $1}')
     if [ "$expected_hash" != "$actual_hash" ]; then
@@ -258,7 +265,11 @@ crias_bootstrap_main() {
         if ! curl -fSL --retry 3 --retry-delay 2 \
             --connect-timeout 30 --max-time 60 \
             -o "$sha_file" "$sha_url"; then
-            warn "Falha ao baixar sha256sums.txt; pulando verificação."
+            # Fail-closed (CR-17): sem o sha256sums.txt o zip nao pode ser
+            # verificado — abortar em vez de prosseguir sem verificacao.
+            err "Falha ao baixar sha256sums.txt de $sha_url"
+            err "Sem o checksum a integridade do zip nao pode ser verificada. Abortando."
+            return 1
         fi
     fi
 

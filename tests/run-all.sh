@@ -180,4 +180,12 @@ run_test "tui-fallback-test"        "tests/tui-fallback-test.sh"
 run_test "mc-manifests-test"        "tests/mc-manifests-test.sh"
 run_test "tmodloader-test"           "tests/tmodloader-test.sh"
 run_test "mutation-test"            "tests/mutation-test.sh"
+# DOC-07: testes antes ausentes do orquestrador (e da CI): save-on do backup
+# (CR-02/16), envsubst do installer (CR-03), flags Java (CR-01) e rollback
+# com snapshot (CR-08).
+run_test "backup-rcon-failure-test" "tests/backup-rcon-failure-test.sh"
+run_test "backup-saveon-success-test" "tests/backup-saveon-success-test.sh"
+run_test "envsubst-test"            "tests/envsubst-test.sh"
+run_test "java-flags-test"          "tests/java-flags-test.sh"
+run_test "stack-rollback-test"      "tests/stack-rollback-test.sh"
 

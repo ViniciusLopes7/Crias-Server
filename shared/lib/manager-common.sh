@@ -8,8 +8,12 @@
 
 # Resolve o caminho real do script (segue symlinks). Shared by mc-manager.sh
 # and tt-manager.sh to avoid duplication.
+# $1 (opcional): caminho do executavel principal. DENTRO de uma funcao
+# definida nesta lib, BASH_SOURCE[0] resolve para a LIB (manager-common.sh),
+# nao para o manager que a carregou — por isso o caller deve passar o propio
+# caminho (CR-10; fallback: BASH_SOURCE[1], o arquivo que chamou a funcao).
 manager_resolve_self() {
-    local src="${BASH_SOURCE[0]}"
+    local src="${1:-${BASH_SOURCE[1]:-${BASH_SOURCE[0]}}}"
     local resolved=""
     if command -v readlink >/dev/null 2>&1; then
         resolved="$(readlink -f "$src" 2>/dev/null || true)"

@@ -268,6 +268,16 @@ download_and_extract_terraria() {
 
     chmod +x "$TERRARIA_SERVER_DIR/TerrariaServer.bin.x86_64"
 
+    # Volta de tModLoader para vanilla no mesmo diretorio (CR-12): o marcador
+    # do tML precisa ser neutralizado para a deteccao legacy concordar com o
+    # modo explicito do runtime.env. Renomeado (nao apagado): mundos, mods e
+    # a instalacao tML antiga ficam intactos para uma possivel volta.
+    if [ -e "$TERRARIA_SERVER_DIR/server/LaunchUtils/ScriptCaller.sh" ]; then
+        print_step "Desativando marcador do tModLoader legado (server/LaunchUtils/ScriptCaller.sh)..."
+        mv "$TERRARIA_SERVER_DIR/server/LaunchUtils/ScriptCaller.sh" \
+            "$TERRARIA_SERVER_DIR/server/LaunchUtils/ScriptCaller.sh.tml-disabled" 2>/dev/null || true
+    fi
+
     rm -f "$tmp_zip"
     safe_remove_dir "$tmp_dir" || true
 }
@@ -315,18 +325,14 @@ alias ttreconfig='sudo $TERRARIA_SERVER_DIR/tt-manager.sh reconfigure-hardware'
 EOF
 }
 
+# Artefatos criados apenas pelo installer que o rollback pode remover.
+# Worlds/ e Mods/ NUNCA entram aqui: mundos sao dados do usuario e mods podem
+# ter sido adicionados manualmente (o rollback anterior APAGAVA mundos ao
+# falhar uma reinstalacao — CR-08). Scripts/unit/runtime.env sao restaurados
+# via snapshot.
 stack_rollback_extra_files() {
     cat << EOF
-$TERRARIA_SERVER_DIR/start-terraria.sh
-$TERRARIA_SERVER_DIR/tt-manager.sh
-$TERRARIA_SERVER_DIR/backup-cron.sh
-$TERRARIA_SERVER_DIR/setup-cron.sh
-$TERRARIA_SERVER_DIR/comandos.sh
-$TERRARIA_SERVER_DIR/runtime.env
-$TERRARIA_SERVER_DIR/hardware-profile.env
 $TERRARIA_SERVER_DIR/server
-$TERRARIA_SERVER_DIR/Mods
-$TERRARIA_SERVER_DIR/Worlds
 $TERRARIA_SERVER_DIR/steamapps
 EOF
 }
@@ -358,10 +364,13 @@ stack_install_mods() {
 
     if ! tml_steamcmd_available; then
         print_warning "steamcmd nao encontrado. Mods do tModLoader NAO serao baixados."
-        print_warning "Instale steamcmd (AUR: steamcmd) para usar mods automaticamente."
-        print_warning "Voce pode baixar mods manualmente e colocar em $TERRARIA_SERVER_DIR/Mods/"
-        # Mesmo sem steamcmd, gera enabled.json/install.txt para auditoria.
-        _tml_write_mod_files "$TERRARIA_SERVER_DIR/Mods" "$TERRARIA_TMODLOADER_MODS"
+        print_warning "Instale steamcmd (AUR: steamcmd) e baixe os mods com:"
+        print_warning "  steamcmd +force_install_dir $TERRARIA_SERVER_DIR +login anonymous +workshop_download_item 1281930 <workshop_id> +quit"
+        print_warning "Depois reexecute o installer para gerar o enabled.json dos mods presentes."
+        # (CR-22) Intent apenas: install.txt registra os IDs solicitados para
+        # auditoria/retry manual. enabled.json NAO e gerado — sem os .tmod
+        # fisicos, declarar mods "habilitados" seria sucesso falso.
+        tml_write_install_txt "$TERRARIA_SERVER_DIR/Mods" "$TERRARIA_TMODLOADER_MODS"
         return 0
     fi
 
@@ -370,9 +379,50 @@ stack_install_mods() {
         print_warning "Algum mod pode ter falhado ao baixar. Verifique os logs do steamcmd."
     fi
 
-    # Gera enabled.json e install.txt com os mods selecionados.
-    _tml_write_mod_files "$TERRARIA_SERVER_DIR/Mods" "$TERRARIA_TMODLOADER_MODS"
-    print_success "Mods instalados em $TERRARIA_SERVER_DIR/Mods/"
+    # (CR-22) Verifica quais Workshop IDs realmente baixaram: enabled.json so
+    # e gerado para mods com arquivo fisico presente; os ausentes entram no
+    # relatorio de pendencias.
+    local downloaded_ids=""
+    local missing_ids=""
+    local first_dl=1
+    local first_miss=1
+    local IFS=','
+    local wid
+    for wid in $TERRARIA_TMODLOADER_MODS; do
+        [ -z "$wid" ] && continue
+        if tml_workshop_item_installed "$TERRARIA_SERVER_DIR" "$wid"; then
+            if [ "$first_dl" -eq 1 ]; then
+                downloaded_ids="$wid"
+                first_dl=0
+            else
+                downloaded_ids="$downloaded_ids,$wid"
+            fi
+        else
+            if [ "$first_miss" -eq 1 ]; then
+                missing_ids="$wid"
+                first_miss=0
+            else
+                missing_ids="$missing_ids,$wid"
+            fi
+        fi
+    done
+    unset IFS
+
+    if [ -n "$missing_ids" ]; then
+        print_warning "Mods tML PENDENTES (workshop ID sem conteudo baixado): $missing_ids"
+        print_warning "Rode manualmente: steamcmd +force_install_dir $TERRARIA_SERVER_DIR +login anonymous +workshop_download_item 1281930 <id> +quit"
+    fi
+
+    # install.txt sempre com o intent completo (auditoria); enabled.json so
+    # com os mods instalados.
+    tml_write_install_txt "$TERRARIA_SERVER_DIR/Mods" "$TERRARIA_TMODLOADER_MODS"
+
+    if [ -n "$downloaded_ids" ]; then
+        _tml_write_mod_files "$TERRARIA_SERVER_DIR/Mods" "$downloaded_ids"
+        print_success "Mods instalados em $TERRARIA_SERVER_DIR/Mods/"
+    else
+        print_warning "Nenhum mod tML baixado com sucesso; enabled.json NAO gerado."
+    fi
 }
 
 # Helper: gera enabled.json (internal names) e install.txt (workshop IDs).

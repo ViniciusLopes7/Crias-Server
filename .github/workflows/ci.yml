@@ -2,11 +2,13 @@
 #
 # Crias-Server — CI/CD completo (lint + test + build + release)
 #
-#   lint-shell ─┐
-#   lint-go ────┤
-#   lint-python ┤
-#   test-go ─────┤──→ build-agent ─┤──→ release
-#   test-python ─┘──→ build-bot ───┘
+#   lint-shell ─┐                ┌──────────────┐
+#   lint-go ────┤──→ build-agent ─┤             │
+#   lint-python ┤                │             ├──→ release
+#   test-go ─────┤──→ build-bot ──┤             │
+#   test-python ─┘                │             │
+#   test-shell ──────────────────→│  (gates)    │
+#   test-shell-arch ─────────────→└──────────────┘
 #
 # Triggers:
 #   - push to main          → lint + test + build (no release)
@@ -67,6 +69,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
       - name: Run shellcheck
+        # NOTA (DOC-08): a passagem severity=warning abaixo termina com `|| true`
+        # e e INFORMATIVA (nao bloqueia merge). Apenas errors bloqueiam. O
+        # bloqueio gradativo das regras warning mais relevantes e decisao
+        # pendente — ate la, trate o resumo de warnings como sinal de review,
+        # nao como gate.
         # -x segue sources (resolve SC1091)
         # --exclude suprime falsos positivos conhecidos:
         #   SC1091: não segue source (já tratado com -x, mas alguns ainda warn)
@@ -171,6 +178,9 @@ jobs:
 
       - name: Run shell test suite
         # install-contracts e arch-dry-install rodam em container Arch separado.
+        # backup-rcon-failure/envsubst/java-flags/rollback adicionados (DOC-07):
+        # antes nao rodavam nem aqui nem no run-all.sh — coberturas criticas
+        # (save-on do backup, envsubst do installer) ficavam fora da CI.
         run: |
           bash tests/quick-script-tests.sh
           bash tests/install-contracts.sh
@@ -178,6 +188,10 @@ jobs:
           bash tests/stack-installer-test.sh
           bash tests/agent-install-hook-test.sh
           bash tests/config-parser-eq-test.sh
+          bash tests/backup-rcon-failure-test.sh
+          bash tests/envsubst-test.sh
+          bash tests/java-flags-test.sh
+          bash tests/stack-rollback-test.sh
 
   test-shell-arch:
     name: Test Shell (Arch container)
@@ -392,7 +406,11 @@ jobs:
 
   release:
     name: Release (consolidada)
-    needs: [build-agent, build-bot]
+    # CR-19: release exige TODOS os jobs de teste/lint, nao apenas os builds.
+    # Antes: needs=[build-agent, build-bot] e os builds nao dependiam de
+    # lint-shell/test-shell/test-shell-arch — uma release podia ser publicada
+    # com a pipeline geral vermelha (testes Shell falhos).
+    needs: [build-agent, build-bot, lint-shell, test-shell, test-shell-arch]
     if: |
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.create_release)

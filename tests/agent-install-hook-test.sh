@@ -65,13 +65,34 @@ assert_grep 'MemoryDenyWriteExecute=yes' "$ROOT_DIR/install.sh"
 assert_grep 'SystemCallFilter=@system-service' "$ROOT_DIR/install.sh"
 assert_grep 'CapabilityBoundingSet=' "$ROOT_DIR/install.sh"
 assert_grep 'ProtectSystem=strict' "$ROOT_DIR/install.sh"
-assert_grep 'NoNewPrivileges=yes' "$ROOT_DIR/install.sh"
 assert_grep 'LockPersonality=yes' "$ROOT_DIR/install.sh"
-assert_grep 'RestrictSUIDSGID=yes' "$ROOT_DIR/install.sh"
 assert_grep 'RestrictRealtime=yes' "$ROOT_DIR/install.sh"
 assert_grep 'RemoveIPC=yes' "$ROOT_DIR/install.sh"
 assert_grep 'ProtectHostname=yes' "$ROOT_DIR/install.sh"
 assert_grep 'ProtectClock=yes' "$ROOT_DIR/install.sh"
+
+# 9b. (CR-06) A unit do AGENTE nao pode ter NoNewPrivileges/RestrictSUIDSGID:
+# o agente invoca /usr/bin/sudo (setuid) para systemctl — com essas diretivas
+# o systemd nega a elevacao e o controle remoto falha em silencio. A fronteira
+# de privilegio e o sudoers allowlist. (As units dos JOGOS legitimamente usam
+# NoNewPrivileges=yes — o teste mira o bloco do agente.)
+agent_unit_block="$(awk '/Description=Crias Agent/,/^EOF/' "$ROOT_DIR/install.sh" 2>/dev/null || true)"
+if [ -n "$agent_unit_block" ]; then
+    if printf '%s\n' "$agent_unit_block" | grep -Eq '^[[:space:]]*NoNewPrivileges=yes'; then
+        echo "FAIL: unit do crias-agent contem NoNewPrivileges=yes (CR-06)"
+        exit 1
+    fi
+    if printf '%s\n' "$agent_unit_block" | grep -Eq '^[[:space:]]*RestrictSUIDSGID=yes'; then
+        echo "FAIL: unit do crias-agent contem RestrictSUIDSGID=yes (CR-06)"
+        exit 1
+    fi
+    # Hardening restante presente no bloco do agente:
+    printf '%s\n' "$agent_unit_block" | grep -q 'ProtectSystem=strict' \
+        || { echo "FAIL: unit do agente sem ProtectSystem=strict"; exit 1; }
+    printf '%s\n' "$agent_unit_block" | grep -q 'SystemCallFilter=@system-service' \
+        || { echo "FAIL: unit do agente sem SystemCallFilter"; exit 1; }
+    echo "OK: unit do agente sem NoNewPrivileges/RestrictSUIDSGID (CR-06), hardening restante intacto"
+fi
 
 # 10. INSTALL_AGENT é uma variável configurável em config.env
 assert_grep '^INSTALL_AGENT=' "$ROOT_DIR/config.env"

@@ -103,9 +103,29 @@ EOF
 write_terraria_runtime_env() {
     local file_path="$1"
 
+    # Modo explicito (CR-12): o launcher le esta chave para decidir tML vs
+    # vanilla com prioridade sobre a deteccao por artefato (o marcador
+    # ScriptCaller.sh fica para tras numa migracao tML -> vanilla).
+    # Backup (CR-15): idem write_minecraft_runtime_env.
+    local backup_remote="${BACKUP_REMOTE_PATH:-$(env_file_read_value "$file_path" BACKUP_REMOTE_PATH)}"
+    local backup_webhook="${BACKUP_NOTIFY_WEBHOOK:-$(env_file_read_value "$file_path" BACKUP_NOTIFY_WEBHOOK)}"
+    local backup_include_mods="${BACKUP_INCLUDE_MODS:-$(env_file_read_value "$file_path" BACKUP_INCLUDE_MODS)}"
+
+    case "$backup_remote$backup_webhook" in
+        *'"'*|*'$'*|*'`'*|*$'\n'*)
+            print_warning "BACKUP_REMOTE_PATH/BACKUP_NOTIFY_WEBHOOK contem caracteres nao suportados (\$ \" \`) — chaves nao serao persistidas no runtime.env."
+            backup_remote=""
+            backup_webhook=""
+            ;;
+    esac
+
     write_file_or_dry_run "Gerando runtime.env do Terraria em $file_path" "$file_path" << EOF
 BACKUP_RETENTION_DAYS="$TT_BACKUP_RETENTION_DAYS"
 BACKUP_ZSTD_LEVEL="$TT_BACKUP_ZSTD_LEVEL"
+TERRARIA_USE_TMODLOADER="${TERRARIA_USE_TMODLOADER:-false}"
+BACKUP_REMOTE_PATH="$backup_remote"
+BACKUP_NOTIFY_WEBHOOK="$backup_webhook"
+BACKUP_INCLUDE_MODS="$backup_include_mods"
 EOF
 }
 

@@ -3,31 +3,32 @@
 #
 # Valida que o template .service pode ser processado por envsubst sem erros
 # e produz a unit systemd esperada com variáveis substituídas corretamente.
+#
+# CR-03 (regressão): o teste ANTIGO exportava as variáveis antes do envsubst
+# — exatamente o que o installer NÃO fazia (locals sem export). O bug
+# (User=, ExecStart=/start-server.sh, MemoryMax=M) era mascarado. Agora o
+# teste replica o padrão real do installer: valores via env do COMANDO,
+# ambiente sem as variáveis.
 
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-# shellcheck source=/dev/null
-source "$ROOT_DIR/tests/lib/assert.sh"
-
 if ! command -v envsubst >/dev/null 2>&1; then
     echo "SKIP: envsubst não disponível neste ambiente (gettext não instalado)"
     exit 0
 fi
 
-# 1. Template do Minecraft
-# envsubst lê variáveis do AMBIENTE (não do shell), então precisamos exportar.
-export SERVER_USER="minecraft"
-export SERVER_DIR="/opt/minecraft-server"
-export MEMORY_MAX_MB="4096"
-export SERVICE_NAME="minecraft"
+# Garante ambiente LIMPO (sem as variáveis) — como num shell de instalação.
+unset SERVER_USER SERVER_DIR MEMORY_MAX_MB SERVICE_NAME 2>/dev/null || true
 
-OUTPUT=$(envsubst '${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB} ${SERVICE_NAME}' \
+# 1. Template do Minecraft — padrão do installer (env do comando, sem export).
+OUTPUT=$(env SERVER_USER="minecraft" SERVER_DIR="/opt/minecraft-server" \
+    MEMORY_MAX_MB="4096" SERVICE_NAME="minecraft" \
+    envsubst '${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB} ${SERVICE_NAME}' \
     < "$ROOT_DIR/minecraft/minecraft.service")
 
-# Verifica que as variáveis foram substituídas
 if ! echo "$OUTPUT" | grep -q '^User=minecraft$'; then
     echo "FAIL: User não substituído no template do Minecraft"
     echo "$OUTPUT" | head -20
@@ -51,13 +52,25 @@ if echo "$OUTPUT" | grep -q '__'; then
     exit 1
 fi
 
-# 2. Template do Terraria
-export SERVER_USER="terraria"
-export SERVER_DIR="/opt/terraria-server"
-export MEMORY_MAX_MB="2048"
-export SERVICE_NAME="terraria"
+# 1b. Documentação viva do modo de falha (CR-03): envsubst SEM o env do
+# comando produz campos vazios — prova empírica de por que o installer
+# precisa do prefixo `env`.
+BAD_OUTPUT=$(envsubst '${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB} ${SERVICE_NAME}' \
+    < "$ROOT_DIR/minecraft/minecraft.service" || true)
+if ! echo "$BAD_OUTPUT" | grep -q '^User=$'; then
+    echo "FAIL: controle do CR-03 — envsubst sem env-prefix deveria gerar User= vazio"
+    exit 1
+fi
+if ! echo "$BAD_OUTPUT" | grep -q '^MemoryMax=M$'; then
+    echo "FAIL: controle do CR-03 — envsubst sem env-prefix deveria gerar MemoryMax=M"
+    exit 1
+fi
+echo "OK: controle negativo (sem env-prefix → campos vazios, como documentado no CR-03)"
 
-OUTPUT=$(envsubst '${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB} ${SERVICE_NAME}' \
+# 2. Template do Terraria
+OUTPUT=$(env SERVER_USER="terraria" SERVER_DIR="/opt/terraria-server" \
+    MEMORY_MAX_MB="2048" SERVICE_NAME="terraria" \
+    envsubst '${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB} ${SERVICE_NAME}' \
     < "$ROOT_DIR/terraria/terraria.service")
 
 if ! echo "$OUTPUT" | grep -q '^User=terraria$'; then
@@ -70,7 +83,14 @@ if ! echo "$OUTPUT" | grep -q '^MemoryMax=2048M$'; then
     exit 1
 fi
 
-# 3. Validação com systemd-analyze verify (se disponível).
+# 3. O installer usa o padrão env-prefix (regressão estática).
+if ! grep -q 'env SERVER_USER=' "$ROOT_DIR/shared/lib/stack-installer.sh"; then
+    echo "FAIL: install_stack_service não usa env SERVER_USER=... envsubst (regressão CR-03)"
+    exit 1
+fi
+echo "OK: install_stack_service usa env-prefix no envsubst"
+
+# 4. Validação com systemd-analyze verify (se disponível).
 # Filtra saída para só verificar erros de SINTAXE do nosso unit file,
 # ignorando erros de ambiente (units do sistema, paths inexistentes em CI).
 if command -v systemd-analyze >/dev/null 2>&1; then

@@ -7,6 +7,153 @@ e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido — Auditoria externa CR-01..CR-28 (contra-verificação 2026-11-18)
+
+- **CR-01 (P0)**: JVM 21 recusava as flags G1 experimentais
+  (`G1NewSizePercent is experimental`, exit 1) — o servidor nunca subia.
+  Fix: `-XX:+UnlockExperimentalVMOptions` antes das flags em
+  `minecraft/start-server.sh`. Teste novo `java-flags-test.sh` (estático +
+  smoke com a JVM real quando disponível).
+- **CR-02 (P0)**: backup bem-sucedido deixava `save-off` ativo — o caminho
+  de sucesso limpava o trap sem chamar o post-hook. Fix: trap armado ANTES
+  do pre-hook + `save-on` explícito no sucesso (idempotente via guard).
+  Teste novo `backup-saveon-success-test.sh` exige exatamente 1 `save-on`.
+- **CR-03 (P0)**: `envsubst` recebia variáveis `local` (não exportadas) e
+  gerava `User=`, `ExecStart=/start-server.sh`, `MemoryMax=M`. Fix: valores
+  via env do comando (`env SERVER_USER=... envsubst`) + validação de campos
+  vazios antes de instalar a unit. `envsubst-test.sh` reescrito SEM
+  pré-export (o teste antigo mascarava o bug) com controle negativo.
+- **CR-04 (P0)**: `if ! run_selected_stack_installer` desativava o errexit
+  do subshell inteiro — falhas de download/pacman eram engolidas e a
+  instalação reportava sucesso falso. Fix: chamada direta + EXIT trap no
+  subshell para limpar o env file. Regra estática no `static-audit.sh`.
+- **CR-05 (P0)**: `Requires=<jogo>.service` na unit de backup colocava o
+  jogo na transação de start — timer disparando com jogo desligado LIGARIA
+  o servidor. Fix: `Requires=` removido (o skip offline já existia no
+  backup-engine via `is_service_active_or_skip`).
+- **CR-06 (P0)**: `NoNewPrivileges=yes` na unit do agente bloqueava o
+  `sudo systemctl` do controle remoto (start/stop/restart falhavam em
+  silêncio). Fix: `NoNewPrivileges`/`RestrictSUIDSGID` removidos da unit do
+  agente (fronteira = sudoers allowlist; demais hardening preservado).
+- **CR-07 (P1)**: troca de stack não desativava o `<stack>-backup.timer`
+  órfão. Fix: `cleanup_stack_by_type` faz `disable --now` do timer e stop do
+  serviço de backup da stack removida.
+- **CR-08 (P1)**: rollback de reinstalação APAGAVA artefatos preexistentes
+  sem restaurar (e o extra_files do Terraria incluía `Worlds/` — mundos do
+  usuário perdidos numa falha de reinstalação!). Fix: snapshot dos artefatos
+  antes de sobrescrever + rollback restaurador; contrato novo:
+  `stack_rollback_extra_files` nunca lista mundos/mods. Teste novo
+  `stack-rollback-test.sh`.
+- **CR-09 (P1)**: `reconfigure-hardware` truncava o `server.properties`
+  inteiro (RCON, whitelist, level-name, comentários perdidos). Fix: merge —
+  bloco gerenciado novo + preservação de tudo que não é chave gerenciada,
+  com backup `.crias-bak`. Contrato de merge no `minecraft-tuning-test.sh`.
+- **CR-10 (P2)**: `manager_resolve_self` resolvia para a lib
+  (manager-common.sh), não para o manager — auto-elevação reinvocava a lib.
+  Fix: caller passa `${BASH_SOURCE[0]}` explicitamente.
+- **CR-11 (P1)**: bot ficava eternamente esperando o agente conectar antes
+  de entrar no Discord (retry infinito no `connect()`). Fix: bot inicia
+  primeiro; conexão do agente em task supervisionada; comandos reportam
+  agente offline até conectar.
+- **CR-12 (P1)**: retorno tModLoader→vanilla no mesmo diretório rodava tML
+  para sempre (detecção por artefato legado). Fix: `TERRARIA_USE_TMODLOADER`
+  persistido no runtime.env com prioridade sobre a detecção; installer
+  vanilla renomeia o marcador legado (não destrutivo).
+- **CR-13 (P1)**: backup do Minecraft ignorava `level-name` customizado
+  (mundo nunca backupeado). Fix: `BACKUP_DIRS` resolve o mundo efetivo via
+  `server.properties`.
+- **CR-14 (P1)**: backup não incluía configuração nem mods. Fix: escopo
+  ampliado (server.properties, config/, mods/ — opt-out via
+  `BACKUP_INCLUDE_MODS=false`); engine aceita arquivos além de diretórios;
+  `docs/restore.md` reescrito.
+- **CR-15 (P1)**: `BACKUP_REMOTE_PATH`/`BACKUP_NOTIFY_WEBHOOK` do
+  `config.env` nunca chegavam ao backup-cron. Fix: propagação
+  config.env → stack env → runtime.env, com preservação em
+  reconfigure-hardware e rejeição de caracteres que quebrariam o `source`.
+- **CR-16 (P1)**: falha de `save-all` era mascarada por `|| true` — tar rodava
+  sem flush confirmado. Fix: fail-closed — 2 tentativas, falhou aborta o
+  backup com `save-on` restaurado pelo trap.
+- **CR-17 (P1)**: bootstrap prosseguia sem verificar SHA256 (sha ausente,
+  hash não listado ou sha256sum faltando = warn + continua). Fix:
+  fail-closed nos três casos; falha no download do sha256sums.txt também
+  aborta. Teste do bootstrap atualizado para o novo contrato.
+- **CR-18 (P1)**: binário do agente instalado sem verificar o checksum da
+  release. Fix: download do asset `.sha256` da mesma release + verificação
+  antes do `install` (binário adulterado não é instalado).
+- **CR-19 (P1)**: release podia ser publicada com testes Shell falhos (o job
+  `release` só dependia dos builds). Fix: `needs` inclui lint-shell,
+  test-shell e test-shell-arch.
+- **CR-20 (P2)**: `MINECRAFT_INSTALL_MODPACK=false` era ignorado (modpack
+  instalado mesmo assim). Fix: flag honrada — instala só servidor base
+  (loader+versão), equivalente a source=vanilla.
+- **CR-21 (P1)**: lista QoL podia divergir sem falhar (skip coletivo quando
+  mods/ não-vazio + `|| true` nos downloads). Fix: checagem por slug +
+  relatório de pendências (QoL e extras) em vez de silêncio.
+- **CR-22 (P2)**: mods tML declarados "habilitados" no enabled.json sem os
+  `.tmod` em disco (steamcmd ausente ou download falho = sucesso falso).
+  Fix: separação intent/installed/enabled — `install.txt` registra o
+  pedido; `enabled.json` só com workshop IDs verificados em disco;
+  pendências reportadas com comando manual de recovery.
+- **CR-23 (P2)**: `StopServer` com timeout montava `systemctl stop
+  --timeout=N` — flag inexistente (systemd 257: `unrecognized option`).
+  Fix: timeout do cliente vira apenas deadline gRPC; SIGTERM/timeout ficam
+  com a unit (`KillSignal`/`TimeoutStopSec`).
+- **CR-24 (P2)**: `VIRT_TUNING_BEHAVIOR=force` documentado mas nunca lido (a
+  mensagem sugeria `SYSTEM_TUNING_SCOPE`, também não consultado no branch).
+  Fix: `force` implementado no `apply_stack_system_tuning` e propagado pelo
+  stack env; contrato das duas variáveis documentado em
+  `docs/hardware-tuning.md`.
+- **CR-25 (P1)**: unit rejeitada pelo `systemd-analyze verify` era instalada
+  mesmo assim (warning) e `systemctl enable` era `|| true`. Fix: verificação
+  e habilitação bloqueantes (falha = rollback via EXIT trap).
+- **CR-26 (P2)**: guia de restore presunha `world_nether/`/`world_the_end/`
+  sempre presentes. Fix: `docs/restore.md` manda listar o conteúdo do
+  archive e restaurar apenas o que existe (inclui mundos com level-name
+  customizado e backups legados só-mundo).
+- **CR-27 (P1)**: exemplo nftables com `policy drop` sem `ct state
+  established,related`/ICMP podia cortar o acesso SSH do próprio admin.
+  Fix: exemplo completo (estado, ICMP/ICMPv6, SSH admin) + aviso de rollback
+  temporizado antes de aplicar.
+- **CR-28 (P2)**: timeout gRPC de 10s no `/mc stop` perdia a corrida com o
+  `TimeoutStopSec=120` da unit. Fix: `STOP_RPC_TIMEOUT=130s` para
+  stop/restart no `agent_client.py`.
+
+### Corrigido — Documentação (DOC-01..DOC-10)
+
+- **DOC-01**: bloco de código Markdown não fechado no deploy do
+  `discord-bot/README.md`.
+- **DOC-02**: links quebrados `mminecraft/README.md` no `docs/tutorial.md`.
+- **DOC-03**: CI anunciada como "12 jobs + ISO na release" — são 10 jobs e a
+  release não tem ISO.
+- **DOC-04**: sincronização de comandos Discord prometida como automática —
+  exige `FORCE_SYNC_COMMANDS=true` (agora documentada e no `.env.example`).
+- **DOC-05**: URL manual `agent-latest` inexistente →
+  `releases/latest/download/...`.
+- **DOC-06**: ROADMAP com statuses superestimados — matriz honesta
+  implementado/testado; itens de backup remoto/webhook marcados como feitos.
+- **DOC-07**: `backup-rcon-failure-test.sh` e `envsubst-test.sh` fora do
+  `run-all.sh` e da CI — incluídos, junto com os testes novos (java-flags,
+  saveon-success, rollback).
+- **DOC-08**: passagem warning do shellcheck documentada como informativa
+  (decisão de bloqueio gradativo pendente).
+- **DOC-09**: referências a ISO descontinuada esclarecidas (bootstrap,
+  docs); nome legacy `MINECRAFT_ADRENALINE_VERSION` documentado no
+  `config.env`.
+- **DOC-10**: README do agente dizia que o token era impresso — na verdade
+  vai para arquivo protegido (0600).
+
+### Adicionado
+
+- `BACKUP_INCLUDE_MODS` (default true) no `config.env`/runtime.env: controla
+  se jars de mods entram nos backups (mundos e config sempre entram).
+- `env_file_read_value` no `common.sh` (leitura de chave com strip de aspas
+  para preservação de config em rewrites de runtime.env).
+- `tml_workshop_item_installed` no `tmodloader.sh` (verificação de download
+  físico por workshop ID).
+- Guards de execução direta (`BASH_SOURCE == $0`) nos `backup-cron.sh` —
+  permitem source em testes.
+
+
 ### Corrigido
 
 - **F9-TUI-fix (TUI invisível durante `curl | bash`)**: o `exec </dev/tty
