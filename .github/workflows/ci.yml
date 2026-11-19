@@ -183,6 +183,7 @@ jobs:
         # (save-on do backup, envsubst do installer) ficavam fora da CI.
         run: |
           bash tests/quick-script-tests.sh
+          bash tests/crias-bootstrap-test.sh
           bash tests/install-contracts.sh
           bash tests/static-audit.sh
           bash tests/stack-installer-test.sh

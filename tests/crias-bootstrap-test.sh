@@ -193,6 +193,27 @@ if [ ! -x "$install_dir/shared/lib/common.sh" ]; then
 fi
 echo "  OK: zip extraído com chmod nos .sh, sem dir top-level"
 
+echo "[crias-bootstrap-test] 6b. Migração legada e retenção..."
+legacy_install="$WORK_DIR/legacy-install"
+mkdir -p "$legacy_install"
+printf 'dados anteriores\n' > "$legacy_install/old-data"
+crias_extract_to "$real_zip" "$legacy_install" >/dev/null
+[ -L "$legacy_install" ] || { echo 'FAIL: migracao nao publicou symlink' >&2; exit 1; }
+compgen -G "$legacy_install.releases/legacy.*/old-data" >/dev/null || { echo 'FAIL: instalacao legada nao preservada' >&2; exit 1; }
+rollback_install="$WORK_DIR/legacy-rollback"
+mkdir -p "$rollback_install"
+printf 'dados preservados\n' > "$rollback_install/old-data"
+if (ln() { return 1; }; crias_extract_to "$real_zip" "$rollback_install" >/dev/null 2>&1); then
+    echo 'FAIL: publicacao simulada deveria falhar' >&2; exit 1
+fi
+[ -f "$rollback_install/old-data" ] || { echo 'FAIL: rollback nao restaurou instalacao legada' >&2; exit 1; }
+for _iteration in 1 2 3 4 5; do
+    crias_extract_to "$real_zip" "$legacy_install" >/dev/null
+done
+release_count=$(find "$legacy_install.releases" -maxdepth 1 -mindepth 1 -type d | wc -l)
+[ "$release_count" -le 3 ] || { echo "FAIL: retencao deixou $release_count versoes" >&2; exit 1; }
+[ -f "$legacy_install/install.sh" ] || { echo 'FAIL: release ativa removida' >&2; exit 1; }
+
 echo "[crias-bootstrap-test] 7. Static checks no crias-bootstrap.sh..."
 # Não deve ter usuário hardcoded (não assume 'crias', 'Server', etc. como login user)
 if grep -Eq '(login|user|usuario).*crias[^_-]' "$BOOTSTRAP" 2>/dev/null; then
