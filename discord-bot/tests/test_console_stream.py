@@ -39,7 +39,9 @@ try:
     )
     from crias_bot.config import BotConfig
 except ImportError:
-    pytest.skip("discord.py não instalado; testes de console stream pulados", allow_module_level=True)
+    pytest.skip(
+        "discord.py não instalado; testes de console stream pulados", allow_module_level=True
+    )
 
 
 # ---------------------------------------------------------------------------

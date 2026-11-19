@@ -824,9 +824,7 @@ class TestStatusCacheInvalidation:
         c = _make_client()
         c._stub.GetStatus = AsyncMock(return_value=_make_status_response())
         c._stub.RestartServer = AsyncMock(
-            return_value=crias_pb2.RestartResponse(
-                ok=True, message="ok", service_name="minecraft"
-            )
+            return_value=crias_pb2.RestartResponse(ok=True, message="ok", service_name="minecraft")
         )
 
         async def run():

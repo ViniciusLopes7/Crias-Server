@@ -495,7 +495,9 @@ class MinecraftCog(commands.Cog):
                     await interaction.followup.send(
                         # EXP-61: RCON output is game-controlled — sanitize
                         # backticks and bound the length.
-                        embed=error("Falha no RCON", f"```\n{truncate_for_codeblock(err_msg)}\n```"),
+                        embed=error(
+                            "Falha no RCON", f"```\n{truncate_for_codeblock(err_msg)}\n```"
+                        ),
                         ephemeral=True,
                     )
                 except discord.HTTPException:
@@ -628,10 +630,7 @@ class MinecraftCog(commands.Cog):
                                 consecutive_send_failures = 0
                             else:
                                 consecutive_send_failures += 1
-                                if (
-                                    consecutive_send_failures
-                                    >= _CONSOLE_MAX_SEND_FAILURES
-                                ):
+                                if consecutive_send_failures >= _CONSOLE_MAX_SEND_FAILURES:
                                     logger.warning(
                                         "Console stream: %d falhas consecutivas de envio; "
                                         "parando stream",
@@ -676,8 +675,7 @@ class MinecraftCog(commands.Cog):
                     consecutive_reconnect_failures += 1
                     if consecutive_reconnect_failures >= _CONSOLE_MAX_RECONNECT_FAILURES:
                         logger.warning(
-                            "Console stream: %d falhas consecutivas de reconexão; "
-                            "parando stream",
+                            "Console stream: %d falhas consecutivas de reconexão; parando stream",
                             consecutive_reconnect_failures,
                         )
                         reason = (

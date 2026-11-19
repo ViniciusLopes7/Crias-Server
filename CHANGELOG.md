@@ -7,6 +7,25 @@ e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido — Formato ruff reprovado na CI (2026-11-19, rodada 3)
+
+O job `lint-python` da CI (`ruff format --check src/ tests/`) reprovou 3
+arquivos que a verificação local não cobria — o `run-all.sh` só checava
+**sintaxe** Python (`ast.parse`), nunca formato/lint:
+
+- `src/crias_bot/bot.py`, `tests/test_agent_client.py` e
+  `tests/test_console_stream.py` reformatados com `ruff format`
+  (ruff 0.17.6 local; saída byte a byte idêntica à esperada pela CI).
+  Mudança **somente de formatação**: AST dos 3 arquivos comparada contra a
+  versão entregue anterior — idêntica, zero mudança semântica.
+- **Fechamento do gap de processo**: `tests/run-all.sh` agora roda
+  `ruff check src/ tests/` + `ruff format --check src/ tests/` a partir de
+  `discord-bot/` — o mesmo contrato exato do job `lint-python` da CI
+  (incluindo `working-directory`). SKIP silencioso quando `ruff` não está
+  instalado localmente (ambientes mínimos); a CI permanece obrigatória.
+  Contraprova por mutação: com o `bot.py` não-formatado o gate reprova
+  (exit 1); com o formatado passa.
+
 ### Corrigido — Auditoria pré-entrega + contraverificação (2026-11-19, rodada 2)
 
 Auditoria pré-entrega obrigatória (dois revisores independentes sobre o diff

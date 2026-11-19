@@ -112,6 +112,34 @@ if command -v python3 >/dev/null 2>&1; then
     fi
 fi
 
+# Ruff (lint + format) — mesmo contrato da CI (jobs lint-python).
+# SKIP silencioso quando ruff não está instalado localmente, para não
+# quebrar o run-all em ambientes mínimos; a CI continua obrigatória.
+if command -v ruff >/dev/null 2>&1; then
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "TEST: ruff check + ruff format --check (discord-bot)"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ruff_ok=1
+    if ! (cd discord-bot && ruff check src/ tests/ >/tmp/ruff-err.log 2>&1); then
+        echo "→ FAIL: ruff check"
+        tail -20 /tmp/ruff-err.log
+        ruff_ok=0
+    fi
+    if ! (cd discord-bot && ruff format --check src/ tests/ >/tmp/ruff-err.log 2>&1); then
+        echo "→ FAIL: ruff format --check"
+        tail -20 /tmp/ruff-err.log
+        ruff_ok=0
+    fi
+    if [ "$ruff_ok" -eq 1 ]; then
+        echo "→ PASS (ruff check + format limpos)"
+        PASS=$((PASS + 1))
+    else
+        FAIL=$((FAIL + 1))
+        FAILED_TESTS+=("ruff: discord-bot")
+    fi
+fi
+
 # YAML validation (se python yaml disponível).
 if python3 -c "import yaml" 2>/dev/null; then
     echo ""
