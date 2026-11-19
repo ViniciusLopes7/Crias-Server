@@ -84,15 +84,11 @@ for loader in vanilla fabric quilt forge neoforge; do
     echo "PASS: real $loader server reached EULA prompt without acceptance"
 done
 
-# Install the real Terraria vanilla stack in this disposable VM.
-(
-    export TERRARIA_SERVER_DIR=/opt/terraria-server TERRARIA_USER=terraria
-    export TERRARIA_USE_TMODLOADER=false FORCE_HARDWARE_TIER=LOW
-    export APPLY_SYSTEM_TUNING=false DRY_RUN=false
-    # shellcheck source=/dev/null
-    source "$root/terraria/install.sh"
-    run_stack_install
-)
+# Install in a fresh shell so Minecraft hook functions cannot leak into Terraria.
+env TERRARIA_SERVER_DIR=/opt/terraria-server TERRARIA_USER=terraria \
+    TERRARIA_USE_TMODLOADER=false FORCE_HARDWARE_TIER=LOW \
+    APPLY_SYSTEM_TUNING=false DRY_RUN=false \
+    bash -c 'set -euo pipefail; source "$1"; run_stack_install' _ "$root/terraria/install.sh"
 systemctl start terraria.service
 ready=false
 for i in $(seq 1 180); do

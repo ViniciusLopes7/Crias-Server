@@ -202,6 +202,7 @@ jobs:
           bash tests/manager-safety-test.sh
           bash tests/readiness-regression-test.sh
           bash tests/modpack-state-test.sh
+          bash tests/terraria-tuning-test.sh
           bash tests/download-modrinth-test.sh
 
   test-shell-arch:

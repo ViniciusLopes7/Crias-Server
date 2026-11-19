@@ -96,10 +96,27 @@ write_terraria_server_config() {
         return 0
     fi
 
+    # Terraria needs world=<file> together with autocreate to start without
+    # an interactive world-selection menu. Preserve an existing world path.
+    local add_world=true
+    if [ -f "$file_path" ] && grep -q '^world=' "$file_path"; then
+        add_world=false
+    fi
+    if [ "$add_world" = true ]; then
+        case "$world_name" in
+            ''|.|..|*/*|*\\*|*$'\n'*|*$'\r'*)
+                print_error "Nome de mundo Terraria invalido: $world_name"
+                return 1
+                ;;
+        esac
+    fi
     local tmp_new
     tmp_new="$(mktemp_crias_file)"
     {
         printf 'worldpath=%s\n' "$world_path"
+        if [ "$add_world" = true ]; then
+            printf 'world=%s/%s.wld\n' "${world_path%/}" "$world_name"
+        fi
         printf 'autocreate=%s\n' "$TT_WORLD_AUTOCREATE"
         printf 'worldname=%s\n' "$world_name"
         printf 'maxplayers=%s\n' "$TT_MAX_PLAYERS"
