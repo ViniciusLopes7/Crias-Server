@@ -84,4 +84,28 @@ for loader in vanilla fabric quilt forge neoforge; do
     echo "PASS: real $loader server reached EULA prompt without acceptance"
 done
 
+# Install the real Terraria vanilla stack in this disposable VM.
+(
+    export TERRARIA_SERVER_DIR=/opt/terraria-server TERRARIA_USER=terraria
+    export TERRARIA_USE_TMODLOADER=false FORCE_HARDWARE_TIER=LOW
+    export APPLY_SYSTEM_TUNING=false DRY_RUN=false
+    # shellcheck source=/dev/null
+    source "$root/terraria/install.sh"
+    run_stack_install
+)
+systemctl start terraria.service
+ready=false
+for i in $(seq 1 180); do
+    if ss -H -ltn 'sport = :7777' | grep -q .; then ready=true; break; fi
+    if systemctl is-failed --quiet terraria.service; then break; fi
+    sleep 2
+done
+if [ "$ready" != true ]; then
+    journalctl -u terraria.service --no-pager >&2
+    echo 'FAIL: Terraria did not listen on port 7777' >&2
+    exit 1
+fi
+systemctl stop terraria.service
+echo 'PASS: real Terraria stack installed and opened its game port'
+
 echo 'PASS: Arch VM, systemd PID 1, real service installer, backup restore, bootstrap and real server pre-EULA launch'
