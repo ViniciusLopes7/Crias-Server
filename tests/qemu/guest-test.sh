@@ -52,4 +52,36 @@ systemctl is-active --quiet minecraft.service
 journalctl -u minecraft.service --no-pager | grep -q CRIAS_VM_PROBE_STARTED
 systemctl stop minecraft.service
 ! systemctl is-active --quiet minecraft.service
-echo 'PASS: Arch VM, systemd PID 1, real hardened unit and JVM probe, backup restore and bootstrap tests'
+# Exercise the real Minecraft downloader and launcher up to the EULA prompt.
+# The test keeps eula=false and does not create or play a Minecraft world.
+# shellcheck source=/dev/null
+source "$root/minecraft/install.sh"
+DRY_RUN=false
+MRPACK_INSTALL_VERSION=v0.23.0
+install_mrpack_install
+for loader in vanilla fabric; do
+    real_server="/opt/crias-real-${loader}"
+    mkdir -p "$real_server/.shared"
+    cp "$root"/shared/lib/*.sh "$real_server/.shared/"
+    MINECRAFT_SERVER_DIR="$real_server"
+    MINECRAFT_LOADER="$loader"
+    MINECRAFT_VERSION=1.21.1
+    _install_minecraft_server_base
+    printf 'eula=false\n' > "$real_server/eula.txt"
+    printf 'server-port=0\n' > "$real_server/server.properties"
+    printf 'MINECRAFT_VERSION=1.21.1\nMINECRAFT_LOADER=%s\nMIN_RAM=128M\nMAX_RAM=512M\n' "$loader" > "$real_server/runtime.env"
+    chown -R criasvm:criasvm "$real_server"
+    set +e
+    timeout 180 runuser -u criasvm -- env SERVER_DIR="$real_server" bash "$root/minecraft/start-server.sh" > "$real_server/output.log" 2>&1
+    status=$?
+    set -e
+    cat "$real_server/output.log"
+    if [ "$status" -eq 124 ] || ! grep -Ei 'agree.*eula|eula.*agree' "$real_server/output.log"; then
+        echo "FAIL: $loader did not reach the Minecraft EULA prompt" >&2
+        exit 1
+    fi
+    grep -qx 'eula=false' "$real_server/eula.txt"
+    echo "PASS: real $loader server reached EULA prompt without acceptance"
+done
+
+echo 'PASS: Arch VM, systemd PID 1, real service installer, backup restore, bootstrap and real server pre-EULA launch'
