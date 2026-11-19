@@ -52,6 +52,26 @@ systemctl is-active --quiet minecraft.service
 journalctl -u minecraft.service --no-pager | grep -q CRIAS_VM_PROBE_STARTED
 systemctl stop minecraft.service
 ! systemctl is-active --quiet minecraft.service
+# Install in a fresh shell so Minecraft hook functions cannot leak into Terraria.
+env TERRARIA_SERVER_DIR=/opt/terraria-server TERRARIA_USER=terraria \
+    TERRARIA_USE_TMODLOADER=false FORCE_HARDWARE_TIER=LOW \
+    APPLY_SYSTEM_TUNING=false DRY_RUN=false \
+    bash -c 'set -euo pipefail; source "$1"; run_stack_install' _ "$root/terraria/install.sh"
+systemctl start terraria.service
+ready=false
+for i in $(seq 1 180); do
+    if ss -H -ltn 'sport = :7777' | grep -q .; then ready=true; break; fi
+    if systemctl is-failed --quiet terraria.service; then break; fi
+    sleep 2
+done
+if [ "$ready" != true ]; then
+    journalctl -u terraria.service --no-pager >&2
+    echo 'FAIL: Terraria did not listen on port 7777' >&2
+    exit 1
+fi
+systemctl stop terraria.service
+echo 'PASS: real Terraria stack installed and opened its game port'
+
 # Exercise the real Minecraft downloader and launcher up to the EULA prompt.
 # The test keeps eula=false and does not create or play a Minecraft world.
 # shellcheck source=/dev/null
@@ -83,5 +103,6 @@ for loader in vanilla fabric quilt forge neoforge; do
     grep -qx 'eula=false' "$real_server/eula.txt"
     echo "PASS: real $loader server reached EULA prompt without acceptance"
 done
+
 
 echo 'PASS: Arch VM, systemd PID 1, real service installer, backup restore, bootstrap and real server pre-EULA launch'

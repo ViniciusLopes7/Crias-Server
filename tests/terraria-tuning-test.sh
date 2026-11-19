@@ -98,3 +98,13 @@ if [ ! -f "$TT_CFG.crias-bak" ]; then
     exit 1
 fi
 echo "OK: CR-03 — senha e chaves do operador preservadas no reconfigure"
+
+# New installs select the generated world; explicit existing paths survive tuning.
+grep -qx 'world=/nova/worlds/reino.wld' "$TT_CFG" || { echo 'FAIL: world file not selected' >&2; exit 1; }
+sed -i 's|^world=.*|world=/dados/mundo-existente.wld|' "$TT_CFG"
+write_terraria_server_config "$TT_CFG" "/outra/worlds" "7777" "motd" "reino"
+grep -qx 'world=/dados/mundo-existente.wld' "$TT_CFG" || { echo 'FAIL: existing world path changed' >&2; exit 1; }
+if write_terraria_server_config "$TT_CFG.new" "/nova/worlds" "7777" "motd" "../escape"; then
+    echo 'FAIL: unsafe world name accepted' >&2; exit 1
+fi
+echo 'OK: world selection and existing world preservation'
