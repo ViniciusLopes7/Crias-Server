@@ -77,6 +77,14 @@ if [ ! -f "$TT_TUNING_LIB" ] && [ -f "$SCRIPT_DIR/../shared/lib/terraria-tuning.
     TT_TUNING_LIB="$SCRIPT_DIR/../shared/lib/terraria-tuning.sh"
 fi
 
+# (EXP-34) setup-cron e administrativo (roda como root): vive no libexec,
+# nunca no diretorio gravavel do jogo.
+CRIS_LIBEXEC_DIR="/usr/local/libexec/crias"
+SETUP_CRON_SCRIPT="$CRIS_LIBEXEC_DIR/setup-cron.sh"
+if [ ! -x "$SETUP_CRON_SCRIPT" ] && [ -x "$SCRIPT_DIR/setup-cron.sh" ]; then
+    SETUP_CRON_SCRIPT="$SCRIPT_DIR/setup-cron.sh"
+fi
+
 # (EXP-34/AUDIT-A P3-13) Guarda completa: SELF, libs e o script de setup-cron.
 manager_assert_root_safe "$SELF" "$COMMON_LIB" "$HARDWARE_LIB" "$TT_TUNING_LIB" "$SETUP_CRON_SCRIPT"
 
@@ -91,13 +99,6 @@ if [ -d "$SERVER_DIR" ]; then
 fi
 
 BACKUP_SCRIPT="$SERVER_DIR/backup-cron.sh"
-# (EXP-34) setup-cron e administrativo (roda como root): vive no libexec,
-# nunca no diretorio gravavel do jogo.
-CRIS_LIBEXEC_DIR="/usr/local/libexec/crias"
-SETUP_CRON_SCRIPT="$CRIS_LIBEXEC_DIR/setup-cron.sh"
-if [ ! -x "$SETUP_CRON_SCRIPT" ] && [ -x "$SCRIPT_DIR/setup-cron.sh" ]; then
-    SETUP_CRON_SCRIPT="$SCRIPT_DIR/setup-cron.sh"
-fi
 CONFIG_FILE="$SERVER_DIR/config/serverconfig.txt"
 RUNTIME_ENV="$SERVER_DIR/runtime.env"
 TUNING_STATE="$SERVER_DIR/hardware-profile.env"

@@ -199,6 +199,7 @@ jobs:
           bash tests/validate-server-dir-test.sh
           bash tests/backup-integrity-test.sh
           bash tests/manager-safety-test.sh
+          bash tests/readiness-regression-test.sh
           bash tests/download-modrinth-test.sh
 
   test-shell-arch:

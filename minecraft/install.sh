@@ -231,7 +231,7 @@ install_mrpack_install() {
         if [ "${repo_ver%%-*}" = "${MRPACK_INSTALL_VERSION#v}" ]; then
             print_step "Pacote mrpack-install $repo_ver (bate com o pin). Instalando via pacman..."
             pacman -S --needed --noconfirm mrpack-install
-            _verify_mrpack_version
+            _verify_mrpack_version || return 1
             return 0
         fi
         print_warning "mrpack-install do repo ($repo_ver) diverge do pin $MRPACK_INSTALL_VERSION; instalando versao pinada."
@@ -244,6 +244,7 @@ install_mrpack_install() {
 
     if curl_with_progress "Baixando mrpack-install ${MRPACK_INSTALL_VERSION}..." -fsSL --connect-timeout 10 --max-time 60 -o "$arch_pkg_local" "$arch_pkg_url"; then
         if pacman -U --noconfirm "$arch_pkg_local"; then
+            _verify_mrpack_version || return 1
             print_success "mrpack-install instalado via pacman -U (.pkg.tar.zst)"
             return 0
         fi
@@ -262,8 +263,8 @@ _verify_mrpack_version() {
     local installed_ver
     installed_ver="$(mrpack-install version 2>/dev/null || mrpack-install --version 2>/dev/null || true)"
     if [ -z "$installed_ver" ]; then
-        print_warning "Nao foi possivel consultar a versao do mrpack-install (comando version ausente?)."
-        return 0
+        print_error "Nao foi possivel verificar a versao do mrpack-install."
+        return 1
     fi
     if ! printf '%s' "$installed_ver" | grep -Fq "${MRPACK_INSTALL_VERSION#v}"; then
         print_error "mrpack-install instalado ($installed_ver) diverge do pin $MRPACK_INSTALL_VERSION."

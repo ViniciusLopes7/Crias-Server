@@ -222,6 +222,7 @@ run_test "stack-rollback-test"      "tests/stack-rollback-test.sh"
 run_test "validate-server-dir-test" "tests/validate-server-dir-test.sh"
 run_test "backup-integrity-test"    "tests/backup-integrity-test.sh"
 run_test "manager-safety-test"      "tests/manager-safety-test.sh"
+run_test "readiness-regression-test" "tests/readiness-regression-test.sh"
 # Correções da auditoria pré-entrega (AUDIT-B): contraprovas de CR-10/48/52.
 run_test "download-modrinth-test"   "tests/download-modrinth-test.sh"
 
