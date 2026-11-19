@@ -203,6 +203,11 @@ create_backup() {
     # e definido pelo script do stack (mc: level-name; tt: worlds/Worlds).
     local req
     for req in ${BACKUP_REQUIRED_DIRS[@]+"${BACKUP_REQUIRED_DIRS[@]}"}; do
+        # A symlinked world would archive only the link, not the actual world.
+        if [ -L "$BACKUP_SERVER_DIR/$req" ]; then
+            backup_log "ERRO: Mundo obrigatorio e um link simbolico: $BACKUP_SERVER_DIR/$req"
+            return 1
+        fi
         if [ ! -e "$BACKUP_SERVER_DIR/$req" ]; then
             backup_log "ERRO: Entrada obrigatoria ausente: $BACKUP_SERVER_DIR/$req — backup SEM o mundo seria falso sucesso (CR-05)."
             return 1
@@ -214,6 +219,13 @@ create_backup() {
     fi
 
     cd "$BACKUP_SERVER_DIR" || return 1
+
+    # Under the exclusive lock, choose a new name even if timestamps collide.
+    local original_name="$BACKUP_NAME" suffix=0
+    while [ -e "$BACKUP_DIR/$BACKUP_NAME" ] || [ -L "$BACKUP_DIR/$BACKUP_NAME" ]; do
+        suffix=$((suffix + 1))
+        BACKUP_NAME="${original_name%.tar.zst}-${suffix}.tar.zst"
+    done
 
     # DRY_RUN: skip pre_hook entirely (don't pause saves on live server).
     if [ "$BACKUP_DRY_RUN" = "true" ]; then

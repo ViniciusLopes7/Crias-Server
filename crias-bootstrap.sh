@@ -114,7 +114,8 @@ crias_fetch_release_urls() {
         err "Verifique https://github.com/$CRIAS_REPO/releases"
         return 1
     fi
-    printf '%s %s' "$zip_url" "$sha_url"
+    CRIAS_ZIP_URL="$zip_url"
+    CRIAS_SHA_URL="$sha_url"
 }
 
 # Verifica SHA256 do zip contra sha256sums.txt.
@@ -195,11 +196,9 @@ crias_extract_to() {
 
     # (CR-16) Deploy versionado + symlink atomico.
     local releases_root="${install_dir}.releases"
-    local stamp
-    stamp="$(date +%Y%m%d-%H%M%S)"
-    local new_dir="$releases_root/$stamp"
+    local new_dir
     mkdir -p "$releases_root"
-    rm -rf "$new_dir"
+    new_dir="$(mktemp -d "$releases_root/release.XXXXXXXX")"
 
     if ! cp -a "$src_dir/." "$new_dir/"; then
         err "Falha ao copiar a nova versao para $new_dir."
@@ -322,8 +321,8 @@ crias_bootstrap_main() {
     fi
 
     log "Consultando release no GitHub..."
-    local urls zip_url sha_url
-    if ! urls="$(crias_fetch_release_urls)"; then
+    local zip_url sha_url
+    if ! crias_fetch_release_urls; then
         err "Não foi possível obter URLs dos assets da release."
         err "Fallback: git clone https://github.com/$CRIAS_REPO && cd Crias-Server && sudo ./install.sh"
         return 1
@@ -336,9 +335,8 @@ crias_bootstrap_main() {
         log "Release que sera instalada: ${CRIAS_RELEASE_TAG_NAME} (alvo: ${CRIAS_RELEASE_TARGET:-desconhecido})"
         warn "main pode estar AHEAD da release latest; veja https://github.com/$CRIAS_REPO/releases para pinar uma tag (CRIAS_RELEASE_TAG)."
     fi
-    zip_url="${urls%% *}"
-    sha_url="${urls#* }"
-    [ "$sha_url" = "$zip_url" ] && sha_url=""
+    zip_url="$CRIAS_ZIP_URL"
+    sha_url="$CRIAS_SHA_URL"
     log "Zip URL: $zip_url"
 
     local tmpdir

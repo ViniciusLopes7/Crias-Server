@@ -103,7 +103,6 @@ JAVA_OPTS+=("-XX:G1ReservePercent=20")
 JAVA_OPTS+=("-XX:G1HeapWastePercent=5")
 JAVA_OPTS+=("-XX:G1MixedGCLiveThresholdPercent=90")
 JAVA_OPTS+=("-XX:G1RSetUpdatingPauseTimePercent=5")
-JAVA_OPTS+=("-XX:SurvivorRatio=32")
 JAVA_OPTS+=("-XX:MaxTenuringThreshold=1")
 JAVA_OPTS+=("-XX:InitiatingHeapOccupancyPercent=15")
 JAVA_OPTS+=("-XX:+UseCompressedOops")
@@ -127,7 +126,14 @@ cd "$SERVER_DIR" || exit 1
 # (EXP-36) Binario java configuravel (caminho absoluto pelo runtime.env se
 # o host tiver multiplos JDKs) e requisito minimo DERIVADO DA VERSAO DO JOGO:
 # MC 26.x exige Java 25 (anuncio oficial 26.1+); 1.20.5-1.21.x exige 21.
-JAVA_BIN="${JAVA_BIN:-java}"
+REQUIRED_JAVA_MAJOR="$(required_java_major "${MINECRAFT_VERSION:-1.21}")"
+if [ -z "${JAVA_BIN:-}" ]; then
+    if [ -x "/usr/lib/jvm/java-${REQUIRED_JAVA_MAJOR}-openjdk/bin/java" ]; then
+        JAVA_BIN="/usr/lib/jvm/java-${REQUIRED_JAVA_MAJOR}-openjdk/bin/java"
+    else
+        JAVA_BIN=java
+    fi
+fi
 if ! command -v "$JAVA_BIN" >/dev/null 2>&1; then
     echo "ERRO: Java nao encontrado ($JAVA_BIN). Instale o jdk-openjdk da versao exigida."
     exit 1
@@ -137,15 +143,27 @@ JAVA_VERSION_RAW="$("$JAVA_BIN" -version 2>&1 | head -n 1)"
 JAVA_VERSION_STRING="$(printf '%s\n' "$JAVA_VERSION_RAW" | awk -F'"' '{print $2}')"
 JAVA_MAJOR_VERSION="$(printf '%s\n' "$JAVA_VERSION_STRING" | awk -F. '{ if ($1 == 1) { print $2 } else { print $1 } }')"
 
-REQUIRED_JAVA_MAJOR="$(required_java_major "${MINECRAFT_VERSION:-1.21}")"
-
 if ! [[ "$JAVA_MAJOR_VERSION" =~ ^[0-9]+$ ]] || [ "$JAVA_MAJOR_VERSION" -lt "$REQUIRED_JAVA_MAJOR" ]; then
     echo "ERRO: Java ${REQUIRED_JAVA_MAJOR}+ exigido para Minecraft ${MINECRAFT_VERSION:-desconhecida}. Detectado: ${JAVA_VERSION_STRING:-desconhecido}"
     exit 1
 fi
 
-if [ ! -f "$SERVER_JAR" ]; then
-    echo "ERRO: $SERVER_JAR nao encontrado em $SERVER_DIR"
+# Modern Forge/NeoForge install a platform-specific argument file, not a
+# standalone server.jar. Reject ambiguous installations rather than guessing.
+LOADER_ARGS=""
+if [ "$MINECRAFT_LOADER" = forge ] || [ "$MINECRAFT_LOADER" = neoforge ]; then
+    mapfile -t loader_arg_files < <(find libraries/net -type f -name unix_args.txt \
+         -path "*/${MINECRAFT_LOADER}/*/unix_args.txt" 2>/dev/null | sort)
+    if [ "${#loader_arg_files[@]}" -gt 1 ]; then
+        echo "ERRO: multiplos unix_args.txt; remova instalacoes antigas do loader."
+        exit 1
+    fi
+    if [ "${#loader_arg_files[@]}" -eq 1 ]; then
+        LOADER_ARGS="${loader_arg_files[0]}"
+    fi
+fi
+if [ -z "$LOADER_ARGS" ] && [ ! -f "$SERVER_JAR" ]; then
+    echo "ERRO: $SERVER_JAR ou argumentos do loader nao encontrados em $SERVER_DIR"
     exit 1
 fi
 
@@ -180,4 +198,7 @@ if { [ "$MINECRAFT_LOADER" = "forge" ] || [ "$MINECRAFT_LOADER" = "neoforge" ]; 
     echo "Loader $MINECRAFT_LOADER: usando @user_jvm_args.txt"
 fi
 
-exec "$JAVA_BIN" "${JAVA_OPTS[@]}" "${LAUNCH_ARGS[@]+"${LAUNCH_ARGS[@]}"}" -jar "$SERVER_JAR" nogui
+if [ -n "$LOADER_ARGS" ]; then
+    exec "$JAVA_BIN" "${JAVA_OPTS[@]}" "${LAUNCH_ARGS[@]}" "@$LOADER_ARGS" nogui
+fi
+exec "$JAVA_BIN" "${JAVA_OPTS[@]}" "${LAUNCH_ARGS[@]}" -jar "$SERVER_JAR" nogui

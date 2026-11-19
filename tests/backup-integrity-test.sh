@@ -246,3 +246,39 @@ fi
 echo "OK: DRY_RUN sem notificações"
 
 echo "OK: backup-integrity-test"
+
+# A world symlink must never be published as a complete world backup.
+LINK_SERVER="$TMP_DIR/server-symlink"
+mkdir -p "$LINK_SERVER" "$TMP_DIR/external-world"
+printf 'world data\n' > "$TMP_DIR/external-world/level.dat"
+ln -s "$TMP_DIR/external-world" "$LINK_SERVER/world"
+printf 'level-name=world\n' > "$LINK_SERVER/server.properties"
+if run_backup "$LINK_SERVER" >/dev/null 2>&1; then
+    echo 'FAIL: symlinked world produced a misleading backup' >&2
+    exit 1
+fi
+if compgen -G "$LINK_SERVER/backups/*.tar.zst" > /dev/null; then
+    echo 'FAIL: symlinked world published an archive' >&2
+    exit 1
+fi
+echo 'OK: symlinked world rejected'
+
+# Freeze the name inputs, forcing a genuine collision across sequential runs.
+COLLISION_SERVER="$TMP_DIR/server-collision"
+mkdir -p "$COLLISION_SERVER/world"
+printf 'world data\n' > "$COLLISION_SERVER/world/level.dat"
+printf 'level-name=world\n' > "$COLLISION_SERVER/server.properties"
+cat > "$STUB_BIN/date" <<'DATE'
+#!/bin/bash
+case "${1:-}" in
+    +%Y%m%d-%H%M%S) echo 20990101-000000 ;;
+    +%N) echo 123456789 ;;
+    *) exec /usr/bin/date "$@" ;;
+esac
+DATE
+chmod +x "$STUB_BIN/date"
+run_backup "$COLLISION_SERVER" >/dev/null 2>&1
+run_backup "$COLLISION_SERVER" >/dev/null 2>&1
+count=$(find "$COLLISION_SERVER/backups" -name '*.tar.zst' -type f | wc -l)
+[ "$count" -eq 2 ] || { echo 'FAIL: collision did not retain both backups' >&2; exit 1; }
+echo 'OK: forced filename collision produces two archives'

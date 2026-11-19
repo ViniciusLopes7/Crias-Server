@@ -77,6 +77,14 @@ if [ ! -f "$MC_TUNING_LIB" ] && [ -f "$SCRIPT_DIR/../shared/lib/minecraft-tuning
     MC_TUNING_LIB="$SCRIPT_DIR/../shared/lib/minecraft-tuning.sh"
 fi
 
+# (EXP-34) setup-cron e administrativo (roda como root): vive no libexec,
+# nunca no diretorio gravavel do jogo.
+CRIS_LIBEXEC_DIR="/usr/local/libexec/crias"
+SETUP_CRON_SCRIPT="$CRIS_LIBEXEC_DIR/setup-cron.sh"
+if [ ! -x "$SETUP_CRON_SCRIPT" ] && [ -x "$SCRIPT_DIR/setup-cron.sh" ]; then
+    SETUP_CRON_SCRIPT="$SCRIPT_DIR/setup-cron.sh"
+fi
+
 # (EXP-34/AUDIT-A P3-13) Guarda completa: SELF, libs e o script de setup-cron
 # (tambem executado como root pelo manager) — recusa root em caminhos
 # gravaveis por nao-root.
@@ -94,13 +102,6 @@ if [ -d "$SERVER_DIR" ]; then
 fi
 
 BACKUP_SCRIPT="$SERVER_DIR/backup-cron.sh"
-# (EXP-34) setup-cron e administrativo (roda como root): vive no libexec,
-# nunca no diretorio gravavel do jogo.
-CRIS_LIBEXEC_DIR="/usr/local/libexec/crias"
-SETUP_CRON_SCRIPT="$CRIS_LIBEXEC_DIR/setup-cron.sh"
-if [ ! -x "$SETUP_CRON_SCRIPT" ] && [ -x "$SCRIPT_DIR/setup-cron.sh" ]; then
-    SETUP_CRON_SCRIPT="$SCRIPT_DIR/setup-cron.sh"
-fi
 PROPS_FILE="$SERVER_DIR/server.properties"
 RUNTIME_ENV="$SERVER_DIR/runtime.env"
 TUNING_STATE="$SERVER_DIR/hardware-profile.env"
