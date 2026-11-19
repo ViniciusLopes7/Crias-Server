@@ -247,6 +247,20 @@ jobs:
           TEST_JAVA_MAJOR: ${{ matrix.java }}
         run: bash tests/minecraft-real-jvm-test.sh
 
+  test-arch-vm:
+    name: Arch VM (QEMU and systemd)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install virtualization tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils ovmf cloud-image-utils
+          if [ -e /dev/kvm ]; then sudo chmod a+rw /dev/kvm; fi
+      - name: Boot and test Arch VM
+        run: bash tests/qemu/run-vm.sh
+
   test-go:
     name: Test Go (race)
     runs-on: ubuntu-22.04
