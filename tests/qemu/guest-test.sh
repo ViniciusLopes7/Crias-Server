@@ -143,6 +143,7 @@ configured_mb="$(sed -n 's/^MC_SERVICE_MEMORY_MAX_MB="\([0-9][0-9]*\)"$/\1/p' "$
 [ -n "$configured_mb" ]
 [ "$(systemctl show minecraft.service -p MemoryMax --value)" = "$((configured_mb * 1048576))" ]
 grep -q "^NATIVE_OVERHEAD_MB=" "$server/runtime.env"
+grep -qx 'MINECRAFT_LOADER="vanilla"' "$server/runtime.env"
 echo "PASS: manager recalibrou RAM com unit parada e sincronizou Xmx/MemoryMax"
 mc_ci_event "PASS" "reconfigure-memory" "manager validou limites efetivos no systemd"
 
