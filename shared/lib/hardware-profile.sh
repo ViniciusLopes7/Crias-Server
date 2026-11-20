@@ -205,9 +205,10 @@ cgroup_v2_effective_memory_mb() {
         rel="$(awk -F: '$1=="0" && $2=="" {print $3; exit}' /proc/self/cgroup 2>/dev/null || true)"
     fi
     # Nao aceite traversal, barras duplas ou caracteres inesperados em path.
-    if ! [[ "$rel" =~ ^(/[-A-Za-z0-9_.:@]+)*$ ]]; then
+    if [ "$rel" != "/" ] && ! [[ "$rel" =~ ^(/[-A-Za-z0-9_.:@]+)+$ ]]; then
         return 1
     fi
+    if [ "$rel" = "/" ]; then rel=""; fi
     cur="${root%/}${rel}"
     while :; do
         if [ -f "$cur/memory.max" ]; then
