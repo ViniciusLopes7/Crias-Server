@@ -52,6 +52,14 @@ test "$(stat -c %U:%G /usr/local/bin/crias-tui)" = root:root
 /usr/local/bin/crias-tui --doctor > /tmp/crias-tui-doctor.log
 grep -q "Diagnostico do Crias-Server" /tmp/crias-tui-doctor.log
 echo "PASS: TUI instalado antecipadamente, fallback e doctor no host Arch"
+# Testa OpenSSH em Arch real ANTES da instalacao Minecraft. O usuario ci
+# ja existe no guest, sem senha nova, e o processo SSH em curso permanece.
+INSTALL_SSH=true
+SSH_USER=ci
+install_ssh_if_enabled
+systemctl is-active --quiet sshd.service
+ss -H -ltn 'sport = :22' | grep -q .
+echo "PASS: OpenSSH habilitado e porta 22 escutando antes do Minecraft"
 # Build a harmless JVM probe and run it through the actual systemd unit and
 # production launcher, with the same sandbox and a non-root service account.
 useradd -r -M -s /usr/bin/nologin criasvm
@@ -100,6 +108,9 @@ journalctl -u minecraft.service --no-pager | grep -q CRIAS_VM_PROBE_STARTED
 [ "$(systemctl show -p MemoryMax --value minecraft.service)" = 536870912 ]
 [ "$(systemctl show -p MemorySwapMax --value minecraft.service)" = 0 ]
 [ "$(systemctl show -p NoNewPrivileges --value minecraft.service)" = yes ]
+[ "$(systemctl show -p StartLimitBurst --value minecraft.service)" = 3 ]
+systemctl cat minecraft.service | grep -q "^StartLimitIntervalSec=300s$"
+systemctl cat minecraft.service | grep -q "^OOMPolicy=stop$"
 server_pid="$(systemctl show -p MainPID --value minecraft.service)"
 [ "$server_pid" -gt 1 ]
 [ "$(ps -o user= -p "$server_pid" | xargs)" = criasvm ]
