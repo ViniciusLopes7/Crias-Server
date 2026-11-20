@@ -4,11 +4,12 @@ O Crias-Server detecta os recursos do host e propõe parâmetros conservadores p
 
 ## Sinais detectados
 
-- RAM total e RAM disponível
-- Cores e threads de CPU
+- RAM total, MemAvailable e swap pelo mesmo snapshot de `/proc/meminfo` (fallback `free`)
+- Threads visíveis e CPUs utilizáveis (`nproc` limitado pela menor cota `cpu.max` da hierarquia cgroup v2; limites fracionários arredondados para baixo, mínimo 1)
 - Tipo de disco (HDD, SSD, NVME)
 - Filesystem (ZFS/Btrfs/LVM detectados — tuning de bloco pode ser pulado)
-- Virtualização (`systemd-detect-virt`) — tuning de host é pulado em container/VPS
+- Teto de RAM de cgroups (`memory.max`) e folga estimada incluindo ancestrais; considera metade de `inactive_file` como cache potencialmente reclamável, mantendo margem de segurança
+- Virtualização (`systemd-detect-virt`) — tuning global de host é pulado em container/VPS
 
 ## Tiers
 
@@ -33,21 +34,34 @@ HW_MID_TIER_MAX_CPU_CORES=6
 
 - `max-players`, `view-distance`, `simulation-distance` (Minecraft)
 - `maxplayers`, `npcstream`, `autocreate` (Terraria)
-- Heap JVM (`-Xms`, `-Xmx`) estimado a partir da RAM física, com folga para o SO e a memória nativa do processo Java (Minecraft)
+- Heap JVM (`-Xms`, `-Xmx`) calculado pelo menor orçamento entre capacidade física menos reserva do host e memória atualmente disponível menos uma margem de pressão; inclui reserva de memória nativa da JVM
 - `MemoryMax` do systemd (acima do heap para acomodar JVM overhead)
 - G1 GC region size baseado no heap
 - Retenção de backup (LOW=5, MID=7, HIGH=10 dias)
 - Nível de compressão zstd (HDD=-3, SSD/NVME=-1)
 
-### No host (se `APPLY_SYSTEM_TUNING=true` e `SYSTEM_TUNING_SCOPE=host`)
+### No host (opcional, desativado por padrão)
+
+O tuning **do servidor Minecraft** continua automático. Mudanças **globais no Linux** não são aplicadas automaticamente: para habilitá-las, configure **ambas** `APPLY_SYSTEM_TUNING=true` e `SYSTEM_TUNING_SCOPE=host`. O instalador respeita arquivos ZRAM/sysctl não gerenciados e não os sobrescreve. O restante das opções globais é opt-in separado.
 
 - `zram-generator` com tamanho baseado em RAM (metade em hosts ≤4 GB, fixo 2 GB em >8 GB)
 - `vm.swappiness` (60 se ≤4 GB, 40 se ≤8 GB, 20 se >8 GB)
 - `vm.vfs_cache_pressure=50`
-- I/O scheduler: `bfq` para HDD, `mq-deadline` para SSD, default para NVME
-- `read_ahead_kb`: 4096 HDD, 2048 SSD, 1024 NVME
-- `cpupower` governor: `performance` em MID/HIGH (se não em bateria), `ondemand` caso contrário
+- I/O scheduler: `bfq` para HDD, `mq-deadline` para SSD (somente com `CRIAS_TUNE_BLOCK_DEVICE=true`)
+- `read_ahead_kb`: 4096 HDD, 2048 SSD, 1024 NVME (somente com `CRIAS_TUNE_BLOCK_DEVICE=true`)
+- `cpupower` governor: `performance` em MID/HIGH (se não em bateria), `ondemand` caso contrário (somente com `CRIAS_TUNE_CPU_GOVERNOR=true`)
 - `nofile` limit 65536 para o usuário do servidor
+
+Exemplo de opt-in explícito em `config.env`:
+
+```bash
+APPLY_SYSTEM_TUNING="true"
+SYSTEM_TUNING_SCOPE="host"
+CRIAS_TUNE_CPU_GOVERNOR="false"   # mantenha politica de energia atual
+CRIAS_TUNE_BLOCK_DEVICE="false"    # mantenha scheduler/read-ahead atuais
+```
+
+**Atenção:** o tuning global pode afetar outros aplicativos e containers. Ajustes de ZRAM e swappiness não substituem RAM física. O instalador não deve sobrescrever `/etc/systemd/zram-generator.conf` ou `/etc/sysctl.d/99-server-tuning.conf` se forem de terceiros. Valores de memória do cgroup incluem cache: em workloads com cache elevado, o cálculo é intencionalmente conservador e pode solicitar revisão manual.
 
 ## Filesystems avançados
 
@@ -144,6 +158,10 @@ Os eventos do kernel não identificam sozinhos qual perfil ou mod causou o probl
 - O launcher verifica a memória do cgroup antes de executar Java e recusa `user_jvm_args.txt` Forge/NeoForge com parâmetros duplicados de heap/MaxRAM que poderiam sobrescrever o tuning.
 - `reconfigure-hardware` **exige Minecraft parado**. Atualiza `MemoryMax` por drop-in persistente em `/etc/systemd/system/minecraft.service.d/20-crias-memory.conf`, valida com `systemd-analyze`, confere tanto `MemoryMax` quanto `EffectiveMemoryMax` (que inclui cotas da slice pai) e restaura o drop-in anterior se a validação falhar. O comando não reinicia o serviço automaticamente.
 - `MemorySwapMax=0` continua impedindo que o **processo Minecraft** use swap; isso não impede que o host utilize ZRAM para outros processos. A opção prioriza limitar pausas graves de JVM, mas não substitui memória física suficiente.
+
+**Memória sob pressão:** se o orçamento seguro for inferior ao heap mínimo, o instalador/recalibrador recusa gerar uma configuração inválida; não aumenta automaticamente o limite e não encerra processos concorrentes. O operador pode liberar RAM, encerrar outro servidor de jogo ou revisar as cotas antes de tentar novamente. A disponibilidade é uma medição de um instante; processos futuros ainda podem consumir memória.
+
+**Disco incerto:** se o filesystem ou dispositivo não puder ser classificado com segurança, `sync-chunk-writes=true` é mantido, em vez de presumir SSD. Isso pode reduzir throughput, mas evita um ajuste agressivo baseado em detecção inconclusiva.
 
 **Modpacks grandes:** o tuning é um orçamento inicial e não garante que todos os mods caibam no heap. Analise `MemoryPeak`, `MemoryMax`, logs do Java e uso do host antes de escolher o heap; não aumente `-Xmx` sozinho sem ajustar o cgroup.
 

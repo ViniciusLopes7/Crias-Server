@@ -258,7 +258,7 @@ cmd_reconfigure_hardware() {
     done
 
     detect_hardware_profile "$SERVER_DIR" "$forced_tier"
-    compute_minecraft_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER" || return 1
+    compute_minecraft_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER" "$HW_AVAILABLE_RAM_MB" || return 1
 
     # O systemd recebe a mesma cota de memoria calculada para runtime.env.
     # O helper valida e reverte o drop-in se daemon-reload/verify falhar.

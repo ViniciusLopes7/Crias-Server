@@ -7,6 +7,10 @@ compute_minecraft_tuning() {
     local cpu_cores="$2"
     local disk_type="$3"
     local tier="$4"
+    # Quinto argumento opcional: memoria realmente disponivel, incluindo
+    # pressao da slice cgroup. Chamadas legadas sem ele usam a RAM total.
+    local available_ram_mb="${5:-$total_ram_mb}"
+    local pressure_reserve_mb
 
     local reserve_mb
     local xmx_mb
@@ -16,6 +20,10 @@ compute_minecraft_tuning() {
     # Nao fabrique um heap minimo maior que a memoria disponivel.
     if ! [[ "$total_ram_mb" =~ ^[0-9]+$ ]] || [ "$total_ram_mb" -lt 1024 ]; then
         print_error "Minecraft precisa de pelo menos 1024 MB de RAM efetiva; detectado: ${total_ram_mb:-desconhecido}MB."
+        return 1
+    fi
+    if ! [[ "$available_ram_mb" =~ ^[0-9]{1,7}$ ]] || [ "$available_ram_mb" -gt "$total_ram_mb" ]; then
+        print_error "Memoria disponivel inconsistente: ${available_ram_mb:-desconhecida}MB (total ${total_ram_mb}MB)."
         return 1
     fi
     if ! [[ "$cpu_cores" =~ ^[0-9]+$ ]] || [ "$cpu_cores" -le 0 ]; then
@@ -69,12 +77,27 @@ compute_minecraft_tuning() {
             native_overhead_mb=$((total_ram_mb / 8))
         fi
     fi
-    local budget_mb=$((total_ram_mb - reserve_mb - native_overhead_mb))
+    # MemAvailable considera cache reclamavel, mas nao autoriza tomar toda
+    # essa folga: mantenha uma margem livre mesmo com processos em execucao.
+    # Essa conta complementa a reserva proporcional ao host, nao a substitui.
+    pressure_reserve_mb=256
+    if [ "$total_ram_mb" -gt 2048 ]; then
+        pressure_reserve_mb=$((reserve_mb / 2))
+        pressure_reserve_mb=$(clamp_value "$pressure_reserve_mb" 384 1024)
+    fi
+    local service_budget_mb=$((total_ram_mb - reserve_mb))
+    local available_budget_mb=$((available_ram_mb - pressure_reserve_mb))
+    if [ "$available_budget_mb" -lt "$service_budget_mb" ]; then
+        service_budget_mb="$available_budget_mb"
+    fi
+    local budget_mb=$((service_budget_mb - native_overhead_mb))
     if [ "$budget_mb" -lt 384 ]; then
-        print_error "RAM insuficiente: ${total_ram_mb}MB total, ${reserve_mb}MB para host e ${native_overhead_mb}MB para JVM nativa."
+        print_error "RAM disponivel insuficiente: ${total_ram_mb}MB total, ${available_ram_mb}MB disponiveis, ${reserve_mb}MB reserva host, ${native_overhead_mb}MB nativa, ${pressure_reserve_mb}MB margem de pressao."
         return 1
     fi
     xmx_mb=$(clamp_value "$budget_mb" 384 12288)
+    MC_EFFECTIVE_AVAILABLE_RAM_MB="$available_ram_mb"
+    MC_PRESSURE_RESERVE_MB="$pressure_reserve_mb"
     # Xms conservador e sem AlwaysPreTouch: modpacks pesados nao precisam
     # reservar imediatamente 70% do heap antes de gerar o mundo.
     xms_mb=$((xmx_mb * 30 / 100))
@@ -102,13 +125,22 @@ compute_minecraft_tuning() {
     MC_MIN_RAM="${xms_mb}M"
     MC_MAX_RAM="${xmx_mb}M"
 
-    if [ "$disk_type" = "HDD" ]; then
-        MC_SYNC_CHUNK_WRITES="true"
-        MC_BACKUP_ZSTD_LEVEL="-3"
-    else
-        MC_SYNC_CHUNK_WRITES="false"
-        MC_BACKUP_ZSTD_LEVEL="-1"
-    fi
+    # Discos desconhecidos/abstratos nao devem ser presumidos SSD.
+    # Priorize consistencia das gravacoes ate tipo de armazenamento confirmado.
+    case "$disk_type" in
+        HDD)
+            MC_SYNC_CHUNK_WRITES="true"
+            MC_BACKUP_ZSTD_LEVEL="-3"
+            ;;
+        SSD|NVME)
+            MC_SYNC_CHUNK_WRITES="false"
+            MC_BACKUP_ZSTD_LEVEL="-1"
+            ;;
+        *)
+            MC_SYNC_CHUNK_WRITES="true"
+            MC_BACKUP_ZSTD_LEVEL="-1"
+            ;;
+    esac
 
     if [ "$tier" = "LOW" ]; then
         MC_BACKUP_RETENTION_DAYS=5
@@ -119,8 +151,9 @@ compute_minecraft_tuning() {
     fi
 
     service_memory_mb=$((xmx_mb + native_overhead_mb))
-    # Invariante: Xmx < MemoryMax <= RAM efetiva - reserva host.
-    if [ "$service_memory_mb" -gt "$((total_ram_mb - reserve_mb))" ] || [ "$service_memory_mb" -le "$xmx_mb" ]; then
+    # Invariantes: Xmx < MemoryMax <= RAM-reserva e folga disponivel.
+    if [ "$service_memory_mb" -gt "$((total_ram_mb - reserve_mb))" ] \
+        || [ "$service_memory_mb" -gt "$available_budget_mb" ] || [ "$service_memory_mb" -le "$xmx_mb" ]; then
         print_error "Orcamento inconsistente de heap/MemoryMax; recusando iniciar configuracao."
         return 1
     fi
@@ -140,6 +173,8 @@ compute_minecraft_tuning() {
     export MC_SERVICE_MEMORY_MAX_MB
     export MC_NATIVE_OVERHEAD_MB
     export MC_HOST_RESERVE_MB
+    export MC_EFFECTIVE_AVAILABLE_RAM_MB
+    export MC_PRESSURE_RESERVE_MB
 }
 
 # Atualiza somente o limite MemoryMax da unidade Minecraft. Mantem unit
@@ -404,6 +439,10 @@ MC_BACKUP_ZSTD_LEVEL="$MC_BACKUP_ZSTD_LEVEL"
 MC_SERVICE_MEMORY_MAX_MB="$MC_SERVICE_MEMORY_MAX_MB"
 MC_NATIVE_OVERHEAD_MB="${MC_NATIVE_OVERHEAD_MB:-0}"
 MC_HOST_RESERVE_MB="${MC_HOST_RESERVE_MB:-0}"
+MC_EFFECTIVE_AVAILABLE_RAM_MB="${MC_EFFECTIVE_AVAILABLE_RAM_MB:-0}"
+MC_PRESSURE_RESERVE_MB="${MC_PRESSURE_RESERVE_MB:-0}"
 HW_CGROUP_LIMIT_MB="${HW_CGROUP_LIMIT_MB:-0}"
+HW_CGROUP_AVAILABLE_MB="${HW_CGROUP_AVAILABLE_MB:-0}"
+HW_CPU_QUOTA_CORES="${HW_CPU_QUOTA_CORES:-0}"
 EOF
 }

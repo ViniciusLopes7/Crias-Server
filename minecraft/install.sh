@@ -54,7 +54,7 @@ MRPACK_INSTALL_VERSION="${MRPACK_INSTALL_VERSION:-v0.23.0}"
 # (CR-17) strict: pendencias de mods transformam-se em falha da instalacao.
 MINECRAFT_MODS_STRICT="${MINECRAFT_MODS_STRICT:-false}"
 FORCE_HARDWARE_TIER="${FORCE_HARDWARE_TIER:-}"
-APPLY_SYSTEM_TUNING="${APPLY_SYSTEM_TUNING:-true}"
+APPLY_SYSTEM_TUNING="${APPLY_SYSTEM_TUNING:-false}"
 DRY_RUN="${DRY_RUN:-false}"
 MINECRAFT_SERVER_DIR_PREEXISTED="${MINECRAFT_SERVER_DIR_PREEXISTED:-false}"
 MINECRAFT_INSTALL_SUCCEEDED="${MINECRAFT_INSTALL_SUCCEEDED:-false}"
@@ -710,7 +710,7 @@ stack_configure_runtime() {
     print_step "Aplicando tuning automatico para Minecraft..."
 
     detect_hardware_profile "$MINECRAFT_SERVER_DIR" "$FORCE_HARDWARE_TIER"
-    compute_minecraft_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER"
+    compute_minecraft_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER" "$HW_AVAILABLE_RAM_MB"
 
     # STACK_SERVICE_MEMORY_MAX_MB read by install_stack_service (stack-installer.sh).
     # shellcheck disable=SC2034
