@@ -90,8 +90,11 @@ sudo systemctl status terraria
 
 ### Hub TUI (menu interativo — não precisa lembrar comandos)
 
+O instalador disponibiliza o hub antes de instalar os serviços e mods; em uma falha parcial, use o modo de diagnóstico de somente leitura.
+
 ```bash
 sudo crias-tui
+sudo crias-tui --doctor
 # Menu: Servidor / Monitoramento / Backup / Sistema / Sair
 ```
 
@@ -262,6 +265,16 @@ sudo /usr/local/libexec/crias/mc-manager.sh health
 ```
 
 ### OutOfMemoryError (Minecraft)
+
+Primeiro confira os limites efetivos e os eventos do kernel, sem reiniciar automaticamente o jogo:
+
+```bash
+sudo crias-tui --doctor
+systemctl show minecraft -p MemoryMax -p MemoryPeak -p NRestarts
+sudo journalctl -k -b --no-pager | grep -Ei 'oom-kill|out of memory' | tail -n 20
+```
+
+Se a memória calculada estiver inadequada e o host tiver folga, reconfigure com cuidado e revise a unidade systemd antes do restart:
 
 ```bash
 sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware LOW
