@@ -30,6 +30,7 @@ bash tests/terraria-backup-dry-run.sh
 
 echo "[quick-script-tests] Validando tuning do Minecraft..."
 bash tests/minecraft-tuning-test.sh
+bash tests/minecraft-memory-contract-test.sh
 
 echo "[quick-script-tests] Validando tuning do Terraria..."
 bash tests/terraria-tuning-test.sh
@@ -51,6 +52,9 @@ bash tests/agent-install-hook-test.sh
 
 echo "[quick-script-tests] Validando hook de instalação do SSH..."
 bash tests/install-ssh-hook-test.sh
+
+echo "[quick-script-tests] Validando Tailscale, SSH antecipado e limite de OOM..."
+bash tests/remote-access-setup-test.sh
 
 echo "[quick-script-tests] Validando hook de instalação das ferramentas de monitoramento..."
 bash tests/install-monitor-hook-test.sh

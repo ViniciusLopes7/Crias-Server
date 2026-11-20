@@ -28,4 +28,21 @@ touch "$tmp/libraries/net/minecraftforge/forge/old/unix_args.txt"
 if SERVER_DIR="$tmp" JAVA_BIN="$tmp/java" bash "$ROOT/minecraft/start-server.sh" >"$tmp/out" 2>&1; then
     echo 'Expected ambiguous loader installation to fail' >&2; exit 1
 fi
+# Mesmo que o heap de runtime.env seja seguro, user_jvm_args.txt nao pode
+# sobrescreve-lo e ultrapassar MemoryMax silenciosamente.
+rm -f "$tmp/libraries/net/minecraftforge/forge/old/unix_args.txt"
+printf '# -Xmx4G (comentario nao deve ser considerado)\n' > "$tmp/user_jvm_args.txt"
+SERVER_DIR="$tmp" JAVA_BIN="$tmp/java" bash "$ROOT/minecraft/start-server.sh" >"$tmp/out" 2>&1
+printf '%s\n' '-Xmx4G' >> "$tmp/user_jvm_args.txt"
+if SERVER_DIR="$tmp" JAVA_BIN="$tmp/java" bash "$ROOT/minecraft/start-server.sh" >"$tmp/out" 2>&1; then
+    echo "FAIL: arquivo de args Forge sobrescreveu Xmx" >&2; exit 1
+fi
+grep -q 'user_jvm_args.txt contem Xmx' "$tmp/out"
+rm -f "$tmp/user_jvm_args.txt"
+printf 'MINECRAFT_LOADER=forge\nMINECRAFT_VERSION=1.21\nMIN_RAM=256M\nMAX_RAM=64M\n' > "$tmp/runtime.env"
+if SERVER_DIR="$tmp" JAVA_BIN="$tmp/java" bash "$ROOT/minecraft/start-server.sh" >"$tmp/out" 2>&1; then
+    echo "FAIL: runtime com Xms > Xmx foi aceito" >&2; exit 1
+fi
+grep -q 'MIN_RAM.*excede MAX_RAM' "$tmp/out"
+
 echo 'OK: manager entrypoints and Forge launcher regression checks'

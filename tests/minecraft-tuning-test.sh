@@ -233,4 +233,11 @@ if ! grep -q '^MINECRAFT_VERSION=' "$MC_ENV" || ! grep -q '^SERVER_JAR=' "$MC_EN
     echo "FAIL: EXP-36/39 — MINECRAFT_VERSION/SERVER_JAR ausentes no runtime.env" >&2
     exit 1
 fi
+# Reconfigurar RAM jamais converte Forge 1.20.1 silenciosamente em Fabric.
+printf 'MINECRAFT_LOADER="forge"\nMINECRAFT_VERSION="1.20.1"\nSERVER_JAR="server.jar"\n' > "$MC_ENV"
+unset MINECRAFT_LOADER MINECRAFT_VERSION MINECRAFT_SERVER_FILE
+write_minecraft_runtime_env "$MC_ENV"
+grep -qx 'MINECRAFT_LOADER="forge"' "$MC_ENV" || { echo "FAIL: loader Forge perdido na recalibracao" >&2; exit 1; }
+grep -qx 'MINECRAFT_VERSION="1.20.1"' "$MC_ENV" || { echo "FAIL: versao Forge perdida na recalibracao" >&2; exit 1; }
+
 echo "OK: CR-13/CR-08/EXP-36 — precedencia, modo 0600 e chaves novas no runtime.env"

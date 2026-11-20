@@ -820,10 +820,56 @@ EOF
     fi
 
     if [ "$tailscale_activated" = "true" ]; then
-        print_success "Tailscale pronto. Execute 'sudo tailscale up' para autenticar."
+        print_success "Servico tailscaled ativo. A conexao com a tailnet sera verificada na proxima etapa."
     else
         print_warning "Tailscale foi instalado mas o serviço tailscaled não está ativo."
         print_warning "Verifique manualmente: sudo systemctl status tailscaled"
+    fi
+}
+
+# Configuracao de tailnet separada da instalacao do daemon.
+# A autenticacao envolve uma URL no navegador: nunca e feita implicitamente
+# em NON_INTERACTIVE e nunca copia chaves de autenticacao para config.env.
+configure_tailscale_login_if_enabled() {
+    if ! is_true "$INSTALL_TAILSCALE"; then return 0; fi
+    if is_true "$DRY_RUN"; then
+        print_step "[DRY_RUN] Verificaria status do Tailscale e ofereceria autenticacao opcional."
+        return 0
+    fi
+    if ! command_exists tailscale || ! systemctl is-active --quiet tailscaled; then
+        print_warning "Tailscale indisponivel; verifique: sudo systemctl status tailscaled"
+        return 0
+    fi
+    local status_json ts_ip
+    status_json="$(tailscale status --json 2>/dev/null || true)"
+    if printf "%s\n" "$status_json" | grep -Eq '"BackendState"[[:space:]]*:[[:space:]]*"Running"'; then
+        ts_ip="$(tailscale ip -4 2>/dev/null || true)"
+        print_success "Tailscale autenticado; IP da tailnet: ${ts_ip:-indisponivel}"
+        return 0
+    fi
+    if is_true "$NON_INTERACTIVE" || [ ! -t 0 ]; then
+        print_warning "Tailscale instalado mas nao autenticado (modo nao interativo)."
+        print_step "Conecte depois com: sudo tailscale up"
+        return 0
+    fi
+    print_step "Para conectar o servidor a sua tailnet, autorize o link exibido no celular ou navegador."
+    if ! tui_confirm "Autenticar Tailscale agora? (opcional)" "Y"; then
+        print_warning "Autenticacao adiada. Execute depois: sudo tailscale up"
+        return 0
+    fi
+    # Impede que o instalador bloqueie indefinidamente se a rede ou o
+    # navegador nao completar a autorizacao. Nao desconfigura a tailnet.
+    if ! timeout --foreground 180s tailscale up --timeout=180s; then
+        print_warning "Tailscale nao foi autenticado nesta tentativa; a instalacao pode prosseguir localmente."
+        print_step "Repita quando puder: sudo tailscale up"
+        return 0
+    fi
+    status_json="$(tailscale status --json 2>/dev/null || true)"
+    if printf "%s\n" "$status_json" | grep -Eq '"BackendState"[[:space:]]*:[[:space:]]*"Running"'; then
+        ts_ip="$(tailscale ip -4 2>/dev/null || true)"
+        print_success "Tailscale conectado; IP: ${ts_ip:-indisponivel}"
+    else
+        print_warning "tailscale up terminou, mas o estado Running nao foi confirmado. Confira: tailscale status"
     fi
 }
 
@@ -1237,7 +1283,7 @@ install_ssh_if_enabled() {
         if is_true "$NON_INTERACTIVE"; then
             INSTALL_SSH="false"
         else
-            if tui_confirm "Habilitar acesso SSH no servidor instalado? (cria usuario 'crias' com sudo)" "N"; then
+            if tui_confirm "Habilitar OpenSSH na porta 22 para acesso remoto (inclusive Tailscale)? (cria usuario 'crias' com sudo)" "N"; then
                 INSTALL_SSH="true"
             else
                 INSTALL_SSH="false"
@@ -1283,6 +1329,13 @@ install_ssh_if_enabled() {
         fi
     else
         print_step "openssh ja instalado."
+    fi
+
+    # Arch Linux pode nao ter host keys ainda em uma instalacao fresca.
+    # ssh-keygen -A cria apenas as ausentes, sem sobrescrever as existentes.
+    if ! ssh-keygen -A >/dev/null 2>&1; then
+        print_error "Nao foi possivel gerar/verificar as chaves do servidor SSH."
+        return 1
     fi
 
     # 2. Cria usuario 'crias' com sudo (se nao existir).
@@ -2089,8 +2142,13 @@ main() {
     done
 
     tui_clear
-    tui_stage "ETAPA 5/5 · INSTALAÇÃO"
+    tui_stage "ETAPA 5/5 · ACESSO REMOTO"
     install_tailscale_if_enabled
+    configure_tailscale_login_if_enabled
+    # SSH precisa estar disponivel antes da etapa mais demorada e sujeita a
+    # falha (download e inicializacao do Minecraft), nao depois dela.
+    install_ssh_if_enabled
+    tui_stage "ETAPA 5/5 · INSTALAÇÃO DO JOGO"
     # Policy gate: ensure EULA acceptance for non-interactive Minecraft installs
     if [ "$SERVER_TYPE" = "minecraft" ] && is_true "${NON_INTERACTIVE:-false}"; then
         if ! is_true "${ACCEPT_EULA:-false}"; then
@@ -2107,9 +2165,6 @@ main() {
     run_selected_stack_installer
     configure_alias_autoload_for_selected_stack
     cleanup_other_stack_if_needed
-
-    # v1.2.0: configura SSH no host instalado (pergunta interativamente).
-    install_ssh_if_enabled
 
     # Fase 1+: instala agente de controle remoto (opcional, pergunta interativo).
     install_crias_agent_if_enabled

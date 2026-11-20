@@ -30,6 +30,7 @@ JAVA_PREFER_IPV4_STACK="${JAVA_PREFER_IPV4_STACK:-false}"
 
 MIN_RAM="1024M"
 MAX_RAM="2048M"
+NATIVE_OVERHEAD_MB="0"
 GC_MAX_PAUSE="200"
 G1_REGION_SIZE="8M"
 
@@ -42,10 +43,11 @@ normalize_mem_value() {
     local value="$1"
     local default_value="$2"
 
-    if [[ "$value" =~ ^[0-9]+M$ ]]; then
+    if [[ "$value" =~ ^[1-9][0-9]*M$ ]]; then
         echo "$value"
     else
-        echo "$default_value"
+        echo "ERRO: valor de memoria invalido: $value (esperado numero positivo em M)." >&2
+        return 1
     fi
 }
 
@@ -70,14 +72,16 @@ fi
 
 min_ram_mb=${MIN_RAM%M}
 max_ram_mb=${MAX_RAM%M}
+if ! [[ "$NATIVE_OVERHEAD_MB" =~ ^[0-9]{1,6}$ ]]; then
+    echo "ERRO: NATIVE_OVERHEAD_MB invalido no runtime.env: $NATIVE_OVERHEAD_MB" >&2
+    exit 1
+fi
 
 # Só corrige se min > max (config inválida). Se min == max (cenario válido
 # quando o usuario quer -Xms==-Xmx, recomendado para producao), mantém.
 if [ "$min_ram_mb" -gt "$max_ram_mb" ]; then
-    max_ram_mb=$((max_ram_mb > 1536 ? max_ram_mb : 2048))
-    min_ram_mb=$((max_ram_mb * 70 / 100))
-    MIN_RAM="${min_ram_mb}M"
-    MAX_RAM="${max_ram_mb}M"
+    echo "ERRO: MIN_RAM=$MIN_RAM excede MAX_RAM=$MAX_RAM; ajuste runtime.env." >&2
+    exit 1
 fi
 
 # ---------------------------------------------------------------------------
@@ -108,7 +112,8 @@ JAVA_OPTS+=("-XX:InitiatingHeapOccupancyPercent=15")
 JAVA_OPTS+=("-XX:+UseCompressedOops")
 JAVA_OPTS+=("-XX:+UseStringDeduplication")
 JAVA_OPTS+=("-XX:+PerfDisableSharedMem")
-JAVA_OPTS+=("-XX:+AlwaysPreTouch")
+# Nao usar AlwaysPreTouch por padrao: Forge pesado pode pre-alocar muita
+# memoria antes de ficar disponivel, aumentando pressao de startup.
 if [ "$JAVA_PREFER_IPV4_STACK" = "true" ]; then
     JAVA_OPTS+=("-Djava.net.preferIPv4Stack=true")
 fi
@@ -187,14 +192,41 @@ echo "Java: $JAVA_VERSION_RAW"
 echo "Porta: $SERVER_PORT"
 echo "=========================================="
 
+# Valide o limite do cgroup efetivo ANTES do JVM tentar alocar o heap.
+# Memoria nativa minima acompanha o tuning; envs anteriores sao tratados
+# como modo compatibilidade (Xmx precisa ser estritamente menor que a cota).
+CGROUP_MEMORY_LIB="$SCRIPT_DIR/.shared/hardware-profile.sh"
+if [ ! -f "$CGROUP_MEMORY_LIB" ]; then
+    CGROUP_MEMORY_LIB="$SCRIPT_DIR/../shared/lib/hardware-profile.sh"
+fi
+if [ -f "$CGROUP_MEMORY_LIB" ]; then
+    # shellcheck source=/dev/null
+    source "$CGROUP_MEMORY_LIB"
+    effective_limit_mb="$(cgroup_v2_effective_memory_mb 2>/dev/null || true)"
+    if [[ "$effective_limit_mb" =~ ^[0-9]+$ ]] && [ "$effective_limit_mb" -gt 0 ]; then
+        if [ "$((max_ram_mb + NATIVE_OVERHEAD_MB))" -gt "$effective_limit_mb" ] || [ "$max_ram_mb" -ge "$effective_limit_mb" ]; then
+            echo "ERRO: Xmx ${max_ram_mb}MB + overhead ${NATIVE_OVERHEAD_MB}MB excede MemoryMax efetivo ${effective_limit_mb}MB. Corrija runtime.env e o limite systemd; Java NAO sera iniciado." >&2
+            exit 1
+        fi
+        echo "Limite efetivo do cgroup: ${effective_limit_mb}MB (heap ${max_ram_mb}MB, overhead planejado ${NATIVE_OVERHEAD_MB}MB)"
+    fi
+fi
+
 # Run java with native array (preserves flags with spaces).
 # (EXP-38) Forge 1.17+ e NeoForge EXIGEM os JVM args gerados pelo instalador
 # (user_jvm_args.txt) — `java -jar server.jar` puro nao inicia esses loaders.
 # Os args do arquivo vem DEPOIS dos nossos: java usa a ultima ocorrencia,
 # entao um Xmx no @file (se o usuario o configurou) prevalece sobre o nosso.
+# Limites de memoria escondidos num argfile Forge sobrescrevem -Xmx do
+# runtime.env e invalidam o calculo do MemoryMax. Recuse o conflito.
 LAUNCH_ARGS=()
 if { [ "$MINECRAFT_LOADER" = "forge" ] || [ "$MINECRAFT_LOADER" = "neoforge" ]; } \
     && [ -f "$SERVER_DIR/user_jvm_args.txt" ]; then
+    if grep -Ev '^[[:space:]]*(#|$)' "$SERVER_DIR/user_jvm_args.txt" | \
+        grep -Eq '(^|[[:space:]])-(Xmx|Xms|XX:(MaxRAM|InitialRAM|MaxRAMPercentage|InitialRAMPercentage))'; then
+        echo "ERRO: user_jvm_args.txt contem Xmx/Xms/MaxRAM. Defina heap somente em runtime.env para respeitar MemoryMax." >&2
+        exit 1
+    fi
     LAUNCH_ARGS+=("@user_jvm_args.txt")
     echo "Loader $MINECRAFT_LOADER: usando @user_jvm_args.txt"
 fi

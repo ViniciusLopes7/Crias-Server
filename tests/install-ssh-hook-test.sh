@@ -26,6 +26,11 @@ source "$ROOT_DIR/tests/lib/assert.sh"
 # 1. Função existe e é chamada em main()
 assert_grep '^install_ssh_if_enabled\(\)' "$ROOT_DIR/install.sh"
 assert_grep 'install_ssh_if_enabled' "$ROOT_DIR/install.sh"
+# Acesso remoto deve ficar disponivel ANTES do instalador do jogo.
+line_ssh="$(grep -n '^    install_ssh_if_enabled$' "$ROOT_DIR/install.sh" | cut -d: -f1)"
+line_stack="$(grep -n '^    run_selected_stack_installer$' "$ROOT_DIR/install.sh" | cut -d: -f1)"
+[ -n "$line_ssh" ] && [ "$line_ssh" -lt "$line_stack" ] || { echo 'FAIL: SSH executado depois do jogo' >&2; exit 1; }
+assert_grep 'configure_tailscale_login_if_enabled' "$ROOT_DIR/install.sh"
 
 # 2. INSTALL_SSH declarada em config.env e tratada em config-parser.sh
 assert_grep '^INSTALL_SSH=' "$ROOT_DIR/config.env"
@@ -51,6 +56,7 @@ assert_grep 'PermitRootLogin no' "$ROOT_DIR/install.sh"
 assert_grep 'PasswordAuthentication \$password_auth' "$ROOT_DIR/install.sh"
 assert_grep 'sshd -T' "$ROOT_DIR/install.sh"
 assert_grep 'sshd -t' "$ROOT_DIR/install.sh"
+assert_grep 'ssh-keygen -A' "$ROOT_DIR/install.sh"
 assert_grep 'PubkeyAuthentication yes' "$ROOT_DIR/install.sh"
 
 # 6. useradd -m -s /bin/bash (cria home + bash shell) + chpasswd (set password) + usermod -aG wheel

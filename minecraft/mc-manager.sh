@@ -231,9 +231,38 @@ cmd_reconfigure_hardware() {
     # shellcheck source=/dev/null
     source "$MC_TUNING_LIB"
 
-    detect_hardware_profile "$SERVER_DIR" "$forced_tier"
-    compute_minecraft_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER"
+    # Nao reduza/aumente limites em processo ativo: pare o Minecraft antes
+    # de reconciliar heap, MemoryMax e demais arquivos.
+    local unit_state
+    unit_state="$(systemctl show "$SERVICE_NAME.service" -p ActiveState --value 2>/dev/null || true)"
+    case "$unit_state" in
+        inactive|failed) ;;
+        *)
+            err "Minecraft deve estar completamente parado para recalibrar: estado=${unit_state:-desconhecido}. Execute sudo systemctl stop $SERVICE_NAME"
+            return 1
+            ;;
+    esac
+    if ! systemctl cat "$SERVICE_NAME.service" >/dev/null 2>&1; then
+        err "A unidade $SERVICE_NAME.service nao existe. Complete a instalacao antes de recalibrar."
+        return 1
+    fi
+    if ! validate_server_dir "$SERVER_DIR"; then
+        err "Diretorio de servidor invalido: $SERVER_DIR"
+        return 1
+    fi
+    for managed_file in "$RUNTIME_ENV" "$PROPS_FILE" "$TUNING_STATE"; do
+        if [ -L "$managed_file" ]; then
+            err "Arquivo administrativo e link simbolico: $managed_file"
+            return 1
+        fi
+    done
 
+    detect_hardware_profile "$SERVER_DIR" "$forced_tier"
+    compute_minecraft_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER" || return 1
+
+    # O systemd recebe a mesma cota de memoria calculada para runtime.env.
+    # O helper valida e reverte o drop-in se daemon-reload/verify falhar.
+    write_minecraft_systemd_memory_limit "$MC_SERVICE_MEMORY_MAX_MB" || return 1
     write_minecraft_runtime_env "$RUNTIME_ENV"
 
     server_port="$(config_read_value "$PROPS_FILE" "server-port")"
@@ -252,15 +281,12 @@ cmd_reconfigure_hardware() {
     echo "View/Simulation: $MC_VIEW_DISTANCE / $MC_SIMULATION_DISTANCE"
     echo "Max players: $MC_MAX_PLAYERS"
 
-    # (AUDIT-A P3-7) chown -R so apos validar o diretorio (mesma regra do
-    # installer/EXP-35; o tt-manager ja validava, o mc-manager nao).
-    if ! validate_server_dir "$SERVER_DIR"; then
-        err "Recusa de chown -R em SERVER_DIR invalido: '$SERVER_DIR'"
-        return 1
-    fi
-    chown -R "${SERVER_USER}:${SERVER_USER}" "$SERVER_DIR"
+    # Nunca varra os mundos com chown -R apenas para editar tres configs.
+    chown "${SERVER_USER}:${SERVER_USER}" "$RUNTIME_ENV" "$PROPS_FILE" "$TUNING_STATE"
 
-    warn "Reconfiguracao aplicada em arquivos. Reinicie o servico para aplicar no runtime: sudo systemctl restart $SERVICE_NAME"
+    echo "MemoryMax aplicado no systemd: ${MC_SERVICE_MEMORY_MAX_MB} MB"
+    echo "Reserva para SO: ${MC_HOST_RESERVE_MB} MB | memoria JVM nativa: ${MC_NATIVE_OVERHEAD_MB} MB"
+    warn "Heap e MemoryMax sincronizados. Servico continua parado; confira os limites e execute: sudo systemctl reset-failed $SERVICE_NAME; sudo systemctl start $SERVICE_NAME"
 }
 
 cmd_health() {
