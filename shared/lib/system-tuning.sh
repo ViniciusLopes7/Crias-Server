@@ -222,18 +222,20 @@ apply_common_system_tuning() {
 
     # Scope guard: avoid host-wide changes unless explicitly allowed.
     # host = apply sysctl/zram/scheduler/cpupower; anything else skips.
-    local scope="${SYSTEM_TUNING_SCOPE:-host}"
+    local scope="${SYSTEM_TUNING_SCOPE:-none}"
     if [ "$scope" != "host" ]; then
         return 0
     fi
 
     apply_nofile_limit "$server_user"
     apply_zram_and_sysctl_tuning "$total_ram_mb"
-    if [ -n "${HW_TARGET_DEVICE:-}" ]; then
+    if is_true "${CRIAS_TUNE_BLOCK_DEVICE:-false}" && [ -n "${HW_TARGET_DEVICE:-}" ]; then
         apply_block_device_tuning "$HW_TARGET_DEVICE"
     else
         print_warning "Tuning de I/O pulado: nenhum device de bloco detectado (ZFS/Btrfs/LVM/subvolume)."
         print_warning "Esse comportamento e esperado quando o filesystem gerencia I/O internamente."
     fi
-    apply_cpupower_tuning "$tier"
+    if is_true "${CRIAS_TUNE_CPU_GOVERNOR:-false}"; then
+        apply_cpupower_tuning "$tier"
+    fi
 }
