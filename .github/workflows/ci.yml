@@ -205,6 +205,7 @@ jobs:
           bash tests/manager-safety-test.sh
           bash tests/readiness-regression-test.sh
           bash tests/crias-tui-deploy-test.sh
+          bash tests/remote-access-setup-test.sh
           bash tests/modpack-state-test.sh
           bash tests/temp-cleanup-test.sh
           bash tests/custom-mrpack-test.sh
