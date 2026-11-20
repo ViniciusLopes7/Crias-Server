@@ -147,3 +147,7 @@ Os eventos do kernel não identificam sozinhos qual perfil ou mod causou o probl
 
 **Modpacks grandes:** o tuning é um orçamento inicial e não garante que todos os mods caibam no heap. Analise `MemoryPeak`, `MemoryMax`, logs do Java e uso do host antes de escolher o heap; não aumente `-Xmx` sozinho sem ajustar o cgroup.
 
+## Prioridade no OOM global do Linux
+
+O template anterior marcava o Minecraft com `OOMScoreAdjust=-800`, dando proteção alta ao Java perante o OOM **global** e potencialmente tornando outros processos mais expostos. A unidade passa a usar `OOMScoreAdjust=100`, preservando prioridade operacional para o host e seu acesso remoto; o `MemoryMax` continua regulando o OOM **do próprio cgroup**. Isso não impede interrupção do Minecraft: backup/recuperação e RAM física suficiente continuam necessários.
+
