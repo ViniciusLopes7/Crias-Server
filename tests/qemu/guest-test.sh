@@ -124,4 +124,19 @@ _resolve_modpack_effective_versions
 [ "$MC_EFFECTIVE_VERSION" = 1.21.1 ] && [ "$MINECRAFT_LOADER" = fabric ]
 echo 'PASS: real mrpack-install imported personal local archive and server overrides'
 
+# Download real optional mods for the user's Forge version and verify duplicate detection.
+MINECRAFT_SERVER_DIR=/opt/crias-extra-test
+MINECRAFT_LOADER=forge
+MC_EFFECTIVE_VERSION=1.20.1
+MINECRAFT_EXTRA_MODS=skinrestorer,spark,chunky
+MINECRAFT_PENDING_MODS=()
+stack_install_extra_mods
+[ "${#MINECRAFT_PENDING_MODS[@]}" -eq 0 ]
+for mod in skinrestorer spark chunky; do unzip -tq "$MINECRAFT_SERVER_DIR/mods/$mod.jar" >/dev/null; done
+mv "$MINECRAFT_SERVER_DIR/mods/spark.jar" "$MINECRAFT_SERVER_DIR/mods/spark-versioned.jar"
+stack_install_extra_mods
+[ ! -e "$MINECRAFT_SERVER_DIR/mods/spark.jar" ]
+echo 'PASS: real Forge 1.20.1 server extras downloaded and duplicates avoided'
+
+
 echo 'PASS: Arch VM, systemd PID 1, real service installer, backup restore, bootstrap and real server pre-EULA launch'
