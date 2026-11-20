@@ -519,7 +519,7 @@ apply_stack_system_tuning() {
         return 0
     fi
 
-    if ! is_true "${APPLY_SYSTEM_TUNING:-true}"; then
+    if ! is_true "${APPLY_SYSTEM_TUNING:-false}"; then
         return 0
     fi
 
