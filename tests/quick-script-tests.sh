@@ -30,6 +30,7 @@ bash tests/terraria-backup-dry-run.sh
 
 echo "[quick-script-tests] Validando tuning do Minecraft..."
 bash tests/minecraft-tuning-test.sh
+bash tests/minecraft-memory-contract-test.sh
 
 echo "[quick-script-tests] Validando tuning do Terraria..."
 bash tests/terraria-tuning-test.sh
