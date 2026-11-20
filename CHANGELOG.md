@@ -7,23 +7,31 @@ e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
-### Em revisão — proteção de temporários e README principal
+Sem alterações funcionais pendentes nesta entrada; a validação em servidor físico e do modpack completo permanece como etapa de aceitação operacional.
 
-- Limpeza de temporários restringida a caminhos de `mktemp` esperados, com validação contra traversal, links simbólicos e registros adulterados.
-- `TMPDIR` não é aceito para alocar temporários em scripts privilegiados; bootstrap usa `/tmp` explicitamente.
-- Snapshots de reinstalação e arquivos intermediários sensíveis passam a compartilhar o ciclo de registro e limpeza, inclusive nos erros.
-- README simplificado para uso como página inicial; explicações técnicas permanecem nos guias de administração.
-- Reforçados os testes de regressão e a documentação dos limites da proteção.
+## [2026-11-20] — Servidor estabilizado e pronto para testes de aceitação
 
+### Corrigido
 
-### Em revisão — documentação, TUI e validação QEMU (PR #12)
+- Instalador: acesso SSH e etapa de autenticação Tailscale antes de baixar o Minecraft, com diagnóstico antecipado pelo `crias-tui --doctor`.
+- Limites de memória: cálculo do heap com reserva para o sistema operacional, overhead nativo da JVM, RAM disponível e cotas efetivas dos cgroups.
+- Reconfiguração de hardware: `MemoryMax` do systemd sincronizado com o heap configurado e validação/rollback dos limites persistentes.
+- OOM: `Restart=no` no serviço do Minecraft, `OOMPolicy=stop` e `OOMScoreAdjust=200`. Falhas exigem início manual após diagnóstico; não há ciclo automático de reinício.
+- Inicialização Java: bloqueio de parâmetros conflitantes de heap, RAM e memória direta nas variáveis `JAVA_TOOL_OPTIONS`, `JDK_JAVA_OPTIONS`, `_JAVA_OPTIONS` e no arquivo `user_jvm_args.txt` de Forge/NeoForge.
+- Tuning global do host agora é opcional e conservador: sem mudanças automáticas de ZRAM, CPU governor ou I/O scheduler por padrão.
 
-- Implantação antecipada do hub `crias-tui`, diagnóstico somente leitura e fallback de menu sem `gum`.
-- Reserva de memória nativa do Java e do sistema no cálculo de heap/limites.
-- Revisão editorial e técnica da documentação: caminhos administrativos, modpacks próprios, Tailscale, recuperação e limites dos testes.
-- Ampliação dos testes QEMU com contratos reais no Arch, verificação de permissões, limites systemd, injeção controlada de OOM e preservação de logs para investigação.
-- **Estado:** alterações em branch/PR, não publicadas como release de produção.
+### Incluído e validado
 
+- Importação de pacotes `.mrpack` locais, de pendrive ou por URL HTTPS; reconciliação de loader e versão efetivos.
+- Mods opcionais de servidor, incluindo spark, Chunky e Skin Restorer, com detecção de duplicatas.
+- CI com testes Shell, Go, Python, Java 21/25, builds do agente/bot e VM Arch Linux real via QEMU/systemd; Forge 1.20.1 validado com Java 17 até a EULA.
+- Verificação real de SSH na porta 22, limites de memória, OOM artificial, bloqueio de reinícios, rollback e reconfiguração de RAM.
+
+### Limite de homologação
+
+A VM QEMU **não aceita a EULA nem cria mundo Minecraft**. Assim, a release valida a infraestrutura e a instalação dos loaders, mas **não certifica** o funcionamento integral do modpack CriasRealms 0.1.28, FPS/TPS em sessão multiplayer, nem backup/restauração com RCON real. É necessário validar em hardware físico antes de declarar a experiência de jogo homologada.
+
+---
 
 ### Corrigido — Formato ruff reprovado na CI (2026-11-19, rodada 3)
 

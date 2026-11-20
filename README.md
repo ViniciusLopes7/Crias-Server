@@ -41,7 +41,7 @@ sudo crias-tui             # menu de gerenciamento
 sudo crias-tui --doctor    # diagnóstico de somente leitura
 ```
 
-O comando `--doctor` e a instalação antecipada do TUI pertencem às melhorias do [PR #12](https://github.com/ViniciusLopes7/Crias-Server/pull/12). **Enquanto o PR não for incorporado e uma nova release publicada, esses recursos podem não estar disponíveis** na instalação baixada pelo bootstrap.
+O diagnóstico `--doctor` e a instalação antecipada do hub já estão integrados à versão atual. Ele pode ser utilizado mesmo após uma instalação parcial para conferir serviços, RAM e acesso remoto.
 
 Os serviços também podem ser operados diretamente pelo `systemd`:
 
@@ -94,7 +94,7 @@ cd Crias-Server
 bash tests/run-all.sh
 ```
 
-Veja o [guia de validação](docs/testing-qemu.md) antes de considerar uma instalação pronta para jogadores. O conteúdo do PR #12 ainda depende de integração e publicação para chegar ao bootstrap.
+Veja o [guia de validação](docs/testing-qemu.md) antes de considerar uma instalação pronta para jogadores: o teste final com o modpack completo e clientes conectados deve ocorrer em hardware real.
 
 ## Contribuição e licença
 
