@@ -175,11 +175,13 @@ write_minecraft_systemd_memory_limit() {
         return 1
     fi
     # Validacao apos publicar usa o verdadeiro loader de unit + drop-ins.
-    local effective_max=""
+    local effective_max="" inherited_max=""
     if ! systemctl daemon-reload || ! verify_out="$(systemd-analyze verify minecraft.service 2>&1)" \
         || ! effective_max="$(systemctl show minecraft.service -p MemoryMax --value 2>/dev/null)" \
-        || [ "$effective_max" != "$((max_mb * 1048576))" ]; then
-        print_error "Validacao do MemoryMax no systemd falhou (valor efetivo: ${effective_max:-indisponivel}); restaurando configuracao anterior."
+        || [ "$effective_max" != "$((max_mb * 1048576))" ] \
+        || { inherited_max="$(systemctl show minecraft.service -p EffectiveMemoryMax --value 2>/dev/null || true)"; \
+             [[ "$inherited_max" =~ ^[0-9]+$ ]] && [ "$inherited_max" -lt "$((max_mb * 1048576))" ]; }; then
+        print_error "Validacao do MemoryMax falhou (MemoryMax=${effective_max:-?}; EffectiveMemoryMax=${inherited_max:-?}); restaurando limite anterior."
         [ -z "$verify_out" ] || printf "%s\n" "$verify_out" >&2
         if [ -n "$previous" ]; then
             mv -T -- "$previous" "$target" || return 1
