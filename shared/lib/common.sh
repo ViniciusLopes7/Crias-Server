@@ -53,14 +53,22 @@ err_ts() {
 # ---------------------------------------------------------------------------
 # Temp file/dir helpers with auto-cleanup via a single EXIT trap.
 # Registry-based: each mktemp_crias_* appends the path to a per-process file
-# ($TMPDIR/crias-temps.<pid>); the EXIT trap reads it and removes all entries.
+# (private mktemp registry); the EXIT trap reads it and removes all entries.
 # This avoids bash's array-scoping quirks when arrays are modified inside
 # sourced-library functions (the in-memory array approach didn't propagate
 # reliably across `source` boundaries). File-based registry is robust.
 # Idempotent across multiple sources (common.sh is sourced by many scripts).
 # ---------------------------------------------------------------------------
-if [ -z "${CRIAS_TEMPS_FILE+x}" ]; then
-    CRIAS_TEMPS_FILE="${TMPDIR:-/tmp}/crias-temps.$$"
+if ! declare -F _crias_cleanup_temps >/dev/null 2>&1; then
+    # Do not trust a predictable /tmp/crias-temps.<pid> or inherited registry.
+    # Root uses sticky /tmp so another user cannot replace the private file.
+    _crias_registry_dir="${TMPDIR:-/tmp}"
+    if [ "$EUID" -eq 0 ]; then _crias_registry_dir=/tmp; fi
+    CRIAS_TEMPS_FILE="$(mktemp "${_crias_registry_dir%/}/crias-temps.XXXXXXXX")" || {
+        printf 'ERRO: nao foi possivel criar registro privado de temporarios\n' >&2
+        return 1 2>/dev/null || exit 1
+    }
+    unset _crias_registry_dir
     _crias_cleanup_temps() {
         if [ -f "$CRIAS_TEMPS_FILE" ]; then
             while IFS= read -r t || [ -n "$t" ]; do
@@ -84,6 +92,25 @@ mktemp_crias_dir() {
     d="$(mktemp -d "${TMPDIR:-/tmp}/crias.XXXXXX")" || return 1
     printf '%s\n' "$d" >> "$CRIAS_TEMPS_FILE"
     printf '%s\n' "$d"
+}
+
+# Remove only a directory allocated by mktemp_crias_dir in this process.
+# Server directory validation deliberately rejects /tmp and must not be used here.
+remove_crias_temp_dir() {
+    local target="${1:-}" temp_root="${TMPDIR:-/tmp}"
+    case "$target" in
+        "${temp_root%/}"/crias.??????) ;;
+        *) print_warning "Diretorio temporario nao reconhecido: '$target'"; return 1 ;;
+    esac
+    if [ ! -f "$CRIAS_TEMPS_FILE" ] || ! grep -Fxq -- "$target" "$CRIAS_TEMPS_FILE"; then
+        print_warning "Diretorio temporario nao registrado: '$target'"
+        return 1
+    fi
+    if [ -L "$target" ]; then
+        print_warning "Diretorio temporario virou symlink: '$target'"
+        return 1
+    fi
+    [ ! -e "$target" ] || rm -rf -- "$target"
 }
 
 # ---------------------------------------------------------------------------

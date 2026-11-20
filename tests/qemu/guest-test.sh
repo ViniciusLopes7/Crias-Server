@@ -8,6 +8,7 @@ cd "$root"
 bash tests/crias-bootstrap-test.sh
 bash tests/backup-integrity-test.sh
 bash tests/modpack-state-test.sh
+bash tests/temp-cleanup-test.sh
 # Build a harmless JVM probe and run it through the actual systemd unit and
 # production launcher, with the same sandbox and a non-root service account.
 useradd -r -M -s /usr/bin/nologin criasvm
@@ -56,7 +57,11 @@ systemctl stop minecraft.service
 env TERRARIA_SERVER_DIR=/opt/terraria-server TERRARIA_USER=terraria \
     TERRARIA_USE_TMODLOADER=false FORCE_HARDWARE_TIER=LOW \
     APPLY_SYSTEM_TUNING=false DRY_RUN=false \
-    bash -c 'set -euo pipefail; source "$1"; run_stack_install' _ "$root/terraria/install.sh"
+    bash -c 'set -euo pipefail; source "$1"; run_stack_install' _ "$root/terraria/install.sh" 2>&1 | tee /tmp/crias-terraria-install.log
+if grep -Eq 'safe_remove_dir recebeu caminho invalido|Diretorio temporario nao reconhecido|Diretorio temporario nao registrado' /tmp/crias-terraria-install.log; then
+    echo 'FAIL: Terraria installer rejected its own temporary directory' >&2
+    exit 1
+fi
 systemctl start terraria.service
 ready=false
 for i in $(seq 1 180); do

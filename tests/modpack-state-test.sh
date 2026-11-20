@@ -16,7 +16,11 @@ _resolve_modpack_effective_versions
 [ "$MINECRAFT_LOADER" = forge ]
 [ "$MINECRAFT_SERVER_FILE" = actual.jar ]
 printf '%s\n' '{"dependencies":{"minecraft":"1.21.1","fabric-loader":"1","forge":"2"}}' > "$tmp/packstate.json"
-if _resolve_modpack_effective_versions; then echo 'FAIL: ambiguous loader accepted' >&2; exit 1; fi
+if _resolve_modpack_effective_versions >"$tmp/ambiguous.log" 2>&1; then echo 'FAIL: ambiguous loader accepted' >&2; exit 1; fi
+grep -q 'multiplos loaders' "$tmp/ambiguous.log"
+echo 'OK: ambiguous loaders rejected as expected'
 rm "$tmp/packstate.json"
-if _resolve_modpack_effective_versions; then echo 'FAIL: missing state accepted' >&2; exit 1; fi
+if _resolve_modpack_effective_versions >"$tmp/missing.log" 2>&1; then echo 'FAIL: missing state accepted' >&2; exit 1; fi
+grep -q 'Nao foi possivel confirmar' "$tmp/missing.log"
+echo 'OK: missing pack state rejected as expected'
 echo 'OK: actual pack state determines version, loader and server file'
