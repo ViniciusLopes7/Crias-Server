@@ -226,7 +226,7 @@ download_and_install_tmodloader() {
         print_warning "Algumas deps do .NET podem não ter instalado; verifique manualmente."
 
     rm -f "$tml_zip"
-    safe_remove_dir "$tmp_dir" || true
+    remove_crias_temp_dir "$tmp_dir" || true
 
     print_success "tModLoader $tml_version instalado em $TERRARIA_SERVER_DIR/server/"
 }
@@ -258,14 +258,14 @@ download_and_extract_terraria() {
     if [ -z "$binary_path" ]; then
         print_error "Nao foi possivel localizar TerrariaServer.bin.x86_64 no pacote baixado."
         rm -f "$tmp_zip"
-        safe_remove_dir "$tmp_dir" || true
+        remove_crias_temp_dir "$tmp_dir" || true
         exit 1
     fi
 
     if ! file "$binary_path" | grep -q 'ELF'; then
         print_error "O binario encontrado nao parece ser um executavel ELF valido."
         rm -f "$tmp_zip"
-        safe_remove_dir "$tmp_dir" || true
+        remove_crias_temp_dir "$tmp_dir" || true
         exit 1
     fi
 
@@ -285,7 +285,7 @@ download_and_extract_terraria() {
     fi
 
     rm -f "$tmp_zip"
-    safe_remove_dir "$tmp_dir" || true
+    remove_crias_temp_dir "$tmp_dir" || true
 }
 
 stack_configure_runtime() {
