@@ -66,7 +66,24 @@ show_diagnostics() {
         for service in minecraft terraria; do
             if systemctl list-unit-files "$service.service" --no-legend 2>/dev/null | grep -Fq "$service.service"; then
                 echo "--- $service: status e limites ---"
-                systemctl show "$service.service" --no-pager -p ActiveState -p SubState -p Result -p NRestarts -p Restart -p StartLimitBurst -p StartLimitIntervalUSec -p MemoryMax -p MemoryCurrent -p MemoryPeak -p MemorySwapMax 2>/dev/null || true
+                systemctl show "$service.service" --no-pager -p ActiveState -p SubState -p Result -p NRestarts -p Restart -p OOMPolicy -p StartLimitBurst -p StartLimitIntervalUSec -p MemoryMax -p MemoryHigh -p MemoryCurrent -p MemoryPeak -p MemorySwapMax 2>/dev/null || true
+                if [ "$service" = minecraft ]; then
+                    local cg_unit
+                    cg_unit="$(systemctl show -p ControlGroup --value minecraft.service 2>/dev/null || true)"
+                    if [[ "$cg_unit" == /* && "$cg_unit" != *".."* && -r "/sys/fs/cgroup${cg_unit}/memory.events" ]]; then
+                        echo "--- minecraft: contadores cgroup OOM ---"
+                        grep -E "^(high|max|oom|oom_kill|oom_group_kill) " "/sys/fs/cgroup${cg_unit}/memory.events" || true
+                    fi
+                    # Nunca use source do runtime.env: o servidor pode editar
+                    # esse arquivo, e o doctor pode ser executado como root.
+                    if [ -r /opt/minecraft-server/runtime.env ]; then
+                        local runtime_xmx
+                        runtime_xmx="$(sed -n 's/^MAX_RAM="\([0-9][0-9]*\)M"$/\1/p' /opt/minecraft-server/runtime.env | head -n 1)"
+                        if [[ "$runtime_xmx" =~ ^[0-9]+$ ]]; then
+                            echo "Heap Java configurado (-Xmx): ${runtime_xmx} MB"
+                        fi
+                    fi
+                fi
             fi
         done
     fi
