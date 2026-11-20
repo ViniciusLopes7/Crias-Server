@@ -226,7 +226,7 @@ EOF
             stop)                       desc="Para o servico (systemd)" ;;
             restart)                    desc="Reinicia o servico (systemd)" ;;
             status)                     desc="Mostra status (systemd)" ;;
-            logs)                       desc="Tail dos logs (journalctl)" ;;
+            logs)                       desc="${MANAGER_DESC_LOGS:-Tail dos logs (journalctl)}" ;;
             console)                    desc="${MANAGER_DESC_CONSOLE:-Console do servico}" ;;
             monitor)                    desc="Ferramentas de monitoramento: btop/htop/ncdu (cpu|disk|net)" ;;
             health)                     desc="${MANAGER_DESC_HEALTH:-Health check do servidor}" ;;

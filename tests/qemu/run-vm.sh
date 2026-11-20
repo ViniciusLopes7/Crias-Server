@@ -22,6 +22,19 @@ cleanup() {
                 > "$log_dir/failure-system.log" 2>&1 || true
         fi
     fi
+    # Recupere todos os logs Minecraft, inclusive quando o convidado falhou.
+    # Apenas dados sinteticos sao usados no CI; mantenha o conteudo completo
+    # para investigar avisos Forge e erros de download nao resumidos.
+    if [ "$vm_ready" = true ]; then
+        if ssh "${ssh_opts[@]}" ci@127.0.0.1 \
+            "sudo test -d /tmp/crias-qemu-minecraft && sudo tar -C /tmp -czf - crias-qemu-minecraft" \
+            > "$log_dir/minecraft-logs.tar.gz" 2> "$log_dir/minecraft-log-collection.log"; then
+            echo "Logs Minecraft individuais: $log_dir/minecraft-logs.tar.gz"
+        else
+            rm -f -- "$log_dir/minecraft-logs.tar.gz"
+            echo "Aviso: logs Minecraft do guest indisponiveis; consultar guest.log e serial.log" >&2
+        fi
+    fi
     if [ -f "$tmp/serial.log" ]; then cp "$tmp/serial.log" "$log_dir/serial.log" || true; fi
     if [ -n "${vm_pid:-}" ]; then kill "$vm_pid" 2>/dev/null || true; wait "$vm_pid" 2>/dev/null || true; fi
     rm -rf "$tmp"

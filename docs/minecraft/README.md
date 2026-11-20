@@ -6,7 +6,7 @@ Guia de operação do Minecraft no Crias-Server. Para instalar o sistema desde o
 
 | Arquivo | Função |
 |---------|--------|
-| `/opt/minecraft-server/start-server.sh` | Launcher runtime (JAVA_OPTS como array; valida o Java exigido pela versão do jogo: 25 p/ 26.x, 21 p/ 1.20.5–1.21.x) |
+| `/opt/minecraft-server/start-server.sh` | Launcher runtime (valida o Java compatível: 17 p/ 1.20.1, 21 p/ 1.20.5–1.21.x e 25 p/ 26.x) |
 | `/usr/local/libexec/crias/mc-manager.sh` | CLI de gerenciamento (start/stop/status/console/backup/health/...) — root:root, fora da árvore gravável pelo jogo (EXP-34) |
 | `/opt/minecraft-server/backup-cron.sh` | Backup com RCON save-lock + zstd + flock |
 | `/usr/local/libexec/crias/setup-cron.sh` | Configura timer systemd de backup (script administrativo) |
@@ -27,6 +27,9 @@ sudo systemctl stop minecraft                               # parar (graceful)
 sudo systemctl restart minecraft                            # reiniciar
 sudo systemctl status minecraft                             # status systemd
 sudo /usr/local/libexec/crias/mc-manager.sh status             # status + hardware
+sudo /usr/local/libexec/crias/mc-manager.sh logs recent        # ultimas 150 linhas, sem seguir
+sudo /usr/local/libexec/crias/mc-manager.sh logs alerts        # linhas WARN/ERROR/Exception/OOM
+sudo /usr/local/libexec/crias/mc-manager.sh logs boot          # logs do boot atual
 sudo /usr/local/libexec/crias/mc-manager.sh console            # console RCON interativo
 sudo /usr/local/libexec/crias/mc-manager.sh backup             # backup imediato
 sudo /usr/local/libexec/crias/mc-manager.sh health             # porta + RCON
@@ -35,6 +38,17 @@ sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware        # recali
 sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware HIGH   # forçar tier
 sudo /usr/local/libexec/crias/mc-manager.sh setup-cron      # configurar timer de backup
 ```
+
+### Como ler os logs do Minecraft
+
+| Comando | Resultado |
+|---|---|
+| `sudo /usr/local/libexec/crias/mc-manager.sh logs` | Acompanha novas linhas, com horário (`Ctrl+C` para sair) |
+| `sudo /usr/local/libexec/crias/mc-manager.sh logs recent` | Últimas 150 mensagens completas |
+| `sudo /usr/local/libexec/crias/mc-manager.sh logs boot` | Últimas 200 mensagens do boot atual |
+| `sudo /usr/local/libexec/crias/mc-manager.sh logs alerts` | Filtra texto `WARN`, `ERROR`, `Exception` e OOM nas últimas 400 mensagens |
+
+**Importante:** o filtro `alerts` é um atalho, não uma auditoria completa. Algumas falhas aparecem como `INFO`, e mensagens `WARN` do Forge podem ser rotineiras. Antes de alterar o servidor, confira as linhas anteriores e posteriores com `logs recent`. O comando não reinicia serviços nem altera configurações.
 
 ### Aliases de shell
 

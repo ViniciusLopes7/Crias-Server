@@ -187,7 +187,27 @@ main() {
                     "Restart") sudo "$manager_script" restart ;;
                     "Status") sudo "$manager_script" status; read -r -p "Enter..." ;;
                     "Console") sudo "$manager_script" console ;;
-                    "Logs") sudo "$manager_script" logs ;;
+                    "Logs")
+                        if [ "$stack" = "minecraft" ]; then
+                            local log_choice
+                            log_choice=$(hub_choose "Logs do Minecraft:" \
+                                "Recentes (150 linhas)" \
+                                "Avisos e erros" \
+                                "Boot atual" \
+                                "Acompanhar ao vivo" \
+                                "← Voltar") || continue
+                            case "$log_choice" in
+                                "Recentes"*) sudo "$manager_script" logs recent ;;
+                                "Avisos"*) sudo "$manager_script" logs alerts ;;
+                                "Boot atual") sudo "$manager_script" logs boot ;;
+                                "Acompanhar"*) sudo "$manager_script" logs follow ;;
+                                "← Voltar") continue ;;
+                            esac
+                            read -r -p "Enter para voltar..." _ || true
+                        else
+                            sudo "$manager_script" logs
+                        fi
+                        ;;
                     "← Voltar") continue ;;
                 esac
                 ;;

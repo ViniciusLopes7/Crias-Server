@@ -19,7 +19,7 @@ O job `test-arch-vm` inicia uma máquina virtual Arch Linux oficial descartável
 | Serviço Minecraft | Unit criada, permissões, processo não-root, limite do cgroup e início do Java | Usa uma classe Java inofensiva para testar a unit |
 | Falha OOM | Serviço descartável com limite de memória propositalmente insuficiente e resultado `oom-kill` | Não mede a RAM necessária a um modpack específico |
 | Terraria | Instalador real, serviço iniciado e porta em escuta | Não valida longa sessão de jogo nem todos os mods tModLoader |
-| Minecraft Vanilla, Fabric, Quilt, Forge e NeoForge | Download/instalação reais; os cinco executáveis chegam ao aviso da EULA | **A EULA permanece `false`; não há mundo nem jogadores na VM** |
+| Minecraft Vanilla, Fabric, Quilt, Forge e NeoForge | Download e inicialização reais de Minecraft 1.21.1 até a EULA; Forge 1.20.1 testado separadamente com Java 17 | **A EULA permanece `false`; não há mundo nem jogadores na VM** |
 | Modpack `.mrpack` | Arquivo de teste local importado, overrides copiados e loader/versão conciliados | Não equivale a um pacote de centenas de mods |
 | Mods opcionais | Download de arquivos e prevenção de duplicidade | Compatibilidade completa exige servidor modificado ativo |
 | Backups e recovery | Contratos e casos de restauração/rollback executados na VM | RCON e integridade semântica do mundo não são testados ao vivo |
@@ -38,10 +38,13 @@ Uma pipeline verde não demonstra que **todo bug possível foi encontrado**. Per
 
 Abra **Actions → CI → Arch VM (QEMU and systemd)** no PR. Consulte a etapa do teste, depois baixe o artefato `qemu-arch-logs` do workflow para examinar:
 
-- `guest.log`: saída combinada dos testes executados dentro do Arch.
+- `guest.log`: saída combinada dos testes executados dentro do Arch, agora com marcadores `[QEMU][MINECRAFT][INICIO/PASS/ESPERADO/FALHA]` por cenário.
+- `minecraft-logs.tar.gz`: `summary.tsv` e logs integrais individuais de cada loader (incluindo Forge 1.20.1), mais a importação `.mrpack`. Este arquivo é criado mesmo quando o teste falha, desde que a VM esteja acessível.
 - `serial.log`: console serial do QEMU; útil quando o SSH ou o boot falha.
 - `failure-journal.log`: últimas mensagens do journal quando a VM esteve acessível.
 - `failure-system.log`: unidades com falha, memória e espaço em disco.
+
+Os marcadores `ESPERADO` indicam falhas intencionais (rollback e teste isolado de OOM). `PASS` confirma apenas as verificações realizadas, e `FALHA` indica erro que deve interromper a execução. Para avisos do Forge, o resumo conta as linhas mas o conteúdo original permanece no arquivo correspondente.
 
 A coleta de evidências é uma operação de diagnóstico; os artefatos não devem incluir tokens reais. Não publique arquivos de `runtime.env`, `agent.yaml` nem credenciais de cloud-init/SSH de ambientes de produção.
 

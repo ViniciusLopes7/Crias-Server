@@ -131,6 +131,45 @@ get_prop() {
 # entre Minecraft e Terraria).
 MANAGER_DESC_CONSOLE="Console interativo via RCON (fallback para logs)"
 MANAGER_DESC_HEALTH="Verifica porta e RCON do servidor"
+MANAGER_DESC_LOGS="Logs: follow (padrao), recent, boot, alerts"
+
+# Apresenta logs com timestamps completos. Nao confundir linhas WARN
+# impressas pelo Java no stdout com a prioridade do journal: -p warning
+# sozinho perde muitos avisos do Forge/Fabric.
+cmd_logs() {
+    local mode="${1:-follow}"
+    if [ "$#" -gt 1 ]; then
+        echo "Uso: logs [follow|recent|boot|alerts]" >&2
+        return 2
+    fi
+    case "$mode" in
+        follow)
+            echo "[Minecraft] Acompanhando as ultimas 80 linhas (Ctrl+C para sair)..."
+            journalctl -u "$SERVICE_NAME" -n 80 -f -o short-iso
+            ;;
+        recent)
+            echo "[Minecraft] Ultimas 150 linhas completas:"
+            journalctl -u "$SERVICE_NAME" -n 150 --no-pager -o short-iso
+            ;;
+        boot)
+            echo "[Minecraft] Ultimas 200 linhas deste boot:"
+            journalctl -u "$SERVICE_NAME" -b -n 200 --no-pager -o short-iso
+            ;;
+        alerts)
+            echo "[Minecraft] Linhas com WARN/ERROR/Exception/OOM das ultimas 400 mensagens."
+            echo "[Minecraft] Filtro textual, nao substitui a leitura do log completo."
+            local journal_output
+            journal_output="$(journalctl -u "$SERVICE_NAME" -n 400 --no-pager -o short-iso)" || return 1
+            if ! printf "%s\n" "$journal_output" | grep -Ei "WARN|ERROR|Exception|OutOfMemory|oom-kill|Killed process|timed out|Cannot start"; then
+                echo "[Minecraft] Nenhuma linha correspondente no intervalo pesquisado."
+            fi
+            ;;
+        *)
+            echo "Uso: logs [follow|recent|boot|alerts]" >&2
+            return 2
+            ;;
+    esac
+}
 
 cmd_console() {
     local rcon_pass

@@ -628,19 +628,38 @@ generate_token() {
 
 # ---------------------------------------------------------------------------
 # (EXP-36) Versao minima de Java exigida por versao do Minecraft.
-# MC 26.x exige Java 25 (anuncio oficial da Mojang para 26.1+); linhas
-# anteriores (1.20.5–1.21.x) rodam com Java 21. Snapshots "26w14a" contam
-# como 26.x. Usada pelo installer (pacote jdk) e pelo start-server.sh
+# Seleciona JDK por versao do Minecraft: Java 8 ate 1.16, 16 para 1.17,
+# 17 de 1.18 a 1.20.4, 21 de 1.20.5 ate 1.21.x, 25 a partir de 26.x.
+# Usada tanto na instalacao (pacman) quanto no launcher do servico.
 # (validacao de major version antes do exec).
 # ---------------------------------------------------------------------------
 required_java_major() {
     local version="${1:-}"
-    # Digitos iniciais: "26.3"->26, "26w14a"->26 (snapshot sem ponto),
-    # "1.21.11"->1. Sem digitos -> 0 (cai no default 21).
     local major="${version%%[!0-9]*}"
     if [[ "$major" =~ ^[0-9]+$ ]] && [ "$major" -ge 26 ]; then
         echo 25
-    else
-        echo 21
+        return
     fi
+
+    local minor patch
+    if [[ "$version" =~ ^1\.([0-9]+)(\.([0-9]+))? ]]; then
+        minor=$((10#${BASH_REMATCH[1]}))
+        patch="${BASH_REMATCH[3]:-0}"
+        patch=$((10#$patch))
+        if [ "$minor" -eq 20 ] && [ "$patch" -le 4 ]; then
+            echo 17
+        elif [ "$minor" -ge 18 ] && [ "$minor" -le 19 ]; then
+            echo 17
+        elif [ "$minor" -eq 17 ]; then
+            echo 16
+        elif [ "$minor" -le 16 ]; then
+            echo 8
+        else
+            echo 21
+        fi
+        return
+    fi
+
+    # Snapshots sem versao estavel conhecida: default 21 ate a serie 26.
+    echo 21
 }

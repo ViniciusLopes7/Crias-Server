@@ -131,3 +131,16 @@ sudo /opt/crias-server/install.sh  # retomar instalador após diagnosticar
 O hub funciona também sem `gum`, com menu numerado. Se não houver stack detectado, mostra o diagnóstico, em vez de falhar silenciosamente. A ausência do arquivo `crias-tui.sh` ou um erro ao copiá-lo agora interrompe a instalação com mensagem explícita.
 
 Para conferir o bootstrap versionado, **não use** `find /opt/crias-server` sem `-L`: a pasta pode ser um link simbólico. Use `readlink -f /opt/crias-server` e `ls -l /opt/crias-server/crias-tui.sh`.
+
+### Logs do Minecraft pelo hub
+
+No menu **Servidor → Logs**, o Minecraft oferece quatro visões:
+
+| Opção | Resultado |
+|---|---|
+| Recentes (150 linhas) | Histórico completo com timestamps, sem acompanhar novos eventos |
+| Avisos e erros | Filtro textual de mensagens `WARN`, `ERROR`, exceções e OOM das últimas 400 linhas |
+| Boot atual | Últimas 200 mensagens registradas desde o boot do Linux |
+| Acompanhar ao vivo | Exibe novas mensagens continuamente; interrompa com Ctrl+C |
+
+O filtro de avisos é apenas um atalho: ele não transforma qualquer `WARN` em falha fatal, nem detecta todas as causas de travamento. Para investigar, leia também as mensagens anteriores com **Recentes**. Fora do hub, os mesmos modos estão disponíveis em `sudo /usr/local/libexec/crias/mc-manager.sh logs [follow|recent|boot|alerts]`.

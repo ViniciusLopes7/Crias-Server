@@ -35,6 +35,17 @@ assert_match() {
 }
 
 
+# Java deve corresponder a versao efetiva do Minecraft, nao ao JDK mais novo.
+for case_version in \
+    "1.16.5:8" "1.17.1:16" "1.18.2:17" "1.19.4:17" \
+    "1.20.1:17" "1.20.4:17" "1.20.5:21" "1.20.6:21" \
+    "1.21.1:21" "1.21.11:21" "26.1:25" "26.3:25" "26w14a:25"; do
+    game_version="${case_version%:*}"
+    java_major="${case_version#*:}"
+    assert_eq "$java_major" "$(required_java_major "$game_version")" \
+        "Java esperado para Minecraft $game_version"
+done
+echo "[minecraft-tuning-test] OK: compatibilidade Minecraft/Java (inclui Forge 1.20.1)"
 # Reserve margem para memoria nativa da JVM e recursos do sistema.
 for ram in 1024 2048 4096 8192 16384; do
     compute_minecraft_tuning "$ram" 4 SSD MID
