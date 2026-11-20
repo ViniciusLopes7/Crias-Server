@@ -7,6 +7,15 @@ e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Em revisão — proteção de temporários e README principal
+
+- Limpeza de temporários restringida a caminhos de `mktemp` esperados, com validação contra traversal, links simbólicos e registros adulterados.
+- `TMPDIR` não é aceito para alocar temporários em scripts privilegiados; bootstrap usa `/tmp` explicitamente.
+- Snapshots de reinstalação e arquivos intermediários sensíveis passam a compartilhar o ciclo de registro e limpeza, inclusive nos erros.
+- README simplificado para uso como página inicial; explicações técnicas permanecem nos guias de administração.
+- Reforçados os testes de regressão e a documentação dos limites da proteção.
+
+
 ### Em revisão — documentação, TUI e validação QEMU (PR #12)
 
 - Implantação antecipada do hub `crias-tui`, diagnóstico somente leitura e fallback de menu sem `gum`.
