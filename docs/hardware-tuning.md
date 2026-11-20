@@ -129,9 +129,9 @@ Em hosts de aproximadamente 1 GB de RAM, o modo conservador não garante que um 
 
 ## Limite de reinícios após OOM
 
-O template do `minecraft.service` mantém `Restart=on-failure`, mas configura um **disjuntor de reinicialização** (`StartLimitIntervalSec=infinity`, `StartLimitBurst=3`): após três partidas consecutivas com falha, o systemd deixa de tentar sozinho e requer diagnóstico/intervenção explícita. Diferentemente de uma janela de cinco minutos, o limite não volta a permitir tentativas apenas porque um boot demorou muito. `OOMPolicy=stop` encerra o serviço quando o cgroup sofre falta de memória.
+O template do `minecraft.service` usa **`Restart=no`**: se o Java cair por OOM ou outra falha, o systemd não tentará iniciar novamente sozinho. Isso impede que um boot de modpack pesado cause mortes repetidas por OOM. O operador deve diagnosticar a causa antes de executar `sudo systemctl start minecraft.service` novamente. `StartLimitIntervalSec=300s` e `StartLimitBurst=3` continuam limitando partidas manuais muito próximas, sem criar bloqueio permanente por contagem de starts bem-sucedidos. `OOMPolicy=stop` encerra a unidade em OOM do cgroup.
 
-A mudança só entra em vigor quando a unidade do systemd é instalada/atualizada. Para interromper um ciclo ativo use `sudo systemctl stop minecraft.service`. Para impedir a partida automática enquanto investiga, `sudo systemctl disable --now minecraft.service` (reative depois). Após corrigir o problema, `sudo systemctl reset-failed minecraft.service` limpa o bloqueio de tentativas.
+A mudança só entra em vigor quando a unidade do systemd é instalada/atualizada. Para interromper um ciclo ativo use `sudo systemctl stop minecraft.service`. Para impedir a partida automática enquanto investiga, `sudo systemctl disable --now minecraft.service` (reative depois). Após corrigir o problema, inicie manualmente com `sudo systemctl start minecraft.service`. Se o limite de partidas manuais for atingido, `sudo systemctl reset-failed minecraft.service` limpa o contador antes de uma nova tentativa deliberada.
 
 Os eventos do kernel não identificam sozinhos qual perfil ou mod causou o problema. Confira journal, memória do cgroup e limite efetivo antes de aumentar heap ou `MemoryMax`.
 
