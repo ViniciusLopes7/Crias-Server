@@ -38,6 +38,7 @@ mc_ci_event "PASS" "rollback" "falha intencional detectada; artefatos restaurado
 bash tests/manager-safety-test.sh
 bash tests/custom-mrpack-test.sh
 bash tests/minecraft-tuning-test.sh
+bash tests/minecraft-memory-contract-test.sh
 bash tests/minecraft-logs-test.sh
 bash tests/crias-tui-deploy-test.sh
 
@@ -118,6 +119,12 @@ echo "PASS: unit systemd real isolada, sem root e com limites aplicados"
 mc_ci_event "PASS" "systemd" "servico como criasvm e MemoryMax/MemorySwapMax aplicados"
 systemctl stop minecraft.service
 ! systemctl is-active --quiet minecraft.service
+# Valide o limite persistente de memoria usando systemd real e drop-in.
+write_minecraft_systemd_memory_limit 640
+[ "$(systemctl show -p MemoryMax --value minecraft.service)" = 671088640 ]
+write_minecraft_systemd_memory_limit 512
+[ "$(systemctl show -p MemoryMax --value minecraft.service)" = 536870912 ]
+echo "PASS: MemoryMax sincronizado via drop-in e validado pelo systemd real"
 
 # Injeta OOM isolado para validar a observabilidade de falha de cgroup.
 # Nao altera a unit do jogo; a VM e descartavel e nao aceita EULA.
