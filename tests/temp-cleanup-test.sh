@@ -4,8 +4,14 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 export TMPDIR="$tmp"
+# An inherited or predictable registry path must not be reused.
+forged="$tmp/crias-temps.$$"
+printf 'do-not-touch\n' > "$forged"
+export CRIAS_TEMPS_FILE="$forged"
 # shellcheck source=/dev/null
 source "$root/shared/lib/common.sh"
+[ "$CRIAS_TEMPS_FILE" != "$forged" ]
+[ "$(cat "$forged")" = do-not-touch ]
 [ -f "$CRIAS_TEMPS_FILE" ]
 [ "$(stat -c %a "$CRIAS_TEMPS_FILE")" = 600 ]
 first=$(mktemp_crias_dir)
