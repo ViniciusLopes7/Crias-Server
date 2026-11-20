@@ -1,8 +1,6 @@
 # Interface TUI (Terminal User Interface)
 
-Desde a v1.2.0, o instalador Crias-Server usa uma **TUI** baseada em `gum`
-(Charm) para todos os prompts interativos. Este documento descreve como ela
-funciona, os requisitos, e o comportamento de fallback.
+O Crias-Server utiliza menus de terminal no instalador e um **hub de gerenciamento** independente (`crias-tui`). Este documento distingue as duas interfaces, seus requisitos e as opções de recuperação.
 
 Para visão geral, veja o [README principal](../README.md). Para o seletor de
 modpacks, veja [minecraft/modpacks.md](minecraft/modpacks.md).
@@ -30,6 +28,11 @@ que expõe funções de alto nível (`tui_choose`, `tui_filter`, `tui_confirm`,
 │         └─ QoL:     tui_confirm                               │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+## Instalador e hub: diferenças
+
+- **Instalador (`install.sh`):** perguntas de configuração, seleção de modpack e implantação dos serviços; usa a biblioteca `shared/lib/tui.sh`.
+- **Hub (`sudo crias-tui`):** operações de servidor, monitoramento e backup; oferece menu numerado sem `gum` e diagnóstico de somente leitura (`--doctor`).
 
 ## Requisitos
 
