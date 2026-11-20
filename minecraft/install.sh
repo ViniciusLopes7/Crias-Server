@@ -710,7 +710,7 @@ stack_configure_runtime() {
     print_step "Aplicando tuning automatico para Minecraft..."
 
     detect_hardware_profile "$MINECRAFT_SERVER_DIR" "$FORCE_HARDWARE_TIER"
-    compute_minecraft_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER"
+    compute_minecraft_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER" "$HW_AVAILABLE_RAM_MB"
 
     # STACK_SERVICE_MEMORY_MAX_MB read by install_stack_service (stack-installer.sh).
     # shellcheck disable=SC2034
