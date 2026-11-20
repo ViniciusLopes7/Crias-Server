@@ -23,6 +23,8 @@ printf 'max\n' > "$tmp/cg/parent/child/memory.max"
 if cgroup_v2_effective_memory_mb "$tmp/cg" / >/dev/null; then
     echo "FAIL: cgroup root sem cota retornou limite" >&2; exit 1
 fi
+mkdir -p "$tmp/outside"
+printf '1073741824\n' > "$tmp/outside/memory.max"
 if cgroup_v2_effective_memory_mb "$tmp/cg" /../outside >/dev/null; then
     echo "FAIL: cgroup path traversal permitido" >&2; exit 1
 fi
