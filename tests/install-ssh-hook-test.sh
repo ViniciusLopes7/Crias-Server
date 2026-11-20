@@ -56,6 +56,7 @@ assert_grep 'PermitRootLogin no' "$ROOT_DIR/install.sh"
 assert_grep 'PasswordAuthentication \$password_auth' "$ROOT_DIR/install.sh"
 assert_grep 'sshd -T' "$ROOT_DIR/install.sh"
 assert_grep 'sshd -t' "$ROOT_DIR/install.sh"
+assert_grep 'ssh-keygen -A' "$ROOT_DIR/install.sh"
 assert_grep 'PubkeyAuthentication yes' "$ROOT_DIR/install.sh"
 
 # 6. useradd -m -s /bin/bash (cria home + bash shell) + chpasswd (set password) + usermod -aG wheel
