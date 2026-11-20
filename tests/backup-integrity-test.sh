@@ -48,6 +48,7 @@ run_backup() {
         SERVER_DIR="$server" \
         BACKUP_DRY_RUN=false \
         BACKUP_REQUIRE_ACTIVE_SERVICE=false \
+        BACKUP_REQUIRE_CONSISTENT=false \
         BACKUP_NOTIFY_WEBHOOK="http://stub.local/hook" \
         CURL_LOG="$TMP_DIR/curl.log" \
         env "$@" bash "$ROOT_DIR/minecraft/backup-cron.sh"
@@ -133,6 +134,7 @@ PATH="$FAIL_BIN:$STUB_BIN:$PATH" \
     SERVER_DIR="$SERVER" \
     BACKUP_DRY_RUN=false \
     BACKUP_REQUIRE_ACTIVE_SERVICE=false \
+    BACKUP_REQUIRE_CONSISTENT=false \
     BACKUP_NOTIFY_WEBHOOK="http://stub.local/hook" \
     CURL_LOG="$CURL_LOG" \
     bash "$ROOT_DIR/minecraft/backup-cron.sh" >/dev/null 2>&1
@@ -173,6 +175,7 @@ PATH="$STUB_BIN:$PATH" \
     SERVER_DIR="$NO_WORLD" \
     BACKUP_DRY_RUN=false \
     BACKUP_REQUIRE_ACTIVE_SERVICE=false \
+    BACKUP_REQUIRE_CONSISTENT=false \
     BACKUP_NOTIFY_WEBHOOK="http://stub.local/hook" \
     CURL_LOG="$CURL_LOG" \
     bash "$ROOT_DIR/minecraft/backup-cron.sh" >/dev/null 2>&1
@@ -235,6 +238,7 @@ PATH="$STUB_BIN:$PATH" \
     SERVER_DIR="$SERVER" \
     BACKUP_DRY_RUN=true \
     BACKUP_REQUIRE_ACTIVE_SERVICE=false \
+    BACKUP_REQUIRE_CONSISTENT=false \
     BACKUP_NOTIFY_WEBHOOK="http://stub.local/hook" \
     CURL_LOG="$CURL_LOG" \
     bash "$ROOT_DIR/minecraft/backup-cron.sh" >/dev/null 2>&1
@@ -282,3 +286,18 @@ run_backup "$COLLISION_SERVER" >/dev/null 2>&1
 count=$(find "$COLLISION_SERVER/backups" -name '*.tar.zst' -type f | wc -l)
 [ "$count" -eq 2 ] || { echo 'FAIL: collision did not retain both backups' >&2; exit 1; }
 echo 'OK: forced filename collision produces two archives'
+
+# New default refuses to publish a potentially inconsistent backup without RCON.
+STRICT_SERVER="$TMP_DIR/server-strict"
+mkdir -p "$STRICT_SERVER/world"
+printf 'data\n' > "$STRICT_SERVER/world/level.dat"
+printf 'level-name=world\nenable-rcon=false\n' > "$STRICT_SERVER/server.properties"
+if env -u BACKUP_REQUIRE_CONSISTENT SERVER_DIR="$STRICT_SERVER" BACKUP_REQUIRE_ACTIVE_SERVICE=false bash "$ROOT_DIR/minecraft/backup-cron.sh" >"$TMP_DIR/strict.log" 2>&1; then
+    echo 'FAIL: default accepted a backup without RCON' >&2; exit 1
+fi
+if compgen -G "$STRICT_SERVER/backups/*.tar.zst" >/dev/null; then
+    echo 'FAIL: strict mode published an archive without RCON' >&2; exit 1
+fi
+BACKUP_REQUIRE_CONSISTENT=false SERVER_DIR="$STRICT_SERVER" BACKUP_REQUIRE_ACTIVE_SERVICE=false bash "$ROOT_DIR/minecraft/backup-cron.sh" >/dev/null 2>&1
+compgen -G "$STRICT_SERVER/backups/*.tar.zst" >/dev/null || { echo 'FAIL: explicit best-effort override failed' >&2; exit 1; }
+echo 'OK: strict backup default and explicit best-effort override'

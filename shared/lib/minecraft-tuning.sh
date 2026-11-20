@@ -172,7 +172,7 @@ write_minecraft_runtime_env() {
     # (CR-06) BACKUP_REQUIRE_CONSISTENT persiste no runtime.env (o
     # backup-cron le de la).
     local backup_require_consistent="${BACKUP_REQUIRE_CONSISTENT:-$(env_file_read_value "$file_path" BACKUP_REQUIRE_CONSISTENT)}"
-    backup_require_consistent="${backup_require_consistent:-false}"
+    backup_require_consistent="${backup_require_consistent:-true}"
 
     # (EXP-36) MINECRAFT_VERSION para o start-server validar o Java exigido;
     # (EXP-39) SERVER_JAR efetivo (quilt usa mc.jar — o launcher interno do

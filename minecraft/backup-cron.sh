@@ -86,8 +86,8 @@ backup_pre_hook() {
     if ! command -v mcrcon >/dev/null 2>&1; then
         # (CR-06) BACKUP_REQUIRE_CONSISTENT=true: sem mcrcon o backup ABORTA —
         # copiar um mundo ativo sem save-off/save-all produz arquivo
-        # potencialmente corrompido. Default: best-effort com aviso claro.
-        if is_true "${BACKUP_REQUIRE_CONSISTENT:-false}"; then
+        # potencialmente corrompido. Default: abortar; best-effort exige escolha explicita.
+        if is_true "${BACKUP_REQUIRE_CONSISTENT:-true}"; then
             backup_log "ERRO: BACKUP_REQUIRE_CONSISTENT=true e mcrcon indisponivel; backup ABORTADO (CR-06)."
             return 1
         fi
@@ -100,7 +100,7 @@ backup_pre_hook() {
     rcon_port="$(read_server_property "rcon.port" 2>/dev/null || true)"
 
     if [ -z "$rcon_pass" ]; then
-        if is_true "${BACKUP_REQUIRE_CONSISTENT:-false}"; then
+        if is_true "${BACKUP_REQUIRE_CONSISTENT:-true}"; then
             backup_log "ERRO: BACKUP_REQUIRE_CONSISTENT=true e RCON sem senha; backup ABORTADO (CR-06)."
             return 1
         fi
@@ -109,7 +109,7 @@ backup_pre_hook() {
     fi
 
     if [ -n "$rcon_enabled" ] && [ "$rcon_enabled" != "true" ]; then
-        if is_true "${BACKUP_REQUIRE_CONSISTENT:-false}"; then
+        if is_true "${BACKUP_REQUIRE_CONSISTENT:-true}"; then
             backup_log "ERRO: BACKUP_REQUIRE_CONSISTENT=true e enable-rcon!=true; backup ABORTADO (CR-06)."
             return 1
         fi
@@ -150,7 +150,7 @@ backup_pre_hook() {
         # recusada, senha errada): em modo strict o backup ABORTA — prosseguir
         # sem save-off e exatamente a inconsistencia que o CR-06 promete
         # bloquear; os 3 checkpoints anteriores nao cobriam este caso.
-        if is_true "${BACKUP_REQUIRE_CONSISTENT:-false}"; then
+        if is_true "${BACKUP_REQUIRE_CONSISTENT:-true}"; then
             backup_log "ERRO: save-off falhou e BACKUP_REQUIRE_CONSISTENT=true; backup ABORTADO (CR-06)."
             return 1
         fi
