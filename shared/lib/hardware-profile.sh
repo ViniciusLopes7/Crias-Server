@@ -309,7 +309,7 @@ detect_hardware_profile() {
             awk '/^MemTotal:/ {t=int($2/1024)}
                  /^MemAvailable:/ {a=int($2/1024)}
                  /^SwapTotal:/ {s=int($2/1024)}
-                 END {printf "%d %d %d\\n", t, a, s}' "$meminfo_file"
+                 END {printf "%d %d %d\n", t, a, s}' "$meminfo_file"
         )
     elif command -v free >/dev/null 2>&1; then
         free_output="$(free -m 2>/dev/null || true)"
@@ -329,7 +329,7 @@ detect_hardware_profile() {
         cg_cpu_cores="$(cgroup_v2_effective_cpu_cores || true)"
     elif [ -r /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
         cg_bytes="$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || true)"
-        if [[ "$cg_bytes" =~ ^[0-9]{1,18}$ ]] && [ "$cg_bytes" -gt 0 ] \\
+        if [[ "$cg_bytes" =~ ^[0-9]{1,18}$ ]] && [ "$cg_bytes" -gt 0 ] \
             && [ "$cg_bytes" -lt 4611686018427387904 ]; then
             cg_limit_mb=$((cg_bytes / 1048576))
         fi
@@ -338,7 +338,7 @@ detect_hardware_profile() {
     HW_CGROUP_LIMIT_MB="${cg_limit_mb:-0}"
     HW_CGROUP_AVAILABLE_MB="${cg_available_mb:-0}"
     HW_CPU_QUOTA_CORES="${cg_cpu_cores:-0}"
-    if [[ "$cg_limit_mb" =~ ^[0-9]+$ ]] && [ "$cg_limit_mb" -gt 0 ] \\
+    if [[ "$cg_limit_mb" =~ ^[0-9]+$ ]] && [ "$cg_limit_mb" -gt 0 ] \
         && [ "$HW_TOTAL_RAM_MB" -gt 0 ] && [ "$cg_limit_mb" -lt "$HW_TOTAL_RAM_MB" ]; then
         if command -v print_warning >/dev/null 2>&1; then
             print_warning "Cgroup limita RAM a ${cg_limit_mb}MB (host ${HW_TOTAL_RAM_MB}MB): orcamento ajustado." >&2
