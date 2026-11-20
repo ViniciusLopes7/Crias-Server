@@ -229,11 +229,12 @@ apply_common_system_tuning() {
 
     apply_nofile_limit "$server_user"
     apply_zram_and_sysctl_tuning "$total_ram_mb"
-    if is_true "${CRIAS_TUNE_BLOCK_DEVICE:-false}" && [ -n "${HW_TARGET_DEVICE:-}" ]; then
-        apply_block_device_tuning "$HW_TARGET_DEVICE"
-    else
-        print_warning "Tuning de I/O pulado: nenhum device de bloco detectado (ZFS/Btrfs/LVM/subvolume)."
-        print_warning "Esse comportamento e esperado quando o filesystem gerencia I/O internamente."
+    if is_true "${CRIAS_TUNE_BLOCK_DEVICE:-false}"; then
+        if [ -n "${HW_TARGET_DEVICE:-}" ]; then
+            apply_block_device_tuning "$HW_TARGET_DEVICE"
+        else
+            print_warning "Tuning de I/O pulado: nenhum device de bloco confiavel detectado."
+        fi
     fi
     if is_true "${CRIAS_TUNE_CPU_GOVERNOR:-false}"; then
         apply_cpupower_tuning "$tier"
