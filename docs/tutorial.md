@@ -325,3 +325,9 @@ sudo journalctl -u minecraft-backup.service -n 50
 
 O CI executa QEMU com Arch Linux e systemd reais, além de contratos e testes de erro. Os servidores Minecraft são inicializados **somente até a tela da EULA**, sem aceitação automática e sem teste de jogadores ou mundo real. A lista dos cenários e suas limitações está em [testing-qemu.md](testing-qemu.md).
 
+## Acesso remoto antes de instalar o jogo
+
+O instalador apresenta uma etapa dedicada a **Tailscale e OpenSSH** após confirmar as opções, mas **antes** de baixar Minecraft. A autenticação Tailscale é opcional e pode exibir uma URL a autorizar no celular. Em instalações não interativas, não há autenticação automática nem armazenamento de chaves.
+
+Escolha habilitar OpenSSH caso queira conectar na porta 22. Apenas instalar Tailscale não inicia um servidor SSH: `Connection refused` pode indicar que `sshd` não está ativo. Consulte [Conexão via Tailscale](Tailscale.md).
+
