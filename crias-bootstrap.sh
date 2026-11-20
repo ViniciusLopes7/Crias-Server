@@ -74,7 +74,7 @@ crias_fetch_release_urls() {
         # (EXP-64) Token fora do argv do curl: linhas de comando sao
         # observaveis via /proc/<pid>/cmdline em hosts com procfs aberto.
         # -H @arquivo le o header de um arquivo privado 0600 (curl >= 7.55).
-        auth_hdr_file="$(mktemp -t crias-auth.XXXXXX)"
+        auth_hdr_file="$(mktemp /tmp/crias-auth.XXXXXX)" || return 1
         chmod 600 "$auth_hdr_file"
         printf 'Authorization: Bearer %s\n' "$GITHUB_TOKEN" > "$auth_hdr_file"
         curl_auth=(-H "@${auth_hdr_file}")
@@ -166,7 +166,7 @@ crias_verify_sha256() {
 crias_extract_to() {
     local zip_file="$1" install_dir="$2"
     local extract_dir
-    extract_dir=$(mktemp -d -t crias-extract.XXXXXX)
+    extract_dir="$(mktemp -d /tmp/crias-extract.XXXXXX)" || return 1
     if ! command -v unzip >/dev/null 2>&1; then
         err "unzip não encontrado (necessário para extrair o zip)."
         rm -rf "$extract_dir"
@@ -342,9 +342,11 @@ crias_bootstrap_main() {
     log "Zip URL: $zip_url"
 
     local tmpdir
-    tmpdir=$(mktemp -d -t crias-bootstrap.XXXXXX)
+    tmpdir="$(mktemp -d /tmp/crias-bootstrap.XXXXXX)" || return 1
     trap 'rm -rf -- "$tmpdir"' RETURN
 
+# O bootstrap nunca usa TMPDIR externo (pode ser um diretorio controlado
+    # por outro usuario durante execucao privilegiada).
     local zip_file="$tmpdir/$CRIAS_ASSET_ZIP"
     local sha_file="$tmpdir/$CRIAS_ASSET_SHA"
 
