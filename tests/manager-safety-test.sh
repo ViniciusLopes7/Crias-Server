@@ -43,8 +43,23 @@ f_root_safe="$TMP_DIR/root_safe.sh"
 make_file "$f_root_safe" "root:root" 0644 2>/dev/null || true
 f_root_gw="$TMP_DIR/root_gw.sh"
 make_file "$f_root_gw" "root:root" 0664 2>/dev/null || true
+# A execução root precisa testar um arquivo realmente pertencente a não-root.
+# Antes, current_user=root tornava o fixture root:root e gerava falso FAIL.
+nonroot_owner="$current_user"
+if [ "$(id -u)" -eq 0 ]; then
+    if id -u nobody >/dev/null 2>&1; then
+        nonroot_owner="nobody"
+    else
+        echo "FAIL: falta usuario nao-root para fixture de seguranca" >&2
+        exit 1
+    fi
+fi
 f_user="$TMP_DIR/user_owned.sh"
-make_file "$f_user" "$current_user:" 0644
+make_file "$f_user" "$nonroot_owner:" 0644
+if [ "$(stat -c '%U' "$f_user")" = root ]; then
+    echo "FAIL: fixture usuario nao-root permaneceu root-owned" >&2
+    exit 1
+fi
 
 actual_owner="$(stat -c '%U' "$f_root_safe")"
 if [ "$actual_owner" = "root" ]; then
