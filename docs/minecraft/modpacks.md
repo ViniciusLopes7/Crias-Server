@@ -30,27 +30,11 @@ Evite adicionar mods QoL ou extras ao importar um modpack fechado, salvo quando 
 
 ## Fluxo de seleção
 
-```
-1. Escolha a fonte (menu TUI)
-       │
-       ├─ Top 10 / Busca ──► 2. Lista de modpacks (gum filter, busca fuzzy)
-       │                       mostra: "slug | title | ↓downloads"
-       │                       │
-       │                       └─► 3. Seleciona um modpack
-       │                              │
-       └─ Slug manual ────────────────┤
-                                      ▼
-                       4. Busca versões compatíveis com o loader+MC
-                          (filtro server-side na API Modrinth)
-                              │
-                              ├─ há versões compatíveis ──► 5a. Seleciona versão (gum filter)
-                              │                              mostra: "version | game_versions | type"
-                              │
-                              └─ nenhuma compatível ──────► 5b. Sugere MC mais próxima
-                                                             pergunta: trocar MC?
-                                                             ├─ sim ──► re-busca versões (5a)
-                                                             └─ não ──► continua (modpack pode falhar)
-```
+1. Escolha a fonte do modpack no instalador.
+2. Para projetos do Modrinth, selecione o resultado e uma versão compatível; se não houver correspondência, o instalador sugere outra versão do Minecraft.
+3. Para `.mrpack` local ou remoto, informe o caminho absoluto ou a URL HTTPS direta. O instalador valida o arquivo e utiliza o manifesto do pacote.
+4. O `mrpack-install` baixa os arquivos e prepara o servidor. A reconciliação posterior lê `packstate.json` para identificar o Minecraft e o loader efetivos.
+5. Revise o resumo antes de confirmar; a compatibilidade de um pacote não garante que todos os mods funcionem na máquina.
 
 ## Compatibilidade (loader + versão MC)
 
