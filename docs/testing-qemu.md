@@ -19,7 +19,7 @@ O job `test-arch-vm` inicia uma máquina virtual Arch Linux oficial descartável
 | Serviço Minecraft | Unit criada, permissões, processo não-root, limite do cgroup e início do Java | Usa uma classe Java inofensiva para testar a unit |
 | Falha OOM | Serviço descartável com limite de memória propositalmente insuficiente e resultado `oom-kill` | Não mede a RAM necessária a um modpack específico |
 | Terraria | Instalador real, serviço iniciado e porta em escuta | Não valida longa sessão de jogo nem todos os mods tModLoader |
-| Minecraft Vanilla, Fabric, Quilt, Forge e NeoForge | Download/instalação reais; os cinco executáveis chegam ao aviso da EULA | **A EULA permanece `false`; não há mundo nem jogadores na VM** |
+| Minecraft Vanilla, Fabric, Quilt, Forge e NeoForge | Download e inicialização reais de Minecraft 1.21.1 até a EULA; Forge 1.20.1 testado separadamente com Java 17 | **A EULA permanece `false`; não há mundo nem jogadores na VM** |
 | Modpack `.mrpack` | Arquivo de teste local importado, overrides copiados e loader/versão conciliados | Não equivale a um pacote de centenas de mods |
 | Mods opcionais | Download de arquivos e prevenção de duplicidade | Compatibilidade completa exige servidor modificado ativo |
 | Backups e recovery | Contratos e casos de restauração/rollback executados na VM | RCON e integridade semântica do mundo não são testados ao vivo |
