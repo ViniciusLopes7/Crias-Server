@@ -88,6 +88,10 @@ chown -R criasvm:criasvm "$server"
 source "$root/shared/lib/common.sh"
 # shellcheck source=/dev/null
 source "$root/shared/lib/stack-installer.sh"
+# Carrega helpers de recalibracao antes dos testes reais de MemoryMax.
+# minecraft/install.sh so e carregado mais tarde no teste pre-EULA.
+# shellcheck source=/dev/null
+source "$root/shared/lib/minecraft-tuning.sh"
 STACK_NAME=minecraft
 STACK_USER=criasvm
 STACK_SERVER_DIR="$server"
