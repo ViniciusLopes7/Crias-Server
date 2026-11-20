@@ -239,6 +239,15 @@ write_minecraft_runtime_env() {
     # Quilt ocupa server.jar). Preserva valor existente quando o ambiente
     # nao define (reconfigure-hardware roda sem essas variaveis).
     local mc_version="${MINECRAFT_VERSION:-$(env_file_read_value "$file_path" MINECRAFT_VERSION)}"
+    local mc_loader="${MINECRAFT_LOADER:-$(env_file_read_value "$file_path" MINECRAFT_LOADER)}"
+    mc_loader="${mc_loader:-fabric}"
+    case "$mc_loader" in
+        vanilla|fabric|quilt|forge|neoforge) ;;
+        *)
+            print_error "Loader Minecraft invalido no runtime.env: $mc_loader"
+            return 1
+            ;;
+    esac
     local server_jar="${MINECRAFT_SERVER_FILE:-$(env_file_read_value "$file_path" SERVER_JAR)}"
     server_jar="${server_jar:-server.jar}"
 
@@ -252,7 +261,7 @@ GC_MAX_PAUSE="$MC_GC_MAX_PAUSE"
 G1_REGION_SIZE="$MC_G1_REGION_SIZE"
 BACKUP_RETENTION_DAYS="$backup_retention"
 BACKUP_ZSTD_LEVEL="$backup_zstd"
-MINECRAFT_LOADER="${MINECRAFT_LOADER:-fabric}"
+MINECRAFT_LOADER="$mc_loader"
 MINECRAFT_VERSION="$mc_version"
 SERVER_JAR="$server_jar"
 BACKUP_REMOTE_PATH="$backup_remote"
