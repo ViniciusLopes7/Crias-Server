@@ -1,4 +1,4 @@
-# Legacy: live ISO customizada (DESCONTINUADA)
+# ISO personalizada antiga — referência histórica (descontinuada)
 
 > **A ISO customizada foi descontinuada.** Este documento preserva o
 > procedimento HISTÓRICO para mídias antigas que ainda o embutem. O fluxo
@@ -8,7 +8,7 @@
 > curl -fsSL https://raw.githubusercontent.com/ViniciusLopes7/Crias-Server/main/crias-bootstrap.sh | sudo bash
 > ```
 
-### Live ISO
+## Mídia live antiga
 
 O `install.sh` instala `openssh` se necessário. O `sshd` **não** sobe
 sozinho no boot do live USB. O `root` está **travado** no `/etc/shadow`
@@ -27,8 +27,8 @@ systemctl start sshd
 # Agora: ssh root@<ip-do-live>
 ```
 
-> **Atenção**: o autologin do root no tty1 é uma conveniência de mídia de
-> Se você iniciar o `sshd` no live **sem** definir uma senha de root forte,
+
+> **Atenção:** o login automático do root no terminal físico era uma conveniência específica da mídia antiga. Se iniciar o `sshd` **sem** definir uma senha de root forte,
 > qualquer um que alcançar a porta 22 NÃO terá shell (root está travado).
 > Mas se você definiu `passwd` com senha fraca, o risco é real. **Sempre**
 > defina uma senha forte OU restrinja via firewall antes de iniciar o `sshd`.
@@ -36,4 +36,8 @@ systemctl start sshd
 > Em outros ttys (tty2-tty6), root não consegue logar (senha travada). Para
 > acesso non-root no live, crie um usuário: `useradd -m -G wheel -s /bin/bash
 > <nome>` + `passwd <nome>`.
+
+## Fluxo suportado atualmente
+
+Instale o Arch Linux pela mídia oficial, reinicie na instalação concluída e execute o [bootstrap documentado](tutorial.md). O projeto não mantém mais uma imagem ISO personalizada como forma principal de distribuição.
 
