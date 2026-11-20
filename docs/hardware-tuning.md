@@ -116,3 +116,11 @@ Mostra `HW_TOTAL_RAM_MB`, `HW_CPU_CORES`, `HW_DISK_TYPE`, `HW_TIER` e todos os p
 
 - [tutorial.md](tutorial.md) — Tutorial de operação (seção 3: tuning)
 - [../README.md](../README.md) — README principal (tabela de tiers)
+
+## Folga para JVM nativa e host (OOM)
+
+O cálculo do Minecraft agora reserva RAM para o sistema operacional e para o consumo **fora do heap Java** (metaspace, stacks de threads, buffers, compilador JIT). O limite `MemoryMax` permanece maior que `MAX_RAM`, mas não deve ocupar praticamente toda a RAM física. Em máquinas pequenas, o heap calculado será menor que nas versões anteriores; isso prioriza estabilidade, não FPS ou TPS máximos. Modpacks pesados podem exigir mais RAM física.
+
+O erro `Memory cgroup out of memory: Killed process (java)` não comprova, isoladamente, vazamento de memória: pode significar que o serviço atingiu o limite do systemd. Consulte `sudo crias-tui --doctor`, `systemctl show minecraft -p MemoryMax -p MemoryPeak -p NRestarts` e `journalctl -k -b` antes de aumentar os limites. O ajuste do instalador não reescreve automaticamente os limites de serviços já instalados; a mudança exige reconfiguração deliberada, validação do arquivo `.service` e reinicialização controlada.
+
+Em hosts de aproximadamente 1 GB de RAM, o modo conservador não garante que um modpack moderno seja viável. Recomenda-se RAM suficiente e teste real.
