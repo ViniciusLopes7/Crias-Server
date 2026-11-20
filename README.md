@@ -53,6 +53,8 @@ curl -fsSL https://raw.githubusercontent.com/ViniciusLopes7/Crias-Server/main/cr
 
 # 4. Pronto! Gerencie via hub TUI:
 sudo crias-tui
+# Em instalações parciais, diagnostique sem alterar serviços:
+sudo crias-tui --doctor
 ```
 
 ### Alternativa (git clone)
