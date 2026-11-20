@@ -545,22 +545,29 @@ stack_install_extra_mods() {
             continue
         fi
 
-        # The curated mods commonly arrive with versioned names in mrpacks.
-        # Avoid installing a second copy over a pack's existing version.
-        local existing= file
+        # Identify the known tools by their declared mod ID, even when a
+        # launcher renamed the JAR. Fall back to well-known versioned names.
+        local existing= file metadata modid
         case "$slug" in
             spark|chunky|skinrestorer)
-                for file in "$MINECRAFT_SERVER_DIR"/mods/*.jar; do
+                while IFS= read -r -d '' file; do
                     [ -f "$file" ] || continue
-                    case "${file##*/}" in
-                        [Ss][Pp][Aa][Rr][Kk]-*.jar|[Cc][Hh][Uu][Nn][Kk][Yy]-*.jar|[Ss][Kk][Ii][Nn][Rr][Ee][Ss][Tt][Oo][Rr][Ee][Rr]-*.jar)
-                            case "${file##*/}" in
-                                [Ss][Pp][Aa][Rr][Kk]-*) if [ "$slug" = spark ]; then existing=$file; fi ;;
-                                [Cc][Hh][Uu][Nn][Kk][Yy]-*) if [ "$slug" = chunky ]; then existing=$file; fi ;;
-                                *) if [ "$slug" = skinrestorer ]; then existing=$file; fi ;;
-                            esac ;;
-                    esac
-                done ;;
+                    metadata=$(unzip -p "$file" META-INF/mods.toml 2>/dev/null | awk '/^[[:space:]]*\[\[mods\]\]/{inmods=1; next} /^[[:space:]]*\[/{inmods=0} inmods {print}' || true)
+                    if printf '%s\n' "$metadata" | grep -Eiq "^[[:space:]]*modId[[:space:]]*=[[:space:]]*[\"']${slug}[\"']"; then
+                        existing=$file
+                    else
+                        modid=$(unzip -p "$file" fabric.mod.json 2>/dev/null | jq -r '.id // empty' 2>/dev/null || true)
+                        if [ "$modid" = "$slug" ]; then existing=$file; fi
+                    fi
+                    if [ -z "$existing" ]; then
+                        case "${file##*/}" in
+                            [Ss][Pp][Aa][Rr][Kk]-*) if [ "$slug" = spark ]; then existing=$file; fi ;;
+                            [Cc][Hh][Uu][Nn][Kk][Yy]-*) if [ "$slug" = chunky ]; then existing=$file; fi ;;
+                            [Ss][Kk][Ii][Nn][Rr][Ee][Ss][Tt][Oo][Rr][Ee][Rr]-*) if [ "$slug" = skinrestorer ]; then existing=$file; fi ;;
+                        esac
+                    fi
+                    [ -z "$existing" ] || break
+                done < <(find "$MINECRAFT_SERVER_DIR/mods" -maxdepth 1 -type f -name '*.jar' -print0) ;;
         esac
         if [ -n "$existing" ]; then
             print_step "Mod extra ja presente: ${existing##*/} (pulando)."
@@ -646,7 +653,7 @@ install_minecraft_qol_mods() {
         local existing= file
         case "$slug" in
             spark|chunky|skinrestorer)
-                for file in "$MINECRAFT_SERVER_DIR"/mods/*.jar; do
+                while IFS= read -r -d '' file; do
                     [ -f "$file" ] || continue
                     case "${file##*/}" in
                         [Ss][Pp][Aa][Rr][Kk]-*.jar|[Cc][Hh][Uu][Nn][Kk][Yy]-*.jar|[Ss][Kk][Ii][Nn][Rr][Ee][Ss][Tt][Oo][Rr][Ee][Rr]-*.jar)

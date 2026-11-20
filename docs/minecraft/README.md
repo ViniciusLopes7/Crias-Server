@@ -70,6 +70,12 @@ O arquivo precisa seguir o formato `.mrpack` de Minecraft; um ZIP comum, instala
 
 No modo não interativo, use `MINECRAFT_MODPACK_SOURCE=arquivo` com `MINECRAFT_MODPACK_FILE` (caminho absoluto), ou `MINECRAFT_MODPACK_SOURCE=link` com `MINECRAFT_MODPACK_URL` (HTTPS). Mantenha `MINECRAFT_INSTALL_MODPACK=true`. O instalador reconcilia a versão e o loader com os dados do pacote instalado. Opte por não adicionar mods QoL/extras para manter a seleção do pacote.
 
+## Utilitários opcionais de servidor
+
+O instalador oferece **Spark** (diagnóstico), **Chunky** (pré-geração) e **Skin Restorer** (skins) como opções individuais, desativadas por padrão. Ele procura uma versão para o loader e a versão efetivos do modpack e avisa quando algum download não estiver disponível. Os mods são baixados do Modrinth; o Skin Restorer é o mod de Suiranoil, não o plugin de nome parecido.
+
+Spark e Chunky já estão no CriasRealms 0.1.28. O instalador tenta identificar cópias existentes por ID ou nome conhecido, mas uma instalação com arquivos alterados pode precisar de revisão manual. Extras podem precisar de configuração e afetar a compatibilidade; faça backup antes de alterar um mundo existente. Mods e plugins têm formatos e loaders diferentes: um servidor Forge comum não instala plugins Bukkit.
+
 ## Server Icon
 
 O installer copia automaticamente `assets/images/branding/server-icon.png` para `/opt/minecraft-server/server-icon.png`. Requisitos do Minecraft:

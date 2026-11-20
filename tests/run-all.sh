@@ -225,6 +225,7 @@ run_test "manager-safety-test"      "tests/manager-safety-test.sh"
 run_test "readiness-regression-test" "tests/readiness-regression-test.sh"
 run_test "modpack-state-test"        "tests/modpack-state-test.sh"
 run_test "temp-cleanup-test"         "tests/temp-cleanup-test.sh"
+run_test "server-extras-test"         "tests/server-extras-test.sh"
 run_test "custom-mrpack-test"        "tests/custom-mrpack-test.sh"
 # Correções da auditoria pré-entrega (AUDIT-B): contraprovas de CR-10/48/52.
 run_test "download-modrinth-test"   "tests/download-modrinth-test.sh"
