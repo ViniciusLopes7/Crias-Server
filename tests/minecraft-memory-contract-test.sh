@@ -51,9 +51,17 @@ done
 
 # Testa escrita e rollback do drop-in sem alterar unidades do sistema.
 MOCK_VERIFY_FAIL=0
+MOCK_EFFECTIVE_WRONG=0
 systemctl() {
     case "$*" in
         daemon-reload) return 0 ;;
+        "show minecraft.service -p MemoryMax --value")
+            if [ "$MOCK_EFFECTIVE_WRONG" -eq 1 ]; then echo 42; return 0; fi
+            local mb
+            mb="$(sed -n 's/^MemoryMax=\([0-9][0-9]*\)M$/\1/p' "$dir/20-crias-memory.conf")"
+            echo "$((mb * 1048576))"
+            return 0
+            ;;
         *) echo "systemctl inesperado: $*" >&2; return 1 ;;
     esac
 }
@@ -72,6 +80,12 @@ grep -qx "MemoryMax=1536M" "$dir/20-crias-memory.conf" || {
     echo "FAIL: rollback da cota anterior nao funcionou" >&2; exit 1;
 }
 MOCK_VERIFY_FAIL=0
+MOCK_EFFECTIVE_WRONG=1
+if write_minecraft_systemd_memory_limit 3072 "$dir" >/dev/null 2>&1; then
+    echo "FAIL: MemoryMax diferente do planejado foi aceito" >&2; exit 1
+fi
+grep -qx "MemoryMax=1536M" "$dir/20-crias-memory.conf"
+MOCK_EFFECTIVE_WRONG=0
 ln -s "$dir" "$tmp/symlink"
 if write_minecraft_systemd_memory_limit 2048 "$tmp/symlink" >/dev/null 2>&1; then
     echo "FAIL: symlink aceito para drop-in" >&2; exit 1
