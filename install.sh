@@ -232,6 +232,19 @@ prompt_minecraft_options() {
                 MINECRAFT_INSTALL_QOL_MODS="false"
             fi
 
+            # Curated server-side choices; installation occurs after the pack's
+            # actual loader/version have been resolved.
+            local curated="" item
+            for item in spark chunky skinrestorer; do
+                case "$item" in
+                    spark) label="Spark (diagnostico de desempenho)" ;;
+                    chunky) label="Chunky (pre-geracao do mundo)" ;;
+                    skinrestorer) label="Skin Restorer (mod para skins)" ;;
+                esac
+                if tui_confirm "Adicionar $label?" "N"; then
+                    curated="${curated:+$curated,}$item"
+                fi
+            done
             # Mods individuais por CIMA do modpack: o QoL acima pula quando mods/
             # já contém os arquivos do modpack, então extras têm fluxo próprio no
             # installer (não pulam). CSV de slugs do Modrinth.
@@ -240,6 +253,7 @@ prompt_minecraft_options() {
             else
                 MINECRAFT_EXTRA_MODS=""
             fi
+            MINECRAFT_EXTRA_MODS="${curated}${curated:+${MINECRAFT_EXTRA_MODS:+,}}${MINECRAFT_EXTRA_MODS}"
         else
             print_step "Servidor base limpo: mods QoL/extras desativados (CR-18)."
             MINECRAFT_INSTALL_QOL_MODS="false"

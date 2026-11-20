@@ -545,6 +545,28 @@ stack_install_extra_mods() {
             continue
         fi
 
+        # The curated mods commonly arrive with versioned names in mrpacks.
+        # Avoid installing a second copy over a pack's existing version.
+        local existing= file
+        case "$slug" in
+            spark|chunky|skinrestorer)
+                for file in "$MINECRAFT_SERVER_DIR"/mods/*.jar; do
+                    [ -f "$file" ] || continue
+                    case "${file##*/}" in
+                        [Ss][Pp][Aa][Rr][Kk]-*.jar|[Cc][Hh][Uu][Nn][Kk][Yy]-*.jar|[Ss][Kk][Ii][Nn][Rr][Ee][Ss][Tt][Oo][Rr][Ee][Rr]-*.jar)
+                            case "${file##*/}" in
+                                [Ss][Pp][Aa][Rr][Kk]-*) if [ "$slug" = spark ]; then existing=$file; fi ;;
+                                [Cc][Hh][Uu][Nn][Kk][Yy]-*) if [ "$slug" = chunky ]; then existing=$file; fi ;;
+                                *) if [ "$slug" = skinrestorer ]; then existing=$file; fi ;;
+                            esac ;;
+                    esac
+                done ;;
+        esac
+        if [ -n "$existing" ]; then
+            print_step "Mod extra ja presente: ${existing##*/} (pulando)."
+            continue
+        fi
+
         if [ -f "$MINECRAFT_SERVER_DIR/mods/${slug}.jar" ]; then
             print_step "Mod extra ja presente: ${slug}.jar (pulando)."
             continue
@@ -616,6 +638,28 @@ install_minecraft_qol_mods() {
         fi
         if [ -n "$_bad_part" ]; then
             print_error "Mod QoL rejeitado (possível path traversal): $_bad_part"
+            continue
+        fi
+
+        # The curated mods commonly arrive with versioned names in mrpacks.
+        # Avoid installing a second copy over a pack's existing version.
+        local existing= file
+        case "$slug" in
+            spark|chunky|skinrestorer)
+                for file in "$MINECRAFT_SERVER_DIR"/mods/*.jar; do
+                    [ -f "$file" ] || continue
+                    case "${file##*/}" in
+                        [Ss][Pp][Aa][Rr][Kk]-*.jar|[Cc][Hh][Uu][Nn][Kk][Yy]-*.jar|[Ss][Kk][Ii][Nn][Rr][Ee][Ss][Tt][Oo][Rr][Ee][Rr]-*.jar)
+                            case "${file##*/}" in
+                                [Ss][Pp][Aa][Rr][Kk]-*) if [ "$slug" = spark ]; then existing=$file; fi ;;
+                                [Cc][Hh][Uu][Nn][Kk][Yy]-*) if [ "$slug" = chunky ]; then existing=$file; fi ;;
+                                *) if [ "$slug" = skinrestorer ]; then existing=$file; fi ;;
+                            esac ;;
+                    esac
+                done ;;
+        esac
+        if [ -n "$existing" ]; then
+            print_step "Mod extra ja presente: ${existing##*/} (pulando)."
             continue
         fi
 
