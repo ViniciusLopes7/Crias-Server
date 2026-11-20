@@ -1,6 +1,6 @@
 # Tutorial de Operação — Crias-Server
 
-Instalar → operar → troubleshoot. Para detalhes específicos de cada stack, veja [minecraft/README.md](minecraft/README.md) ou [terraria/README.md](terraria/README.md).
+Este é o guia de referência para instalar, operar e recuperar o Crias-Server em Arch Linux. Os procedimentos específicos de cada jogo estão em [Minecraft](minecraft/README.md) e [Terraria](terraria/README.md).
 
 ## 1. Instalação
 
@@ -123,10 +123,10 @@ sudo journalctl -u minecraft -n 50 --no-pager
 
 ```bash
 # CPU/RAM/processos
-sudo mc-manager.sh monitor        # ou: sudo crias-tui → Monitoramento → btop
+sudo /usr/local/libexec/crias/mc-manager.sh monitor        # ou: sudo crias-tui → Monitoramento → btop
 
 # Uso de disco (no diretório do servidor)
-sudo mc-manager.sh monitor disk   # ncdu interativo
+sudo /usr/local/libexec/crias/mc-manager.sh monitor disk   # ncdu interativo
 
 # Aliases após source /etc/profile.d/crias-server.sh
 mcstatus   # status do Minecraft
@@ -285,16 +285,20 @@ sudo systemctl restart minecraft
 
 ```bash
 sudo ss -tlnp | grep -E '25565|7777'
-sudo fuser -k 25565/tcp
+sudo ss -tlnp '( sport = :25565 )'  # identifique o processo antes de qualquer ação
 ```
 
 ### Sem internet na VM (VirtualBox)
 
 ```bash
-systemctl start NetworkManager
-nmcli device connect enp0s3
-echo "nameserver 8.8.8.8" > /etc/resolv.conf
+sudo systemctl status NetworkManager --no-pager
+nmcli device status
+resolvectl status  # diagnostique a configuração DNS antes de alterá-la
 ```
+
+### A instalação parou antes de criar o `crias-tui`
+
+O instalador atualizado tenta instalar `/usr/local/bin/crias-tui` antes dos downloads dos jogos. Consulte `readlink -f /opt/crias-server`, `ls -l /opt/crias-server/crias-tui.sh` e [guia do hub](tui.md). O bootstrap usa um link simbólico para a release ativa: `find` sem `-L` pode não atravessá-lo.
 
 ### Backup falha
 
@@ -316,3 +320,8 @@ sudo journalctl -u minecraft-backup.service -n 50
 - [tui.md](tui.md) — Como o TUI funciona
 - [../CHANGELOG.md](../CHANGELOG.md) — Histórico de versões
 - [../ROADMAP.md](../ROADMAP.md) — Próximos passos
+
+## Limitações de validação
+
+O CI executa QEMU com Arch Linux e systemd reais, além de contratos e testes de erro. Os servidores Minecraft são inicializados **somente até a tela da EULA**, sem aceitação automática e sem teste de jogadores ou mundo real. A lista dos cenários e suas limitações está em [testing-qemu.md](testing-qemu.md).
+
