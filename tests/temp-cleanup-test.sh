@@ -12,6 +12,8 @@ printf "do-not-touch\n" > "$forged"
 export CRIAS_TEMPS_FILE="$forged"
 # shellcheck source=/dev/null
 source "$root/shared/lib/common.sh"
+# Compose fixture cleanup with the library cleanup trap (do not leak the fixture).
+trap '_crias_cleanup_temps; rm -rf -- "$tmp"' EXIT
 [ "$CRIAS_TEMPS_FILE" != "$forged" ]
 [ "$(cat "$forged")" = do-not-touch ]
 [ -f "$CRIAS_TEMPS_FILE" ]
