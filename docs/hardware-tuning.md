@@ -90,6 +90,7 @@ Após mudança de hardware (mais RAM, troca de disco, etc.) sem reinstalar:
 
 ```bash
 # Detectar novo hardware e reaplicar tuning
+sudo systemctl stop minecraft
 sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware
 sudo /usr/local/libexec/crias/tt-manager.sh reconfigure-hardware
 
@@ -97,8 +98,9 @@ sudo /usr/local/libexec/crias/tt-manager.sh reconfigure-hardware
 sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware HIGH
 sudo /usr/local/libexec/crias/tt-manager.sh reconfigure-hardware LOW
 
-# Reiniciar para aplicar no runtime
-sudo systemctl restart minecraft
+# Iniciar apos conferir heap e MemoryMax sincronizados
+systemctl show minecraft -p MemoryMax -p MemorySwapMax
+sudo systemctl start minecraft
 # ou
 sudo systemctl restart terraria
 ```
@@ -132,4 +134,16 @@ O template do `minecraft.service` usa `Restart=on-failure`, mas limita falhas re
 A mudança só entra em vigor quando a unidade do systemd é instalada/atualizada. Para interromper um ciclo ativo use `sudo systemctl stop minecraft.service`. Para impedir a partida automática enquanto investiga, `sudo systemctl disable --now minecraft.service` (reative depois). Após corrigir o problema, `sudo systemctl reset-failed minecraft.service` limpa o bloqueio de tentativas.
 
 Os eventos do kernel não identificam sozinhos qual perfil ou mod causou o problema. Confira journal, memória do cgroup e limite efetivo antes de aumentar heap ou `MemoryMax`.
+
+
+## Contratos de memória revisados
+
+- A cota do host considera limites `memory.max` do cgroup atual **e de seus ancestrais**, não apenas o arquivo da raiz. A RAM disponível é limitada à cota efetiva identificada.
+- O cálculo reserva memória para o SO e para o consumo nativo da JVM; se não houver orçamento suficiente, **falha antes de gerar configurações inválidas**. Não aumenta artificialmente o heap mínimo para exceder a cota.
+- `-Xms` automático foi reduzido para cerca de 30% de `-Xmx` (com piso de 256 MB), e a pré-alocação `AlwaysPreTouch` foi removida do launcher padrão para reduzir pressão na inicialização.
+- O launcher verifica a memória do cgroup antes de executar Java e recusa `user_jvm_args.txt` Forge/NeoForge com parâmetros duplicados de heap/MaxRAM que poderiam sobrescrever o tuning.
+- `reconfigure-hardware` **exige Minecraft parado**. Atualiza `MemoryMax` por drop-in persistente em `/etc/systemd/system/minecraft.service.d/20-crias-memory.conf`, valida com `systemd-analyze` e restaura o drop-in anterior se a validação falhar. O comando não reinicia o serviço automaticamente.
+- `MemorySwapMax=0` continua impedindo que o **processo Minecraft** use swap; isso não impede que o host utilize ZRAM para outros processos. A opção prioriza limitar pausas graves de JVM, mas não substitui memória física suficiente.
+
+**Modpacks grandes:** o tuning é um orçamento inicial e não garante que todos os mods caibam no heap. Analise `MemoryPeak`, `MemoryMax`, logs do Java e uso do host antes de escolher o heap; não aumente `-Xmx` sozinho sem ajustar o cgroup.
 
