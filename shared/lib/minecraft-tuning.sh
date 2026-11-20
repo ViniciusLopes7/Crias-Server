@@ -13,14 +13,13 @@ compute_minecraft_tuning() {
     local xms_mb
     local service_memory_mb
 
-    # Normalize numeric inputs to avoid "integer expected" errors in comparisons
-    total_ram_mb="${total_ram_mb:-0}"
-    cpu_cores="${cpu_cores:-0}"
-    if ! [[ "$total_ram_mb" =~ ^[0-9]+$ ]]; then
-        total_ram_mb=0
+    # Nao fabrique um heap minimo maior que a memoria disponivel.
+    if ! [[ "$total_ram_mb" =~ ^[0-9]+$ ]] || [ "$total_ram_mb" -lt 1024 ]; then
+        print_error "Minecraft precisa de pelo menos 1024 MB de RAM efetiva; detectado: ${total_ram_mb:-desconhecido}MB."
+        return 1
     fi
-    if ! [[ "$cpu_cores" =~ ^[0-9]+$ ]]; then
-        cpu_cores=0
+    if ! [[ "$cpu_cores" =~ ^[0-9]+$ ]] || [ "$cpu_cores" -le 0 ]; then
+        cpu_cores=1
     fi
 
     case "$tier" in
@@ -58,9 +57,8 @@ compute_minecraft_tuning() {
             ;;
     esac
 
-    # Memoria do Java nao e so heap: metaspace, threads, buffers e GC
-    # contam no cgroup. Reserve explicitamente RAM para o SO e overhead
-    # nativo antes de calcular Xmx (evita MemoryMax proximo demais do heap).
+    # A memoria real da JVM inclui heap + memoria nativa, dentro da cota.
+    # Falhe se nao houver orcamento. Nao aumente o heap por clamp.
     local native_overhead_mb=512
     if [ "$total_ram_mb" -le 1536 ]; then
         reserve_mb=384
@@ -71,14 +69,21 @@ compute_minecraft_tuning() {
             native_overhead_mb=$((total_ram_mb / 8))
         fi
     fi
-    xmx_mb=$((total_ram_mb - reserve_mb - native_overhead_mb))
-    xmx_mb=$(clamp_value "$xmx_mb" 384 12288)
-
-    xms_mb=$((xmx_mb * 70 / 100))
+    local budget_mb=$((total_ram_mb - reserve_mb - native_overhead_mb))
+    if [ "$budget_mb" -lt 384 ]; then
+        print_error "RAM insuficiente: ${total_ram_mb}MB total, ${reserve_mb}MB para host e ${native_overhead_mb}MB para JVM nativa."
+        return 1
+    fi
+    xmx_mb=$(clamp_value "$budget_mb" 384 12288)
+    # Xms conservador e sem AlwaysPreTouch: modpacks pesados nao precisam
+    # reservar imediatamente 70% do heap antes de gerar o mundo.
+    xms_mb=$((xmx_mb * 30 / 100))
     xms_mb=$(clamp_value "$xms_mb" 256 "$xmx_mb")
     if [ "$xms_mb" -ge "$xmx_mb" ]; then
         xms_mb=$((xmx_mb * 70 / 100))
     fi
+    MC_NATIVE_OVERHEAD_MB="$native_overhead_mb"
+    MC_HOST_RESERVE_MB="$reserve_mb"
 
     if [ "$cpu_cores" -le 2 ] && [ "$MC_MAX_PLAYERS" -gt 10 ]; then
         MC_MAX_PLAYERS=10
@@ -114,14 +119,10 @@ compute_minecraft_tuning() {
     fi
 
     service_memory_mb=$((xmx_mb + native_overhead_mb))
-    # Ao contrario de um simples Xmx+valor fixo, mantem memoria para o host.
-    # Sistemas com menos de 1 GB nao sao adequados a modpacks; neste caso
-    # preservar o minimo de Xmx/overhead pode exceder a RAM disponivel.
-    if [ "$service_memory_mb" -gt "$((total_ram_mb - reserve_mb))" ]; then
-        service_memory_mb=$((total_ram_mb - reserve_mb))
-    fi
-    if [ "$service_memory_mb" -le "$xmx_mb" ]; then
-        service_memory_mb=$((xmx_mb + 256))
+    # Invariante: Xmx < MemoryMax <= RAM efetiva - reserva host.
+    if [ "$service_memory_mb" -gt "$((total_ram_mb - reserve_mb))" ] || [ "$service_memory_mb" -le "$xmx_mb" ]; then
+        print_error "Orcamento inconsistente de heap/MemoryMax; recusando iniciar configuracao."
+        return 1
     fi
     MC_SERVICE_MEMORY_MAX_MB="$service_memory_mb"
 
@@ -137,6 +138,8 @@ compute_minecraft_tuning() {
     export MC_BACKUP_ZSTD_LEVEL
     export MC_BACKUP_RETENTION_DAYS
     export MC_SERVICE_MEMORY_MAX_MB
+    export MC_NATIVE_OVERHEAD_MB
+    export MC_HOST_RESERVE_MB
 }
 
 write_minecraft_runtime_env() {
@@ -194,6 +197,7 @@ write_minecraft_runtime_env() {
     write_file_or_dry_run "Gerando runtime.env do Minecraft em $file_path" "$file_path" 0600 << EOF
 MIN_RAM="$MC_MIN_RAM"
 MAX_RAM="$MC_MAX_RAM"
+NATIVE_OVERHEAD_MB="${MC_NATIVE_OVERHEAD_MB:-0}"
 GC_MAX_PAUSE="$MC_GC_MAX_PAUSE"
 G1_REGION_SIZE="$MC_G1_REGION_SIZE"
 BACKUP_RETENTION_DAYS="$backup_retention"
@@ -337,5 +341,8 @@ MC_SYNC_CHUNK_WRITES="$MC_SYNC_CHUNK_WRITES"
 MC_BACKUP_RETENTION_DAYS="$MC_BACKUP_RETENTION_DAYS"
 MC_BACKUP_ZSTD_LEVEL="$MC_BACKUP_ZSTD_LEVEL"
 MC_SERVICE_MEMORY_MAX_MB="$MC_SERVICE_MEMORY_MAX_MB"
+MC_NATIVE_OVERHEAD_MB="${MC_NATIVE_OVERHEAD_MB:-0}"
+MC_HOST_RESERVE_MB="${MC_HOST_RESERVE_MB:-0}"
+HW_CGROUP_LIMIT_MB="${HW_CGROUP_LIMIT_MB:-0}"
 EOF
 }
