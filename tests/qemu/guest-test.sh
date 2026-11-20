@@ -172,6 +172,39 @@ for loader in vanilla fabric quilt forge neoforge; do
 done
 
 
+
+# Contraprova especifica do modpack CriasRealms (Forge 1.20.1 / Java 17).
+# Os testes acima executam 1.21.1. Aqui verificamos a versao antiga do loader
+# com Java 17 de verdade, incluindo a escolha automatica do binario correto.
+# O teste termina na EULA: nao ha aceitacao, criacao de mundo ou multiplayer.
+echo "[QEMU][MINECRAFT] Inicio: Forge 1.20.1 com Java 17 (EULA=false)"
+pacman -S --needed --noconfirm jdk17-openjdk
+forge1201_dir=/opt/crias-real-forge-1201
+mkdir -p "$forge1201_dir/.shared"
+cp "$root"/shared/lib/*.sh "$forge1201_dir/.shared/"
+MINECRAFT_SERVER_DIR="$forge1201_dir"
+MINECRAFT_LOADER=forge
+MINECRAFT_VERSION=1.20.1
+_install_minecraft_server_base
+printf "eula=false\n" > "$forge1201_dir/eula.txt"
+printf "server-port=0\n" > "$forge1201_dir/server.properties"
+printf "MINECRAFT_VERSION=1.20.1\nMINECRAFT_LOADER=forge\nMIN_RAM=128M\nMAX_RAM=512M\n" > "$forge1201_dir/runtime.env"
+chown -R criasvm:criasvm "$forge1201_dir"
+set +e
+timeout 240 runuser -u criasvm -- env SERVER_DIR="$forge1201_dir" bash "$root/minecraft/start-server.sh" > "$forge1201_dir/output.log" 2>&1
+forge1201_rc=$?
+set -e
+cat "$forge1201_dir/output.log"
+if [ "$forge1201_rc" -eq 124 ] || ! grep -Eiq "agree.*eula|eula.*agree" "$forge1201_dir/output.log"; then
+    echo "FAIL: Forge 1.20.1 nao chegou ao aviso da EULA; veja output.log" >&2
+    exit 1
+fi
+if ! grep -Eq 'Java: .*"17[.]' "$forge1201_dir/output.log"; then
+    echo "FAIL: Forge 1.20.1 nao selecionou automaticamente Java 17" >&2
+    exit 1
+fi
+grep -qx "eula=false" "$forge1201_dir/eula.txt"
+echo "PASS: Minecraft Forge 1.20.1 iniciou com Java 17 e chegou a EULA sem aceitar"
 # Real mrpack-install with a locally generated personal pack (no EULA accepted).
 pack_dir="/tmp/personal-pack-fixture"
 mkdir -p "$pack_dir/server-overrides/config" /opt/crias-custom-pack
@@ -186,7 +219,7 @@ _resolve_modpack_effective_versions
 [ "$MC_EFFECTIVE_VERSION" = 1.21.1 ] && [ "$MINECRAFT_LOADER" = fabric ]
 echo 'PASS: real mrpack-install imported personal local archive and server overrides'
 
-# Download real optional mods for the user's Forge version and verify duplicate detection.
+# Download real optional mods for Forge 1.20.1 and verify duplicate detection.
 MINECRAFT_SERVER_DIR=/opt/crias-extra-test
 MINECRAFT_LOADER=forge
 MC_EFFECTIVE_VERSION=1.20.1
