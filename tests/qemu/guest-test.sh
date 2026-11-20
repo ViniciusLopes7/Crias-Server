@@ -110,7 +110,8 @@ journalctl -u minecraft.service --no-pager | grep -q CRIAS_VM_PROBE_STARTED
 [ "$(systemctl show -p MemorySwapMax --value minecraft.service)" = 0 ]
 [ "$(systemctl show -p NoNewPrivileges --value minecraft.service)" = yes ]
 [ "$(systemctl show -p StartLimitBurst --value minecraft.service)" = 3 ]
-systemctl cat minecraft.service | grep -q "^StartLimitIntervalSec=300s$"
+systemctl cat minecraft.service | grep -q "^StartLimitIntervalSec=infinity$"
+[ "$(systemctl show -p OOMScoreAdjust --value minecraft.service)" = 200 ]
 systemctl cat minecraft.service | grep -q "^OOMPolicy=stop$"
 server_pid="$(systemctl show -p MainPID --value minecraft.service)"
 [ "$server_pid" -gt 1 ]
@@ -159,6 +160,43 @@ if [ "$oom_result" != "oom-kill" ]; then
 fi
 echo "PASS: fault injection OOM marcado corretamente pelo systemd"
 mc_ci_event "PASS" "oom-injetado" "systemd identificou oom-kill na unidade descartavel"
+
+# Contraprova temporal: tres falhas de um servico DESCARTAVEL devem bloquear
+# novas tentativas de forma persistente, nao apenas durante cinco minutos.
+cat > /etc/systemd/system/crias-restart-test.service <<'EOF'
+[Unit]
+Description=Crias CI restart fuse fault injection
+StartLimitIntervalSec=infinity
+StartLimitBurst=3
+[Service]
+Type=simple
+ExecStart=/usr/bin/false
+Restart=on-failure
+RestartSec=1s
+EOF
+systemctl daemon-reload
+mc_ci_event "ESPERADO" "restart-injetado" "falhas artificiais em unidade descartavel; Minecraft nao e afetado"
+systemctl start crias-restart-test.service >/dev/null 2>&1 || true
+restart_result=""
+for i in $(seq 1 20); do
+    restart_result="$(systemctl show -p Result --value crias-restart-test.service)"
+    [ "$restart_result" = "start-limit-hit" ] && break
+    sleep 1
+done
+if [ "$restart_result" != "start-limit-hit" ]; then
+    systemctl status crias-restart-test.service --no-pager -l >&2 || true
+    echo "FAIL: disjuntor de 3 partidas nao bloqueou falhas ($restart_result)" >&2
+    exit 1
+fi
+before_restarts="$(systemctl show -p NRestarts --value crias-restart-test.service)"
+sleep 5
+after_restarts="$(systemctl show -p NRestarts --value crias-restart-test.service)"
+[ "$before_restarts" = "$after_restarts" ] || {
+    echo "FAIL: nova tentativa mesmo apos start-limit-hit" >&2
+    exit 1
+}
+mc_ci_event "PASS" "restart-injetado" "tres falhas bloqueadas ate reset-failed manual"
+
 # Install in a fresh shell so Minecraft hook functions cannot leak into Terraria.
 env TERRARIA_SERVER_DIR=/opt/terraria-server TERRARIA_USER=terraria \
     TERRARIA_USE_TMODLOADER=false FORCE_HARDWARE_TIER=LOW \
