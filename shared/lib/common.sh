@@ -86,10 +86,20 @@ if ! declare -F _crias_cleanup_temps >/dev/null 2>&1; then
     # handler. Systemd units use the destination filesystem for atomic mv.
     _crias_temp_path_allowed() {
         local candidate="${1:-}"
+        local suffix
         case "$candidate" in
-            "${_crias_temp_root%/}"/crias.??????|/etc/systemd/system/crias-unit.??????.service) ;;
+            "${_crias_temp_root%/}"/crias.*)
+                suffix="${candidate#"${_crias_temp_root%/}/crias."}"
+                ;;
+            /etc/systemd/system/crias-unit.*.service)
+                suffix="${candidate#/etc/systemd/system/crias-unit.}"
+                suffix="${suffix%.service}"
+                ;;
             *) return 1 ;;
         esac
+        # A glob wildcard matches slashes. Require exactly 6 mktemp chars,
+        # so entries containing path separators or ../ can never be removed.
+        [[ "$suffix" =~ ^[A-Za-z0-9]{6}$ ]] || return 1
         [ ! -L "$candidate" ] || return 1
     }
 
