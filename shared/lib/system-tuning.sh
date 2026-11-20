@@ -144,7 +144,6 @@ apply_zram_and_sysctl_tuning() {
     local swappiness
     local zram_conf="/etc/systemd/zram-generator.conf"
     local sysctl_conf="/etc/sysctl.d/99-server-tuning.conf"
-    local backup_suffix
 
     if dry_run_enabled; then
         return 0
@@ -171,44 +170,54 @@ apply_zram_and_sysctl_tuning() {
         swappiness=20
     fi
 
-    backup_suffix="$(date +%Y%m%d-%H%M%S 2>/dev/null || true)"
-    if [ -z "$backup_suffix" ]; then
-        backup_suffix="backup"
+    # Nao sobrescreva zram/sysctl ja administrados pelo usuario, distro ou
+    # outra ferramenta. Uma nova instalacao so cria arquivos ausentes; Crias
+    # so altera arquivos que ele mesmo marcou como gerenciados.
+    local marker="# Managed by Crias-Server (automatic host tuning)"
+    local zram_managed=true sysctl_managed=true
+    if [ -e "$zram_conf" ] && ! grep -Fqx "$marker" "$zram_conf" 2>/dev/null; then
+        print_warning "ZRAM existente nao gerenciada pelo Crias; arquivo preservado: $zram_conf" >&2
+        zram_managed=false
+    fi
+    if [ -e "$sysctl_conf" ] && ! grep -Fqx "$marker" "$sysctl_conf" 2>/dev/null; then
+        print_warning "sysctl existente nao gerenciado pelo Crias; arquivo preservado: $sysctl_conf" >&2
+        sysctl_managed=false
     fi
 
-    if [ -f "$zram_conf" ]; then
-        cp -a "$zram_conf" "${zram_conf}.${backup_suffix}.bak" 2>/dev/null || true
-    fi
-
-    mkdir -p "$(dirname "$zram_conf")" 2>/dev/null || true
-    cat > "$zram_conf" << EOF
-[zram0]
-zram-size = ${zram_size_mb}M
-compression-algorithm = zstd
-swap-priority = 100
-fs-type = swap
-EOF
-
-    if [ -f "$sysctl_conf" ]; then
-        cp -a "$sysctl_conf" "${sysctl_conf}.${backup_suffix}.bak" 2>/dev/null || true
-    fi
-
-    mkdir -p "$(dirname "$sysctl_conf")" 2>/dev/null || true
-    cat > "$sysctl_conf" << EOF
-vm.swappiness=${swappiness}
-vm.vfs_cache_pressure=50
-EOF
-
-    systemctl daemon-reload >/dev/null 2>&1 || true
-    # Only attempt to load zram module and start the generator service if
-    # the host appears to support zram.
-    if modprobe -n zram >/dev/null 2>&1; then
-        modprobe zram >/dev/null 2>&1 || true
-        if systemctl list-unit-files | grep -q 'systemd-zram-setup@'; then
-            systemctl start systemd-zram-setup@zram0.service >/dev/null 2>&1 || true
+    local staged=""
+    if [ "$zram_managed" = true ]; then
+        mkdir -p -- "$(dirname "$zram_conf")" || return 1
+        staged="$(mktemp "${zram_conf}.XXXXXX")" || return 1
+        if ! printf '%s\n[zram0]\nzram-size = %sM\ncompression-algorithm = zstd\nswap-priority = 100\nfs-type = swap\n' "$marker" "$zram_size_mb" > "$staged" \
+            || ! chmod 0644 "$staged" || ! mv -T -- "$staged" "$zram_conf"; then
+            rm -f -- "$staged"
+            print_warning "Falha ao escrever ZRAM; configuracao anterior preservada quando possivel." >&2
+            return 1
         fi
     fi
-    sysctl --system >/dev/null 2>&1 || true
+    if [ "$sysctl_managed" = true ]; then
+        mkdir -p -- "$(dirname "$sysctl_conf")" || return 1
+        staged="$(mktemp "${sysctl_conf}.XXXXXX")" || return 1
+        if ! printf '%s\nvm.swappiness=%s\nvm.vfs_cache_pressure=50\n' "$marker" "$swappiness" > "$staged" \
+            || ! chmod 0644 "$staged" || ! mv -T -- "$staged" "$sysctl_conf"; then
+            rm -f -- "$staged"
+            print_warning "Falha ao escrever sysctl; configuracao anterior preservada quando possivel." >&2
+            return 1
+        fi
+    fi
+
+    if [ "$zram_managed" = true ]; then
+        systemctl daemon-reload >/dev/null 2>&1 || true
+        if modprobe -n zram >/dev/null 2>&1; then
+            modprobe zram >/dev/null 2>&1 || true
+            if systemctl list-unit-files | grep -q 'systemd-zram-setup@'; then
+                systemctl start systemd-zram-setup@zram0.service >/dev/null 2>&1 || true
+            fi
+        fi
+    fi
+    if [ "$sysctl_managed" = true ]; then
+        sysctl --system >/dev/null 2>&1 || true
+    fi
 }
 
 apply_common_system_tuning() {
