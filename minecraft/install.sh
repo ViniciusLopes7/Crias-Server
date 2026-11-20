@@ -47,6 +47,8 @@ MINECRAFT_EXTRA_MODS="${MINECRAFT_EXTRA_MODS:-}"
 # Modpack source: "adrenaline" (default) or "modrinth" (generic).
 MINECRAFT_MODPACK_SOURCE="${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
 MINECRAFT_MODPACK_SLUG="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
+MINECRAFT_MODPACK_FILE="${MINECRAFT_MODPACK_FILE:-}"
+MINECRAFT_MODPACK_URL="${MINECRAFT_MODPACK_URL:-}"
 # mrpack-install version pin.
 MRPACK_INSTALL_VERSION="${MRPACK_INSTALL_VERSION:-v0.23.0}"
 # (CR-17) strict: pendencias de mods transformam-se em falha da instalacao.
@@ -136,6 +138,23 @@ validate_minecraft_inputs() {
         print_error "MINECRAFT_VERSION invalido: $MINECRAFT_VERSION"
         print_error "Use formato semantico (ex.: 1.21.11) ou snapshot (ex.: 22w14a)."
         exit 1
+    fi
+
+    if is_true "$MINECRAFT_INSTALL_MODPACK"; then
+        case "$MINECRAFT_MODPACK_SOURCE" in
+            arquivo)
+                if [[ "$MINECRAFT_MODPACK_FILE" != /* ]] || [ ! -f "$MINECRAFT_MODPACK_FILE" ] || [ ! -r "$MINECRAFT_MODPACK_FILE" ]; then
+                    print_error "Informe um arquivo .mrpack local absoluto e legivel; monte o pendrive antes."
+                    exit 1
+                fi
+                ;;
+            link)
+                if ! _valid_custom_pack_url "$MINECRAFT_MODPACK_URL"; then
+                    print_error "Informe uma URL HTTPS direta valida, sem aspas, barras invertidas ou quebras de linha."
+                    exit 1
+                fi
+                ;;
+        esac
     fi
 
     if ! validate_port_number "MINECRAFT_PORT" "$MINECRAFT_PORT"; then
@@ -328,11 +347,34 @@ stack_download_and_install() {
                 timeout 300 mrpack-install "$slug" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
             fi
             ;;
+        arquivo|link)
+            local custom_pack="$MINECRAFT_MODPACK_FILE"
+            if [ "$MINECRAFT_MODPACK_SOURCE" = link ]; then
+                if ! _valid_custom_pack_url "$MINECRAFT_MODPACK_URL"; then
+                    print_error "URL de modpack invalida."
+                    return 1
+                fi
+                local curl_cfg
+                custom_pack="$(mktemp_crias_file)"
+                curl_cfg="$(mktemp_crias_file)"
+                chmod 600 "$curl_cfg"
+                printf 'url = "%s"\n' "$MINECRAFT_MODPACK_URL" > "$curl_cfg"
+                print_step "Baixando o modpack pelo link HTTPS..."
+                if ! curl --config "$curl_cfg" --proto '=https' --proto-redir '=https' --location --fail --silent --show-error --connect-timeout 20 --max-time 900 --max-filesize 2147483648 --output "$custom_pack"; then
+                    rm -f "$curl_cfg"
+                    print_error "Falha ao baixar o arquivo; confirme que o link e direto e publico."
+                    return 1
+                fi
+                rm -f "$curl_cfg"
+            fi
+            if ! _validate_custom_mrpack "$custom_pack"; then return 1; fi
+            timeout 300 mrpack-install "$custom_pack" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
+            ;;
         vanilla)
             _install_minecraft_server_base
             ;;
         *)
-            print_error "MINECRAFT_MODPACK_SOURCE invalido: $MINECRAFT_MODPACK_SOURCE (use: adrenaline, modrinth, vanilla)"
+            print_error "MINECRAFT_MODPACK_SOURCE invalido: $MINECRAFT_MODPACK_SOURCE (use: adrenaline, modrinth, arquivo, link, vanilla)"
             exit 1
             ;;
     esac
@@ -342,7 +384,7 @@ stack_download_and_install() {
     # PACK, que pode divergir da MINECRAFT_VERSION configurada. No ramo
     # vanilla/no-modpack a base instalada E a versao configurada; consultar o
     # slug default aqui sobrescreveria a versao correta com a do adrenaline.
-    if [ "$MINECRAFT_MODPACK_SOURCE" = "adrenaline" ] || [ "$MINECRAFT_MODPACK_SOURCE" = "modrinth" ]; then
+    if [ "$MINECRAFT_MODPACK_SOURCE" = "adrenaline" ] || [ "$MINECRAFT_MODPACK_SOURCE" = "modrinth" ] || [ "$MINECRAFT_MODPACK_SOURCE" = "arquivo" ] || [ "$MINECRAFT_MODPACK_SOURCE" = "link" ]; then
         _resolve_modpack_effective_versions || return 1
         _reconcile_effective_java
     fi
@@ -365,6 +407,25 @@ _install_minecraft_server_base() {
         --server-dir "$MINECRAFT_SERVER_DIR" \
         --server-file "$server_file"
     MINECRAFT_SERVER_FILE="$server_file"
+}
+
+_valid_custom_pack_url() {
+    local url="$1"
+    [[ "$url" == https://* && "$url" != *[[:cntrl:]]* && "$url" != *"\""* && "$url" != *\\* ]]
+}
+
+# Verify the archive and the Modrinth pack format before running the installer.
+_validate_custom_mrpack() {
+    local archive="$1" index_count
+    if [ ! -f "$archive" ] || [ ! -r "$archive" ] || ! unzip -tq "$archive" >/dev/null 2>&1; then
+        print_error "Arquivo .mrpack ausente, ilegivel ou corrompido."
+        return 1
+    fi
+    index_count="$(unzip -Z -1 "$archive" | grep -c '^modrinth[.]index[.]json$' || true)"
+    if [ "$index_count" != 1 ] || ! unzip -p "$archive" modrinth.index.json | jq -e '.formatVersion == 1 and .game == "minecraft" and (.dependencies.minecraft | type == "string" and length > 0)' >/dev/null 2>&1; then
+        print_error "Arquivo nao contem um indice .mrpack valido para Minecraft."
+        return 1
+    fi
 }
 
 # (AUDIT-B N5) A versao EFETIVA do pack alimenta o JDK e o runtime.env: se o

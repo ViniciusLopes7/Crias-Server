@@ -67,6 +67,8 @@ MINECRAFT_EXTRA_MODS="${MINECRAFT_EXTRA_MODS:-}"
 # Modpack source.
 MINECRAFT_MODPACK_SOURCE="${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
 MINECRAFT_MODPACK_SLUG="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
+MINECRAFT_MODPACK_FILE="${MINECRAFT_MODPACK_FILE:-}"
+MINECRAFT_MODPACK_URL="${MINECRAFT_MODPACK_URL:-}"
 MRPACK_INSTALL_VERSION="${MRPACK_INSTALL_VERSION:-v0.23.0}"
 ACCEPT_EULA="${ACCEPT_EULA:-false}"
 
@@ -222,7 +224,9 @@ prompt_minecraft_options() {
         # INSTALL_MODPACK=false = base limpa (CR-18) e as respostas seriam
         # descartadas pelo installer do stack.
         if is_true "${MINECRAFT_INSTALL_MODPACK:-true}"; then
-            if tui_confirm "Instalar mods QoL adicionais?" "Y"; then
+            local qol_default=Y
+            if [ "${MINECRAFT_MODPACK_SOURCE:-}" = arquivo ] || [ "${MINECRAFT_MODPACK_SOURCE:-}" = link ]; then qol_default=N; fi
+            if tui_confirm "Instalar mods QoL adicionais?" "$qol_default"; then
                 MINECRAFT_INSTALL_QOL_MODS="true"
             else
                 MINECRAFT_INSTALL_QOL_MODS="false"
@@ -314,7 +318,9 @@ prompt_minecraft_modpack_dynamic() {
             "Top 10 modpacks (Modrinth)" \
             "Buscar modpack por nome" \
             "Vanilla (so loader, sem modpack)" \
-            "Slug Modrinth manual"
+            "Slug Modrinth manual" \
+            "Arquivo .mrpack (local ou pendrive montado)" \
+            "Link direto HTTPS de .mrpack"
         TUI_BACK=0
         TUI_HELP=0
         unset TUI_HELP_TOPIC
@@ -342,6 +348,24 @@ prompt_minecraft_modpack_dynamic() {
                     MINECRAFT_INSTALL_MODPACK="true"
                 fi
                 return 0
+                ;;
+            "Arquivo .mrpack (local ou pendrive montado)")
+                print_step "Conecte e monte o pendrive antes de informar o caminho completo."
+                if command -v lsblk >/dev/null 2>&1; then lsblk -o NAME,LABEL,FSTYPE,MOUNTPOINTS || true; fi
+                tui_input MINECRAFT_MODPACK_FILE "Caminho absoluto do arquivo .mrpack" "${MINECRAFT_MODPACK_FILE:-}"
+                if [[ "$MINECRAFT_MODPACK_FILE" != /* ]] || [ ! -f "$MINECRAFT_MODPACK_FILE" ] || [ ! -r "$MINECRAFT_MODPACK_FILE" ]; then
+                    print_warning "Arquivo nao encontrado ou nao legivel. Confira o pendrive e o caminho."
+                    continue
+                fi
+                MINECRAFT_MODPACK_SOURCE=arquivo
+                ;;
+            "Link direto HTTPS de .mrpack")
+                tui_input MINECRAFT_MODPACK_URL "Link HTTPS direto para baixar o .mrpack" "${MINECRAFT_MODPACK_URL:-}"
+                if [[ "$MINECRAFT_MODPACK_URL" != https://* ]]; then
+                    print_warning "Informe um link direto que comece com https://."
+                    continue
+                fi
+                MINECRAFT_MODPACK_SOURCE=link
                 ;;
             "Slug Modrinth manual")
                 MINECRAFT_MODPACK_SOURCE="modrinth"
@@ -976,6 +1000,8 @@ write_stack_env_file() {
             printf 'MINECRAFT_EXTRA_MODS=%q\n' "${MINECRAFT_EXTRA_MODS:-}"
             printf 'MINECRAFT_MODPACK_SOURCE=%q\n' "${MINECRAFT_MODPACK_SOURCE:-adrenaline}"
             printf 'MINECRAFT_MODPACK_SLUG=%q\n' "${MINECRAFT_MODPACK_SLUG:-adrenaline}"
+            printf 'MINECRAFT_MODPACK_FILE=%q\n' "${MINECRAFT_MODPACK_FILE:-}"
+            printf 'MINECRAFT_MODPACK_URL=%q\n' "${MINECRAFT_MODPACK_URL:-}"
             printf 'MINECRAFT_SERVER_ICON_URL=%q\n' "${MINECRAFT_SERVER_ICON_URL:-}"
             printf 'MRPACK_INSTALL_VERSION=%q\n' "${MRPACK_INSTALL_VERSION:-v0.23.0}"
             # (CR-17) Modo strict: mods pendentes falham a instalacao.
@@ -1903,6 +1929,10 @@ show_install_summary() {
         printf '  %-22s %s\n' "Versao MC:" "$MINECRAFT_VERSION"
         if [ "${MINECRAFT_MODPACK_SOURCE:-adrenaline}" = "vanilla" ]; then
             printf '  %-22s %s\n' "Modpack:" "nenhum (vanilla, so loader)"
+        elif [ "${MINECRAFT_MODPACK_SOURCE:-}" = arquivo ]; then
+            printf '  %-22s %s\n' "Modpack:" "arquivo: $MINECRAFT_MODPACK_FILE"
+        elif [ "${MINECRAFT_MODPACK_SOURCE:-}" = link ]; then
+            printf '  %-22s %s\n' "Modpack:" "link HTTPS informado"
         else
             printf '  %-22s %s\n' "Modpack:" "${MINECRAFT_MODPACK_SOURCE:-adrenaline} (${MINECRAFT_MODPACK_SLUG:-adrenaline})"
             if [ -n "${MINECRAFT_ADRENALINE_VERSION:-}" ]; then

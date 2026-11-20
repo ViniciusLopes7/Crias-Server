@@ -59,6 +59,17 @@ source /etc/profile.d/crias-server.sh
 | `mchw` | `sudo mc-manager.sh hardware-report` |
 | `mcreconfig` | `sudo mc-manager.sh reconfigure-hardware` |
 
+## Importar um modpack próprio
+
+O instalador aceita um arquivo **`.mrpack`** pessoal, sem exigir que o pacote esteja publicado no Modrinth ou CurseForge. No menu **Fonte do modpack**, escolha:
+
+- **Arquivo .mrpack:** informe o caminho absoluto do arquivo. Para pendrive, conecte e monte o dispositivo antes; o instalador mostra os pontos de montagem disponíveis. Exemplo: `/media/usuario/MEU_USB/Meu pacote.mrpack`.
+- **Link direto HTTPS:** informe um endereço que entregue o arquivo diretamente, sem página intermediária ou login. Links temporários devem permanecer válidos até o download terminar.
+
+O arquivo precisa seguir o formato `.mrpack` de Minecraft; um ZIP comum, instalador de outro launcher ou arquivo de exportação CurseForge não é convertido automaticamente. A máquina ainda precisa de internet para baixar o servidor, o loader e os arquivos apontados pelo pacote. Alguns downloads podem exigir acesso próprio ou não permitir distribuição automática. Arquivos marcados como exclusivos do cliente no índice do pacote não são instalados no servidor.
+
+No modo não interativo, use `MINECRAFT_MODPACK_SOURCE=arquivo` com `MINECRAFT_MODPACK_FILE` (caminho absoluto), ou `MINECRAFT_MODPACK_SOURCE=link` com `MINECRAFT_MODPACK_URL` (HTTPS). Mantenha `MINECRAFT_INSTALL_MODPACK=true`. O instalador reconcilia a versão e o loader com os dados do pacote instalado. Opte por não adicionar mods QoL/extras para manter a seleção do pacote.
+
 ## Server Icon
 
 O installer copia automaticamente `assets/images/branding/server-icon.png` para `/opt/minecraft-server/server-icon.png`. Requisitos do Minecraft:

@@ -110,4 +110,18 @@ for loader in vanilla fabric quilt forge neoforge; do
 done
 
 
+# Real mrpack-install with a locally generated personal pack (no EULA accepted).
+pack_dir="/tmp/personal-pack-fixture"
+mkdir -p "$pack_dir/server-overrides/config" /opt/crias-custom-pack
+printf '%s\n' '{"formatVersion":1,"game":"minecraft","versionId":"test","name":"Personal","files":[],"dependencies":{"minecraft":"1.21.1","fabric-loader":"0.16.0"}}' > "$pack_dir/modrinth.index.json"
+printf 'fixture=ok\n' > "$pack_dir/server-overrides/config/personal.txt"
+(cd "$pack_dir" && zip -qr '/tmp/personal pack.mrpack' modrinth.index.json server-overrides)
+_validate_custom_mrpack '/tmp/personal pack.mrpack'
+timeout 300 mrpack-install '/tmp/personal pack.mrpack' --server-dir /opt/crias-custom-pack --server-file server.jar
+grep -qx 'fixture=ok' /opt/crias-custom-pack/config/personal.txt
+MINECRAFT_SERVER_DIR=/opt/crias-custom-pack
+_resolve_modpack_effective_versions
+[ "$MC_EFFECTIVE_VERSION" = 1.21.1 ] && [ "$MINECRAFT_LOADER" = fabric ]
+echo 'PASS: real mrpack-install imported personal local archive and server overrides'
+
 echo 'PASS: Arch VM, systemd PID 1, real service installer, backup restore, bootstrap and real server pre-EULA launch'
