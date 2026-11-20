@@ -129,11 +129,13 @@ Em hosts de aproximadamente 1 GB de RAM, o modo conservador não garante que um 
 
 ## Limite de reinícios após OOM
 
-O template do `minecraft.service` usa `Restart=on-failure`, mas limita falhas repetidas a três tentativas em cinco minutos (`StartLimitIntervalSec=300s`, `StartLimitBurst=3`). `OOMPolicy=stop` encerra a unidade quando o cgroup sofre falta de memória. Isso evita ciclos ilimitados de reinício.
+O template do `minecraft.service` mantém `Restart=on-failure`, mas configura um **disjuntor de reinicialização** (`StartLimitIntervalSec=infinity`, `StartLimitBurst=3`): após três partidas consecutivas com falha, o systemd deixa de tentar sozinho e requer diagnóstico/intervenção explícita. Diferentemente de uma janela de cinco minutos, o limite não volta a permitir tentativas apenas porque um boot demorou muito. `OOMPolicy=stop` encerra o serviço quando o cgroup sofre falta de memória.
 
 A mudança só entra em vigor quando a unidade do systemd é instalada/atualizada. Para interromper um ciclo ativo use `sudo systemctl stop minecraft.service`. Para impedir a partida automática enquanto investiga, `sudo systemctl disable --now minecraft.service` (reative depois). Após corrigir o problema, `sudo systemctl reset-failed minecraft.service` limpa o bloqueio de tentativas.
 
 Os eventos do kernel não identificam sozinhos qual perfil ou mod causou o problema. Confira journal, memória do cgroup e limite efetivo antes de aumentar heap ou `MemoryMax`.
+
+A unidade usa `OOMScoreAdjust=200` em vez de `-800`: diante de OOM **global do host**, o Java pode ser encerrado antes de serviços de recuperação remota, como SSH. Essa prioridade não evita OOM dentro do `MemoryMax` nem garante que outros serviços nunca sejam afetados. O sistema deve permanecer acessível para investigar a causa. Se desabilitar a partida automática durante diagnóstico, reative apenas depois da correção.
 
 
 ## Contratos de memória revisados
