@@ -1,5 +1,7 @@
 # Crias-Server
 
+Instalador e conjunto de ferramentas para operar servidores **Minecraft** e **Terraria** no Arch Linux, com serviços systemd, backup, ajustes de hardware e administração pelo terminal. A integração com Discord é opcional.
+
 <p align="center">
     <img src="assets/images/branding/EscudoCrias.png" alt="Escudo Crias" width="180" />
 </p>
@@ -21,7 +23,7 @@
 
 Crias-Server é um instalador e gerenciador para servidor de jogos em Arch Linux. Você escolhe entre Minecraft ou Terraria, e ele cuida do resto: instala o servidor, configura tuning de hardware, hardening systemd, backup automático e controle remoto via Discord.
 
-### Por que usar?
+### Recursos em resumo
 
 - **Sem Docker, sem overhead**: roda direto no Arch com systemd. Máximo de performance para o servidor de jogos.
 - **Tuning automático**: detecta RAM, CPU e disco. Aplica LOW/MID/HIGH tier que ajusta heap, max-players, MemoryMax e políticas do host.
@@ -29,6 +31,14 @@ Crias-Server é um instalador e gerenciador para servidor de jogos em Arch Linux
 - **Backup inteligente**: RCON `save-off` + `save-all` antes do tar, `save-on` depois (com trap EXIT). Retenção por tier, compressão zstd, rsync remoto opcional.
 - **TUI com gum**: menus interativos, busca fuzzy, mini-wiki, preview de MOTD colorido. Hub central (`crias-tui`) sem precisar lembrar comandos.
 - **Controle remoto via Discord**: bot Python + agente Go com slash commands `/mc start|stop|status|players|say|console|health`.
+
+## Comece por aqui
+
+- **Instalação inicial:** siga o [guia passo a passo](docs/tutorial.md).
+- **Modpack próprio `.mrpack`:** [importação local ou HTTPS](docs/minecraft/modpacks.md).
+- **Gerenciamento e diagnóstico:** `sudo crias-tui` e `sudo crias-tui --doctor` ([manual](docs/tui.md)).
+- **Falhas de memória:** [tuning de hardware](docs/hardware-tuning.md).
+- **Testes QEMU e limites de cobertura:** [validação em VM](docs/testing-qemu.md).
 
 ## Instalação
 
@@ -173,6 +183,10 @@ bash shared/lib/mc-manifests.sh selftest
 | [docs/gui-feasibility.md](docs/gui-feasibility.md) | Estudo de viabilidade de GUI web (futuro) |
 | [CHANGELOG.md](CHANGELOG.md) | Histórico de versões |
 | [ROADMAP.md](ROADMAP.md) | Status e próximos passos |
+
+## Qualidade e limites dos testes
+
+A CI automatiza lint, testes Bash/Go/Python, launchers com Java 21/25 e uma VM QEMU que instala e verifica serviços reais. **O Minecraft não é testado com EULA aceita nem jogadores conectados na VM.** Consulte o [plano de validação](docs/testing-qemu.md) antes de homologar para produção.
 
 ## CI/CD
 
