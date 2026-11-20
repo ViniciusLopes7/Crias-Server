@@ -1990,11 +1990,14 @@ deploy_crias_tui() {
     local tui_dest="/usr/local/bin/crias-tui"
 
     if [ ! -f "$tui_source" ]; then
-        print_warning "crias-tui.sh nao encontrado em $tui_source. Pulando deploy."
-        return 0
+        print_error "crias-tui.sh nao encontrado em $tui_source. A release esta incompleta."
+        return 1
     fi
 
-    install -m 0755 "$tui_source" "$tui_dest"
+    if ! install -o root -g root -m 0755 "$tui_source" "$tui_dest"; then
+        print_error "Nao foi possivel instalar o hub em $tui_dest."
+        return 1
+    fi
     print_success "crias-tui deployado em $tui_dest"
     print_step "Rode: sudo crias-tui  (menu interativo do hub)"
 }
@@ -2022,6 +2025,10 @@ main() {
         check_root
         check_arch
     fi
+
+    # Instale o hub antes das etapas que podem falhar (rede, mods, SSH, agent,
+    # systemd): ele permanece disponivel em instalacoes parciais.
+    deploy_crias_tui
 
     select_server_type
 
@@ -2107,7 +2114,6 @@ main() {
 
     # Install monitoring tools (btop, ncdu) on the host.
     install_monitor_tools_if_enabled
-    deploy_crias_tui
 
     print_success "Instalacao concluida para stack: $SERVER_TYPE"
 }
