@@ -1,6 +1,6 @@
 # Stack Terraria
 
-Documentação específica do stack Terraria. Para visão geral, veja [../README.md](../README.md).
+Guia de operação do Terraria no Crias-Server, com servidor vanilla e opção de tModLoader. A instalação inicial é explicada no [tutorial](../tutorial.md).
 
 ## Componentes instalados
 
@@ -9,7 +9,7 @@ Documentação específica do stack Terraria. Para visão geral, veja [../README
 | `/opt/terraria-server/start-terraria.sh` | Launcher runtime |
 | `/usr/local/libexec/crias/tt-manager.sh` | CLI de gerenciamento (start/stop/status/console/backup/health/...) |
 | `/opt/terraria-server/backup-cron.sh` | Backup com zstd + flock |
-| `/opt/terraria-server/setup-cron.sh` | Configura timer systemd de backup |
+| `/usr/local/libexec/crias/setup-cron.sh` | Configura timer systemd de backup (script administrativo) |
 | `/opt/terraria-server/terraria.service` | Unit systemd (gerada via envsubst com hardening) |
 | `/opt/terraria-server/config/serverconfig.txt` | Config do servidor |
 | `/opt/terraria-server/runtime.env` | Tuning aplicado (backup retention, zstd level) |
@@ -32,12 +32,12 @@ sudo /usr/local/libexec/crias/tt-manager.sh health                  # verifica p
 sudo /usr/local/libexec/crias/tt-manager.sh hardware-report         # perfil aplicado
 sudo /usr/local/libexec/crias/tt-manager.sh reconfigure-hardware            # recalibrar tier
 sudo /usr/local/libexec/crias/tt-manager.sh reconfigure-hardware HIGH       # forçar tier
-sudo /opt/terraria-server/setup-cron.sh                         # configurar timer de backup
+sudo /usr/local/libexec/crias/tt-manager.sh setup-cron         # configurar timer de backup
 ```
 
 ### Aliases de shell
 
-O installer gera `/opt/terraria-server/comandos.sh` e adiciona autoload em `/etc/profile.d/crias-server.sh`. Para usar imediatamente:
+Os aliases estáticos são publicados em `/etc/profile.d/crias-server.sh`. Para carregá-los na sessão atual:
 
 ```bash
 source /etc/profile.d/crias-server.sh
@@ -48,14 +48,14 @@ source /etc/profile.d/crias-server.sh
 | `ttstart` | `sudo systemctl start terraria` |
 | `ttstop` | `sudo systemctl stop terraria` |
 | `ttrestart` | `sudo systemctl restart terraria` |
-| `ttstatus` | `sudo tt-manager.sh status` |
+| `ttstatus` | `sudo /usr/local/libexec/crias/tt-manager.sh status` |
 | `ttlogs` | `sudo journalctl -u terraria -f` |
-| `ttconsole` | `sudo tt-manager.sh console` (logs em tempo real) |
-| `ttbackup` | `sudo tt-manager.sh backup` |
-| `ttsetupcron` | `sudo tt-manager.sh setup-cron` |
+| `ttconsole` | `sudo /usr/local/libexec/crias/tt-manager.sh console` (logs em tempo real) |
+| `ttbackup` | `sudo /usr/local/libexec/crias/tt-manager.sh backup` |
+| `ttsetupcron` | `sudo /usr/local/libexec/crias/tt-manager.sh setup-cron` |
 | `ttdir` | `cd /opt/terraria-server` |
-| `tthw` | `sudo tt-manager.sh hardware-report` |
-| `ttreconfig` | `sudo tt-manager.sh reconfigure-hardware` |
+| `tthw` | `sudo /usr/local/libexec/crias/tt-manager.sh hardware-report` |
+| `ttreconfig` | `sudo /usr/local/libexec/crias/tt-manager.sh reconfigure-hardware` |
 
 ## Diferenças em relação ao Minecraft
 
@@ -64,7 +64,7 @@ source /etc/profile.d/crias-server.sh
 - **Backup**: sem `save-off`/`save-on` (sem RCON). Apenas `tar` + `zstd` dos diretórios `worlds/` e `config/`.
 - **Health check**: só verifica se a porta está em escuta (não há RCON para validar).
 
-## tModLoader (Terraria com mods) — v1.2.1
+## Terraria com mods (tModLoader)
 
 O Crias-Server agora suporta **tModLoader** como substituto do servidor vanilla
 do Terraria. Quando `TERRARIA_USE_TMODLOADER=true`, o instalador baixa o
@@ -139,3 +139,8 @@ sudo journalctl -u terraria-backup.service -n 50
 - [../Tailscale.md](../Tailscale.md) — Conexão via Tailscale
 - [../restore.md](../restore.md) — Restore de backups
 - [../security.md](../security.md) — Firewall, logs, hardening
+
+## Recuperação de instalação parcial
+
+Se a configuração do Terraria falhar antes de concluir o instalador, use `sudo crias-tui --doctor` e `sudo journalctl -u terraria -n 80 --no-pager` para separar erro de instalação, falta de memória e problema de serviço. O TUI não requer que o servidor já esteja ativo.
+
