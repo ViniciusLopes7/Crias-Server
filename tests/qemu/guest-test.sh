@@ -109,6 +109,7 @@ journalctl -u minecraft.service --no-pager | grep -q CRIAS_VM_PROBE_STARTED
 [ "$(systemctl show -p MemoryMax --value minecraft.service)" = 536870912 ]
 [ "$(systemctl show -p MemorySwapMax --value minecraft.service)" = 0 ]
 [ "$(systemctl show -p NoNewPrivileges --value minecraft.service)" = yes ]
+[ "$(systemctl show -p OOMScoreAdjust --value minecraft.service)" = 100 ]
 [ "$(systemctl show -p StartLimitBurst --value minecraft.service)" = 3 ]
 systemctl cat minecraft.service | grep -q "^StartLimitIntervalSec=300s$"
 systemctl cat minecraft.service | grep -q "^OOMPolicy=stop$"
