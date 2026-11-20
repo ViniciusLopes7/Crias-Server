@@ -38,10 +38,13 @@ Uma pipeline verde não demonstra que **todo bug possível foi encontrado**. Per
 
 Abra **Actions → CI → Arch VM (QEMU and systemd)** no PR. Consulte a etapa do teste, depois baixe o artefato `qemu-arch-logs` do workflow para examinar:
 
-- `guest.log`: saída combinada dos testes executados dentro do Arch.
+- `guest.log`: saída combinada dos testes executados dentro do Arch, agora com marcadores `[QEMU][MINECRAFT][INICIO/PASS/ESPERADO/FALHA]` por cenário.
+- `minecraft-logs.tar.gz`: `summary.tsv` e logs integrais individuais de cada loader (incluindo Forge 1.20.1), mais a importação `.mrpack`. Este arquivo é criado mesmo quando o teste falha, desde que a VM esteja acessível.
 - `serial.log`: console serial do QEMU; útil quando o SSH ou o boot falha.
 - `failure-journal.log`: últimas mensagens do journal quando a VM esteve acessível.
 - `failure-system.log`: unidades com falha, memória e espaço em disco.
+
+Os marcadores `ESPERADO` indicam falhas intencionais (rollback e teste isolado de OOM). `PASS` confirma apenas as verificações realizadas, e `FALHA` indica erro que deve interromper a execução. Para avisos do Forge, o resumo conta as linhas mas o conteúdo original permanece no arquivo correspondente.
 
 A coleta de evidências é uma operação de diagnóstico; os artefatos não devem incluir tokens reais. Não publique arquivos de `runtime.env`, `agent.yaml` nem credenciais de cloud-init/SSH de ambientes de produção.
 
