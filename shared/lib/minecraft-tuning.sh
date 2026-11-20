@@ -58,13 +58,27 @@ compute_minecraft_tuning() {
             ;;
     esac
 
-    reserve_mb=$(clamp_value "$reserve_mb" 1000 8192)
-
-    xmx_mb=$((total_ram_mb - reserve_mb))
-    xmx_mb=$(clamp_value "$xmx_mb" 512 12288)
+    # Memoria do Java nao e so heap: metaspace, threads, buffers e GC
+    # contam no cgroup. Reserve explicitamente RAM para o SO e overhead
+    # nativo antes de calcular Xmx (evita MemoryMax proximo demais do heap).
+    local native_overhead_mb=512
+    if [ "$total_ram_mb" -le 1536 ]; then
+        reserve_mb=384
+        native_overhead_mb=256
+    else
+        reserve_mb=$(clamp_value "$reserve_mb" 768 8192)
+        if [ "$((total_ram_mb / 8))" -gt "$native_overhead_mb" ]; then
+            native_overhead_mb=$((total_ram_mb / 8))
+        fi
+    fi
+    xmx_mb=$((total_ram_mb - reserve_mb - native_overhead_mb))
+    xmx_mb=$(clamp_value "$xmx_mb" 384 12288)
 
     xms_mb=$((xmx_mb * 70 / 100))
-    xms_mb=$(clamp_value "$xms_mb" 384 "$xmx_mb")
+    xms_mb=$(clamp_value "$xms_mb" 256 "$xmx_mb")
+    if [ "$xms_mb" -ge "$xmx_mb" ]; then
+        xms_mb=$((xmx_mb * 70 / 100))
+    fi
 
     if [ "$cpu_cores" -le 2 ] && [ "$MC_MAX_PLAYERS" -gt 10 ]; then
         MC_MAX_PLAYERS=10
@@ -99,22 +113,15 @@ compute_minecraft_tuning() {
         MC_BACKUP_RETENTION_DAYS=7
     fi
 
-    service_memory_mb=$((xmx_mb + 1792))
-    local min_allowed_mb
-    local max_allowed_mb
-    min_allowed_mb=$((xmx_mb + 1024))
-    max_allowed_mb=$((total_ram_mb - 256))
-
-    if [ "$max_allowed_mb" -ge "$min_allowed_mb" ]; then
-        service_memory_mb=$(clamp_value "$service_memory_mb" "$min_allowed_mb" "$max_allowed_mb")
-    else
-        # If computed min exceeds max, use max as long as it stays above Xmx.
-        # Ensures systemd memory cap stays above JVM Xmx where possible.
-        if [ "$max_allowed_mb" -gt "$xmx_mb" ]; then
-            service_memory_mb="$max_allowed_mb"
-        else
-            service_memory_mb="$xmx_mb"
-        fi
+    service_memory_mb=$((xmx_mb + native_overhead_mb))
+    # Ao contrario de um simples Xmx+valor fixo, mantem memoria para o host.
+    # Sistemas com menos de 1 GB nao sao adequados a modpacks; neste caso
+    # preservar o minimo de Xmx/overhead pode exceder a RAM disponivel.
+    if [ "$service_memory_mb" -gt "$((total_ram_mb - reserve_mb))" ]; then
+        service_memory_mb=$((total_ram_mb - reserve_mb))
+    fi
+    if [ "$service_memory_mb" -le "$xmx_mb" ]; then
+        service_memory_mb=$((xmx_mb + 256))
     fi
     MC_SERVICE_MEMORY_MAX_MB="$service_memory_mb"
 

@@ -1,11 +1,29 @@
 # Changelog
 
-Todos os mudanças notáveis do projeto Crias-Server serão documentadas neste arquivo.
+Todas as mudanças relevantes do projeto Crias-Server são registradas neste arquivo. Entradas antigas permanecem como histórico e não substituem a documentação operacional atual.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
+
+### Em revisão — proteção de temporários e README principal
+
+- Limpeza de temporários restringida a caminhos de `mktemp` esperados, com validação contra traversal, links simbólicos e registros adulterados.
+- `TMPDIR` não é aceito para alocar temporários em scripts privilegiados; bootstrap usa `/tmp` explicitamente.
+- Snapshots de reinstalação e arquivos intermediários sensíveis passam a compartilhar o ciclo de registro e limpeza, inclusive nos erros.
+- README simplificado para uso como página inicial; explicações técnicas permanecem nos guias de administração.
+- Reforçados os testes de regressão e a documentação dos limites da proteção.
+
+
+### Em revisão — documentação, TUI e validação QEMU (PR #12)
+
+- Implantação antecipada do hub `crias-tui`, diagnóstico somente leitura e fallback de menu sem `gum`.
+- Reserva de memória nativa do Java e do sistema no cálculo de heap/limites.
+- Revisão editorial e técnica da documentação: caminhos administrativos, modpacks próprios, Tailscale, recuperação e limites dos testes.
+- Ampliação dos testes QEMU com contratos reais no Arch, verificação de permissões, limites systemd, injeção controlada de OOM e preservação de logs para investigação.
+- **Estado:** alterações em branch/PR, não publicadas como release de produção.
+
 
 ### Corrigido — Formato ruff reprovado na CI (2026-11-19, rodada 3)
 

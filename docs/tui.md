@@ -1,8 +1,6 @@
 # Interface TUI (Terminal User Interface)
 
-Desde a v1.2.0, o instalador Crias-Server usa uma **TUI** baseada em `gum`
-(Charm) para todos os prompts interativos. Este documento descreve como ela
-funciona, os requisitos, e o comportamento de fallback.
+O Crias-Server utiliza menus de terminal no instalador e um **hub de gerenciamento** independente (`crias-tui`). Este documento distingue as duas interfaces, seus requisitos e as opções de recuperação.
 
 Para visão geral, veja o [README principal](../README.md). Para o seletor de
 modpacks, veja [minecraft/modpacks.md](minecraft/modpacks.md).
@@ -30,6 +28,11 @@ que expõe funções de alto nível (`tui_choose`, `tui_filter`, `tui_confirm`,
 │         └─ QoL:     tui_confirm                               │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+## Instalador e hub: diferenças
+
+- **Instalador (`install.sh`):** perguntas de configuração, seleção de modpack e implantação dos serviços; usa a biblioteca `shared/lib/tui.sh`.
+- **Hub (`sudo crias-tui`):** operações de servidor, monitoramento e backup; oferece menu numerado sem `gum` e diagnóstico de somente leitura (`--doctor`).
 
 ## Requisitos
 
@@ -106,7 +109,7 @@ bash shared/lib/tui.sh selftest
 bash tests/tui-fallback-test.sh
 ```
 
-O caminho `gum` (com TTY) é exercitado manualmente, não em CI.
+O caminho `gum` (com TTY) é exercitado manualmente, não em CI. O hub de gerenciamento oferece menu numerado quando `gum` não está disponível.
 
 ## Veja também
 
@@ -114,3 +117,17 @@ O caminho `gum` (com TTY) é exercitado manualmente, não em CI.
 - [minecraft/modpacks.md](minecraft/modpacks.md) — seletor de modpacks.
 - [security.md](security.md) — configuração de SSH.
 - [`shared/lib/tui.sh`](../shared/lib/tui.sh) — código-fonte da biblioteca.
+
+## Hub de gerenciamento e recuperação
+
+O executável `/usr/local/bin/crias-tui` é implantado **antes** da seleção dos jogos, dos downloads e da instalação de serviços. Isso mantém o diagnóstico acessível se a instalação falhar depois dessa etapa.
+
+```bash
+sudo crias-tui
+sudo crias-tui --doctor  # somente leitura: RAM/swap, estado systemd e OOM
+sudo /opt/crias-server/install.sh  # retomar instalador após diagnosticar
+```
+
+O hub funciona também sem `gum`, com menu numerado. Se não houver stack detectado, mostra o diagnóstico, em vez de falhar silenciosamente. A ausência do arquivo `crias-tui.sh` ou um erro ao copiá-lo agora interrompe a instalação com mensagem explícita.
+
+Para conferir o bootstrap versionado, **não use** `find /opt/crias-server` sem `-L`: a pasta pode ser um link simbólico. Use `readlink -f /opt/crias-server` e `ls -l /opt/crias-server/crias-tui.sh`.

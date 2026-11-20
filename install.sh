@@ -969,8 +969,10 @@ remove_alias_autoload_entry() {
 write_stack_env_file() {
     local env_file
 
-    env_file="$(mktemp "${TMPDIR:-/tmp}/crias_stack_env.XXXXXX")"
-    chmod 600 "$env_file"
+    # Arquivo de configuracao temporario com segredos (webhook, paths).
+    # O registro garante limpeza mesmo se o processo falhar antes do subshell.
+    env_file="$(mktemp_crias_file)" || return 1
+    chmod 0600 "$env_file" || return 1
     # Caller cleans up; validate write before returning path.
     if ! {
         printf 'FORCE_HARDWARE_TIER=%q\n' "$FORCE_HARDWARE_TIER"
@@ -1990,11 +1992,14 @@ deploy_crias_tui() {
     local tui_dest="/usr/local/bin/crias-tui"
 
     if [ ! -f "$tui_source" ]; then
-        print_warning "crias-tui.sh nao encontrado em $tui_source. Pulando deploy."
-        return 0
+        print_error "crias-tui.sh nao encontrado em $tui_source. A release esta incompleta."
+        return 1
     fi
 
-    install -m 0755 "$tui_source" "$tui_dest"
+    if ! install -o root -g root -m 0755 "$tui_source" "$tui_dest"; then
+        print_error "Nao foi possivel instalar o hub em $tui_dest."
+        return 1
+    fi
     print_success "crias-tui deployado em $tui_dest"
     print_step "Rode: sudo crias-tui  (menu interativo do hub)"
 }
@@ -2022,6 +2027,10 @@ main() {
         check_root
         check_arch
     fi
+
+    # Instale o hub antes das etapas que podem falhar (rede, mods, SSH, agent,
+    # systemd): ele permanece disponivel em instalacoes parciais.
+    deploy_crias_tui
 
     select_server_type
 
@@ -2107,7 +2116,6 @@ main() {
 
     # Install monitoring tools (btop, ncdu) on the host.
     install_monitor_tools_if_enabled
-    deploy_crias_tui
 
     print_success "Instalacao concluida para stack: $SERVER_TYPE"
 }

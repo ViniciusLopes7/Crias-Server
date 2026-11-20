@@ -1,13 +1,10 @@
-# discord-agent/NOTES.md
+# Notas de desenvolvimento — agente Go
 
 Notas sobre o estado atual do agente Go.
 
 ## Como buildar localmente
 
-O código é production-ready. O `go.sum` (lockfile de integridade criptográfica)
-**é commitado** no repositório — isso garante builds reprodutíveis e verificáveis
-conforme recomenda a documentação oficial do Go:
-https://go.dev/ref/mod#go-sum-file
+O agente possui testes e fluxo de compilação automatizados, mas isso não garante comportamento em todos os hosts, redes e permissões. O arquivo `go.sum` registra hashes de dependências, permitindo verificar downloads de módulos; ele **não**, isoladamente, garante um build bit a bit reproduzível. Referência: https://go.dev/ref/mod#go-sum-file
 
 ```bash
 cd discord-agent/
@@ -39,8 +36,8 @@ make test           # roda go test -race
 
 ## Estado de implementação
 
-Tudo pronto. Veja [ROADMAP.md](../ROADMAP.md) para status consolidado.
+O estado dos recursos está no [ROADMAP](../ROADMAP.md) e no [README do agente](README.md). A homologação em produção depende de testes no host e de autorização para operações remotas.
 
 ## Próximos passos
 
-Veja [ROADMAP.md](../ROADMAP.md) — seção "Planejado (Pós-v1.0.0)".
+Consulte o [ROADMAP](../ROADMAP.md) e a documentação de [segurança](../docs/security.md) antes de propor mudanças de privilégios ou rede.

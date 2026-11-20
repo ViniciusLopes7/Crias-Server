@@ -5,8 +5,8 @@
 # apresenta um menu interativo (gum) com as ações principais, sem precisar
 # lembrar comandos do manager.
 #
-# Embedado na ISO em /usr/local/bin/crias-tui (via sync-airootfs.sh).
-# Também deployado pelo install.sh em /opt/<stack>/crias-tui.sh.
+# Disponivel em /usr/local/bin/crias-tui desde o inicio do instalador.
+# --doctor funciona mesmo com instalacao parcial ou sem gum.
 #
 # Uso: crias-tui  (abre o menu principal)
 
@@ -20,6 +20,63 @@ if [ -t 1 ]; then
 else
     CYAN=''; GREEN=''; YELLOW=''; NC=''
 fi
+
+# Menu numerado se gum nao estiver presente; mantem TUI acessivel.
+hub_choose() {
+    local header="$1" picked opt i=1
+    shift
+    if command -v gum >/dev/null 2>&1 && [ -t 0 ] && [ -t 1 ]; then
+        gum choose --header="$header" "$@"
+        return $?
+    fi
+    printf "%s\n" "$header" >&2
+    for opt in "$@"; do printf "  %s) %s\n" "$i" "$opt" >&2; i=$((i + 1)); done
+    printf "Escolha (numero ou nome, Enter para voltar): " >&2
+    IFS= read -r picked || return 1
+    [ -n "$picked" ] || return 1
+    if [[ "$picked" =~ ^[0-9]+$ ]] && [ "$picked" -ge 1 ] && [ "$picked" -le "$#" ]; then
+        i=1
+        for opt in "$@"; do
+            if [ "$i" -eq "$picked" ]; then printf "%s\n" "$opt"; return 0; fi
+            i=$((i + 1))
+        done
+    fi
+    for opt in "$@"; do
+        if [ "$opt" = "$picked" ]; then printf "%s\n" "$opt"; return 0; fi
+    done
+    return 1
+}
+
+# Diagnostico somente leitura para reparo e memoria.
+show_diagnostics() {
+    local service
+    echo "=== Diagnostico do Crias-Server (somente leitura) ==="
+    if [ -f /opt/crias-server/install.sh ]; then
+        printf "Instalador: %s\n" "$(readlink -f /opt/crias-server)"
+    else
+        echo "Instalador ausente em /opt/crias-server"
+    fi
+    if [ -x /usr/local/bin/crias-tui ]; then
+        echo "Hub: /usr/local/bin/crias-tui"
+    else
+        echo "Hub: ainda nao instalado"
+    fi
+    if command -v free >/dev/null 2>&1; then echo "--- RAM/swap ---"; free -h || true; fi
+    if command -v systemctl >/dev/null 2>&1; then
+        for service in minecraft terraria; do
+            if systemctl list-unit-files "$service.service" --no-legend 2>/dev/null | grep -Fq "$service.service"; then
+                echo "--- $service: status e limites ---"
+                systemctl show "$service.service" --no-pager -p ActiveState -p SubState -p Result -p NRestarts -p MemoryMax -p MemoryCurrent -p MemoryPeak -p MemorySwapMax 2>/dev/null || true
+            fi
+        done
+    fi
+    if command -v journalctl >/dev/null 2>&1; then
+        echo "--- Ultimos eventos OOM (se disponiveis) ---"
+        journalctl -k -b --no-pager 2>/dev/null | grep -Ei "memory cgroup out of memory|out of memory: killed process|oom-kill" | tail -n 8 || true
+    fi
+    echo "Logs: sudo journalctl -u minecraft -n 80 --no-pager"
+    echo "Instalador: sudo /opt/crias-server/install.sh"
+}
 
 # (AUDIT-A P2-4) Deteccao via systemd units + manager no libexec: as copias
 # em /opt/<stack>-server/ foram REMOVIDAS pela migracao EXP-34 (eram
@@ -83,17 +140,22 @@ show_header() {
 }
 
 main() {
+    case "${1:-}" in
+        --doctor|doctor|diagnose) show_diagnostics; return 0 ;;
+        --help|-h) echo "Uso: crias-tui [--doctor|--help]"; return 0 ;;
+        "") ;;
+        *) echo "Opcao desconhecida: $1" >&2; return 2 ;;
+    esac
+
     # Detecta stack
     local stack
     stack="$(detect_stack)"
 
     if [ -z "$stack" ]; then
         echo "${YELLOW}Nenhum stack do Crias-Server detectado.${NC}"
-        echo "  /opt/minecraft-server/ ou /opt/terraria-server/ não encontrados."
-        echo ""
-        echo "Para instalar: sudo /opt/crias-server/install.sh"
-        echo "Ou: curl -fsSL https://raw.githubusercontent.com/ViniciusLopes7/Crias-Server/main/crias-bootstrap.sh | sudo bash"
-        exit 0
+        echo "  Nenhuma unit/manager foi localizada. A instalacao pode estar incompleta."
+        show_diagnostics
+        return 0
     fi
 
     local manager_script
@@ -101,29 +163,23 @@ main() {
     local service
     service="$(get_service_name "$stack")"
 
-    # Verifica se gum está disponível
-    if ! command -v gum >/dev/null 2>&1; then
-        echo "${YELLOW}gum não disponível. Use o manager diretamente:${NC}"
-        echo "  sudo $manager_script"
-        exit 1
-    fi
-
     # Menu principal
     while true; do
         show_header "$stack" "$service"
 
         local choice
-        choice=$(gum choose --header="Crias-Server Hub — selecione:" \
+        choice=$(hub_choose "Crias-Server Hub — selecione:" \
             "🎮 Servidor" \
             "📊 Monitoramento" \
             "💾 Backup" \
             "⚙️  Sistema" \
+            "🩺 Diagnóstico" \
             "🚪 Sair") || break
 
         case "$choice" in
             "🎮 Servidor")
                 local srv_choice
-                srv_choice=$(gum choose --header="Servidor ($stack):" \
+                srv_choice=$(hub_choose "Servidor ($stack):" \
                     "Start" "Stop" "Restart" "Status" "Console" "Logs" "← Voltar") || continue
                 case "$srv_choice" in
                     "Start") sudo "$manager_script" start ;;
@@ -137,7 +193,7 @@ main() {
                 ;;
             "📊 Monitoramento")
                 local mon_choice
-                mon_choice=$(gum choose --header="Monitoramento:" \
+                mon_choice=$(hub_choose "Monitoramento:" \
                     "btop (CPU/RAM/processos)" \
                     "ncdu (uso de disco)" \
                     "← Voltar") || continue
@@ -149,7 +205,7 @@ main() {
                 ;;
             "💾 Backup")
                 local bk_choice
-                bk_choice=$(gum choose --header="Backup:" \
+                bk_choice=$(hub_choose "Backup:" \
                     "Backup agora" \
                     "Configurar timer systemd" \
                     "← Voltar") || continue
@@ -161,7 +217,7 @@ main() {
                 ;;
             "⚙️  Sistema")
                 local sys_choice
-                sys_choice=$(gum choose --header="Sistema:" \
+                sys_choice=$(hub_choose "Sistema:" \
                     "Reconfigurar hardware (tier)" \
                     "Health check" \
                     "Hardware report" \
@@ -169,7 +225,7 @@ main() {
                 case "$sys_choice" in
                     "Reconfigurar hardware"*)
                         local tier_choice
-                        tier_choice=$(gum choose --header="Forçar tier?" \
+                        tier_choice=$(hub_choose "Forçar tier?" \
                             "Auto" "LOW" "MID" "HIGH" "← Voltar") || continue
                         case "$tier_choice" in
                             "Auto") sudo "$manager_script" reconfigure-hardware ;;
@@ -183,6 +239,10 @@ main() {
                         sudo "$manager_script" hardware-report; read -r -p "Enter..." ;;
                     "← Voltar") continue ;;
                 esac
+                ;;
+            "🩺 Diagnóstico")
+                show_diagnostics
+                read -r -p "Enter para voltar..." _ || true
                 ;;
             "🚪 Sair")
                 break

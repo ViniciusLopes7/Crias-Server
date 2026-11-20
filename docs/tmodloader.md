@@ -1,14 +1,16 @@
 # tModLoader (Terraria com mods)
 
-Desde a v1.2.1, o Crias-Server suporta **tModLoader** como substituto do
-servidor vanilla do Terraria. O tModLoader é a plataforma oficial de mods do
-Terraria (sucessor do tAPI), mantido pela equipe oficial.
+O Crias-Server oferece **tModLoader** como alternativa ao servidor vanilla do Terraria. Este guia explica a seleção de versão, o download de mods, a configuração e as limitações da operação em systemd.
 
 > **Status**: Implementado em v1.2.1. Substitui o binário vanilla quando
 > `TERRARIA_USE_TMODLOADER=true`. Usa a mesma porta (7777), o mesmo diretório
 > (`/opt/terraria-server`), e a mesma service unit systemd (`terraria.service`).
 
 Para visão geral do stack Terraria, veja [terraria/README.md](terraria/README.md).
+
+## Quando escolher tModLoader
+
+Utilize tModLoader quando seus jogadores também usarem uma instalação cliente compatível. Um mundo ou mod não deve ser copiado diretamente para o servidor sem conferir a versão, os nomes internos e as dependências. O instalador pode baixar mods via SteamCMD, mas isso não garante compatibilidade entre todos eles.
 
 ## Como funciona
 
@@ -160,7 +162,7 @@ backup inclui os dirs do tModLoader.
 - **Sem RCON**: tModLoader (como vanilla Terraria) não tem RCON nativo. O
   `crias-agent` (controle Discord) não suporta Terraria por enquanto.
 
-## Gotchas
+## Problemas conhecidos e diagnóstico
 
 - **.NET JIT na primeira execução**: o tModLoader compila código na primeira
   execução, causando um pico de CPU de 10-30s. O `terraria.service` tem

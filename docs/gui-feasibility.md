@@ -1,6 +1,6 @@
 # Estudo de Viabilidade de GUI (F6)
 
-> **Fase**: F6 (estudo — sem código). Documenta opções de interface gráfica para
+> **Natureza do documento:** estudo histórico de viabilidade (não é um plano aprovado de implementação). Documenta opções de interface gráfica para
 > o Crias-Server, alinhado à visão de longo prazo: **TUI como hub central
 > headless → eventualmente GUI web estilo CasaOS** (dashboard com ícones por
 > categoria). Recomendação gateada por hardware tier.
@@ -252,10 +252,7 @@ fases pós-F8. Razões:
 **Não recomendado**: Cockpit (genérico, pesado pra LOW), CasaOS fork (Docker
 mismatch), ttyd/wetty (não são dashboard), sway (headless não usa).
 
-**Próxima fase do plano atual (F7)**: melhorar superfície de testes + QEMU
-(validar o autologin do F1 end-to-end, cobrir install_ssh_if_enabled,
-deep-smoke com banner). A GUI fica como estudo documentado — implementação
-só se o usuário decidir seguir (pós-F8).
+**Situação atual:** a validação QEMU de Arch/systemd já foi implementada e é mantida em CI. A GUI permanece somente como estudo; não há uma decisão de implementação registrada neste documento. Consulte [testing-qemu.md](testing-qemu.md) para a cobertura real e o [ROADMAP](../ROADMAP.md) para próximos passos.
 
 ## 8. Veja também
 

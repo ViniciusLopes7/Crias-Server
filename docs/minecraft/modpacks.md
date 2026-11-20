@@ -1,53 +1,40 @@
-# Seletor de Modpacks (Minecraft)
+# Seleção e instalação de modpacks Minecraft
 
-Desde a v1.2.0, o instalador Crias-Server oferece um **seletor dinâmico de
-modpacks** que busca dados em tempo real na [API do Modrinth](https://docs.modrinth.com).
-Este documento descreve as 4 fontes disponíveis, a lógica de compatibilidade, e
-a sugestão de versão mais próxima.
+O instalador Crias-Server aceita modpacks publicados no Modrinth e arquivos pessoais no formato `.mrpack`. Este guia cobre o uso interativo e automático, os critérios de compatibilidade e os problemas mais comuns.
 
-Para os mods QoL (instalados junto ao modpack), veja [mods.md](mods.md). Para
-o TUI em geral, veja [../tui.md](../tui.md).
+> **Antes de começar:** a máquina precisa de internet para baixar o loader, o servidor e os arquivos referenciados pelo modpack. Mesmo usando um `.mrpack` de pendrive, a instalação normalmente **não é totalmente offline**.
 
-## Fontes de modpack
+## Fontes disponíveis
 
-Ao instalar Minecraft, o instalador pergunta (via TUI) qual fonte de modpack
-você quer:
+| Opção no instalador | Quando usar | Entrada necessária |
+|---|---|---|
+| Top 10 Modrinth | Explorar projetos populares | Seleção na lista |
+| Buscar modpack por nome | Encontrar um projeto publicado | Termo de pesquisa |
+| Slug Modrinth manual | Usar projeto publicado conhecido | Slug do projeto |
+| Arquivo `.mrpack` | Importar pacote próprio ou de pendrive | Caminho absoluto acessível no Linux |
+| Link HTTPS `.mrpack` | Baixar pacote próprio hospedado | URL direta de download HTTPS |
+| Vanilla (apenas loader) | Instalar servidor sem modpack | Loader e versão do jogo |
 
-| Opção | Descrição | Precisa de internet? |
-|-------|-----------|----------------------|
-| **Top 10 modpacks (Modrinth)** | Os 10 modpacks mais baixados no Modrinth (ordenado por `downloads`). Seleção via busca fuzzy. | Sim |
-| **Buscar modpack por nome** | Busca livre por nome (ex.: "Fabulously Optimized"). Retorna até 10 resultados. | Sim |
-| **Vanilla (só loader, sem modpack)** | Instala apenas o servidor vanilla com o loader selecionado (fabric/quilt/vanilla/forge/neoforge). Sem mods. | Sim (para o server.jar) |
-| **Slug Modrinth manual** | Você digita o slug do modpack no Modrinth (ex.: `adrenaline`, `fabulously-optimized`). Útil para modpacks específicos. | Sim |
+### Modpack próprio por pendrive ou arquivo local
 
-> **Sem internet**: a seleção dinâmica e o download do server.jar/modpack
-> exigem internet. O instalador aborta com mensagem clara se não houver
-> conectividade (não há fallback offline — o servidor precisa ser baixado de
-> qualquer forma).
+1. Conecte o pendrive ao servidor e monte a partição, se necessário.
+2. Confira o caminho com `lsblk -o NAME,LABEL,FSTYPE,MOUNTPOINTS`.
+3. Escolha **Arquivo .mrpack (local ou pendrive montado)** e informe o caminho absoluto, por exemplo `/run/media/usuario/PENDRIVE/MeuPack.mrpack`.
+4. Confirme que o arquivo está legível; o instalador valida a estrutura e reconcilia a versão/loader efetivos após importar.
+
+### Modpack próprio por link
+
+Use **Link direto HTTPS de .mrpack** e informe uma URL pública que devolva o arquivo, não uma página de visualização ou login. Links privados ou temporários podem expirar antes do download terminar. O instalador valida o arquivo recebido antes de executar `mrpack-install`.
+
+Evite adicionar mods QoL ou extras ao importar um modpack fechado, salvo quando você verificar a compatibilidade das dependências.
 
 ## Fluxo de seleção
 
-```
-1. Escolha a fonte (menu TUI)
-       │
-       ├─ Top 10 / Busca ──► 2. Lista de modpacks (gum filter, busca fuzzy)
-       │                       mostra: "slug | title | ↓downloads"
-       │                       │
-       │                       └─► 3. Seleciona um modpack
-       │                              │
-       └─ Slug manual ────────────────┤
-                                      ▼
-                       4. Busca versões compatíveis com o loader+MC
-                          (filtro server-side na API Modrinth)
-                              │
-                              ├─ há versões compatíveis ──► 5a. Seleciona versão (gum filter)
-                              │                              mostra: "version | game_versions | type"
-                              │
-                              └─ nenhuma compatível ──────► 5b. Sugere MC mais próxima
-                                                             pergunta: trocar MC?
-                                                             ├─ sim ──► re-busca versões (5a)
-                                                             └─ não ──► continua (modpack pode falhar)
-```
+1. Escolha a fonte do modpack no instalador.
+2. Para projetos do Modrinth, selecione o resultado e uma versão compatível; se não houver correspondência, o instalador sugere outra versão do Minecraft.
+3. Para `.mrpack` local ou remoto, informe o caminho absoluto ou a URL HTTPS direta. O instalador valida o arquivo e utiliza o manifesto do pacote.
+4. O `mrpack-install` baixa os arquivos e prepara o servidor. A reconciliação posterior lê `packstate.json` para identificar o Minecraft e o loader efetivos.
+5. Revise o resumo antes de confirmar; a compatibilidade de um pacote não garante que todos os mods funcionem na máquina.
 
 ## Compatibilidade (loader + versão MC)
 
@@ -86,35 +73,33 @@ Exemplo: se você selecionou o modpack X e a versão MC `1.21.5`, mas o modpack
 só tem versões para `1.21.4` e `1.20.6`, o instalador sugere `1.21.4` (mesma
 minor) e pergunta se deseja trocar a versão do MC.
 
-## Instalação do modpack
+## Instalação e configurações não interativas
 
-A instalação é feita pelo [`mrpack-install`](https://github.com/nothub/mrpack-install)
-(versão pinada em `MRPACK_INSTALL_VERSION` no `config.env`). O fluxo:
+Os pacotes são instalados com [`mrpack-install`](https://github.com/nothub/mrpack-install), cuja versão é fixada em `MRPACK_INSTALL_VERSION` no `config.env`. No fluxo sem modpack o comando de servidor usa `mrpack-install server <loader> --minecraft-version <versão>`.
 
-| Fonte | Comando |
-|-------|---------|
-| `adrenaline` (default) | `mrpack-install adrenaline [version] --server-dir ... --server-file server.jar` |
-| `modrinth` (top-10/busca/slug) | `mrpack-install <slug> [version] --server-dir ... --server-file server.jar` |
-| `vanilla` | `mrpack-install <loader> <mc_version> --server-dir ... --server-file server.jar` |
-
-A versão do modpack (selecionada no passo 5a) é passada como argumento
-posicional. Se vazia, `mrpack-install` usa a mais recente.
-
-## Configuração não-interativa
-
-Em `NON_INTERACTIVE=true` (CI/automação), o seletor TUI **não é usado**. Use
-as variáveis em `config.env`:
+Exemplo para um arquivo armazenado no próprio servidor:
 
 ```bash
 SERVER_TYPE="minecraft"
 NON_INTERACTIVE="true"
 ACCEPT_EULA="true"
-MINECRAFT_LOADER="fabric"          # fabric|quilt|vanilla|forge|neoforge
-MINECRAFT_VERSION="26.3"            # versão específica
-MINECRAFT_MODPACK_SOURCE="modrinth"  # adrenaline|modrinth|vanilla
-MINECRAFT_MODPACK_SLUG="adrenaline"
-MINECRAFT_ADRENALINE_VERSION=""    # vazio = mais recente
+MINECRAFT_INSTALL_MODPACK="true"
+MINECRAFT_MODPACK_SOURCE="arquivo"
+MINECRAFT_MODPACK_FILE="/home/usuario/modpacks/MeuPack.mrpack"
+MINECRAFT_INSTALL_QOL_MODS="false"
+MINECRAFT_EXTRA_MODS=""
 ```
+
+Para baixar o pacote, substitua as duas linhas de fonte/caminho por:
+
+```bash
+MINECRAFT_MODPACK_SOURCE="link"
+MINECRAFT_MODPACK_URL="https://exemplo.org/MeuPack.mrpack"
+```
+
+Para um projeto publicado no Modrinth, use `MINECRAFT_MODPACK_SOURCE=modrinth`, `MINECRAFT_MODPACK_SLUG=slug` e, opcionalmente, `MINECRAFT_ADRENALINE_VERSION=versão` (nome legado que também controla modpacks genéricos).
+
+O instalador examina `packstate.json` depois da instalação e utiliza a versão e o loader efetivos para ajustar o Java e o runtime. Ele não deve supor que a versão previamente escolhida no menu seja a mesma que a do pacote.
 
 ## Mods QoL
 
@@ -131,8 +116,7 @@ lista e guias.
 ### "Nenhum modpack encontrado na busca do Modrinth"
 
 - Verifique conexão com internet: `curl -fsSL https://api.modrinth.com/v2/tag/loader`
-- Se a API estiver fora do ar, use a opção "Slug Modrinth manual" com `adrenaline`
-  (default) ou `vanilla`.
+- Se a API estiver fora do ar, o slug manual depende da mesma API. Você pode selecionar um arquivo `.mrpack` local, lembrando que as dependências do pacote ainda precisam ser baixadas.
 
 ### "Nenhuma versão de X compatível com MC Y"
 
@@ -140,6 +124,10 @@ lista e guias.
   mais próxima, ou escolha outro modpack.
 - Verifique a página do modpack em `https://modrinth.com/modpack/<slug>` para
   ver as versões suportadas.
+
+### O link baixa uma página HTML em vez de um `.mrpack`
+
+Use o URL **direto** de um asset público. Confira se ele continua acessível e não exige cookies ou autenticação.
 
 ### `mrpack-install` falha ao instalar
 

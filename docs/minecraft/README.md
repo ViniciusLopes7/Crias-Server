@@ -1,6 +1,6 @@
 # Stack Minecraft
 
-Documentação específica do stack Minecraft. Para visão geral, veja [../README.md](../README.md).
+Guia de operação do Minecraft no Crias-Server. Para instalar o sistema desde o início, siga o [tutorial](../tutorial.md); para importar um modpack particular, veja [modpacks](modpacks.md).
 
 ## Componentes instalados
 
@@ -9,7 +9,7 @@ Documentação específica do stack Minecraft. Para visão geral, veja [../READM
 | `/opt/minecraft-server/start-server.sh` | Launcher runtime (JAVA_OPTS como array; valida o Java exigido pela versão do jogo: 25 p/ 26.x, 21 p/ 1.20.5–1.21.x) |
 | `/usr/local/libexec/crias/mc-manager.sh` | CLI de gerenciamento (start/stop/status/console/backup/health/...) — root:root, fora da árvore gravável pelo jogo (EXP-34) |
 | `/opt/minecraft-server/backup-cron.sh` | Backup com RCON save-lock + zstd + flock |
-| `/opt/minecraft-server/setup-cron.sh` | Configura timer systemd de backup |
+| `/usr/local/libexec/crias/setup-cron.sh` | Configura timer systemd de backup (script administrativo) |
 | `/opt/minecraft-server/minecraft.service` | Unit systemd (gerada via envsubst com hardening) |
 | `/opt/minecraft-server/server.properties` | Config do servidor (gerado pelo installer) |
 | `/opt/minecraft-server/runtime.env` | Tuning aplicado (heap, GC, G1 region size) |
@@ -33,12 +33,12 @@ sudo /usr/local/libexec/crias/mc-manager.sh health             # porta + RCON
 sudo /usr/local/libexec/crias/mc-manager.sh hardware-report    # perfil aplicado
 sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware        # recalibrar tier
 sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware HIGH   # forçar tier
-sudo /opt/minecraft-server/setup-cron.sh                    # configurar timer de backup
+sudo /usr/local/libexec/crias/mc-manager.sh setup-cron      # configurar timer de backup
 ```
 
 ### Aliases de shell
 
-O installer gera `/opt/minecraft-server/comandos.sh` e adiciona autoload em `/etc/profile.d/crias-server.sh`. Para usar imediatamente:
+O instalador publica aliases estáticos em `/etc/profile.d/crias-server.sh` (não executa scripts controlados pelo usuário do jogo como root). Para carregá-los na sessão atual:
 
 ```bash
 source /etc/profile.d/crias-server.sh
@@ -49,15 +49,15 @@ source /etc/profile.d/crias-server.sh
 | `mcstart` | `sudo systemctl start minecraft` |
 | `mcstop` | `sudo systemctl stop minecraft` |
 | `mcrestart` | `sudo systemctl restart minecraft` |
-| `mcstatus` | `sudo mc-manager.sh status` |
+| `mcstatus` | `sudo /usr/local/libexec/crias/mc-manager.sh status` |
 | `mclogs` | `sudo journalctl -u minecraft -f` |
-| `mcconsole` | `sudo mc-manager.sh console` |
-| `mcbackup` | `sudo mc-manager.sh backup` |
-| `mcsetupcron` | `sudo mc-manager.sh setup-cron` |
+| `mcconsole` | `sudo /usr/local/libexec/crias/mc-manager.sh console` |
+| `mcbackup` | `sudo /usr/local/libexec/crias/mc-manager.sh backup` |
+| `mcsetupcron` | `sudo /usr/local/libexec/crias/mc-manager.sh setup-cron` |
 | `mcdir` | `cd /opt/minecraft-server` |
 | `mcprops` | `sudo nano /opt/minecraft-server/server.properties` |
-| `mchw` | `sudo mc-manager.sh hardware-report` |
-| `mcreconfig` | `sudo mc-manager.sh reconfigure-hardware` |
+| `mchw` | `sudo /usr/local/libexec/crias/mc-manager.sh hardware-report` |
+| `mcreconfig` | `sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware` |
 
 ## Importar um modpack próprio
 
@@ -150,7 +150,7 @@ Para o **seletor de modpacks dinâmico** (top-10 Modrinth, busca por nome,
 compatibilidade loader+MC, sugestão de versão mais próxima), veja
 [modpacks.md](modpacks.md).
 
-### Loaders suportados (v1.2.0)
+### Loaders suportados
 
 | Loader | Descrição |
 |--------|-----------|
@@ -192,7 +192,7 @@ Causas comuns:
 - Porta 25565 em uso: `sudo ss -tlnp | grep 25565`
 - `eula.txt` faltando: `echo "eula=true" > /opt/minecraft-server/eula.txt`
 
-### OutOfMemoryError
+### Falta de memória ou encerramento por OOM
 
 Heap está em `/opt/minecraft-server/runtime.env` (`MIN_RAM`, `MAX_RAM`). Reduza via `reconfigure-hardware`:
 
@@ -225,3 +225,8 @@ Requer `mcrcon` instalado (AUR). Veja a seção "Backup com RCON save-lock" acim
 - [../Tailscale.md](../Tailscale.md) — Conexão via Tailscale
 - [../restore.md](../restore.md) — Restore de backups
 - [../security.md](../security.md) — Firewall, logs, hardening
+
+## Recuperação de instalação parcial
+
+Se `sudo crias-tui` não existir, confira `ls -l /usr/local/bin/crias-tui` e `readlink -f /opt/crias-server`. Em versões atualizadas, o hub é instalado **antes** de configurar os jogos e oferece `sudo crias-tui --doctor` para avaliar memória e serviços sem alterar o host. Não reinstale ou remova um mundo existente antes de verificar a integridade do backup.
+

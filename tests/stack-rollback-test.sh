@@ -81,6 +81,7 @@ STACK_NAME="minecraft" \
 STACK_USER="minecraft" \
 STACK_SERVER_DIR="$server_dir" \
 STACK_SERVICE_TEMPLATE="$ROOT_DIR/minecraft/minecraft.service" \
+CRIAS_TEST_SNAPSHOT_FILE="$tmp_dir/snapshot-path" \
 bash -c '
     set -euo pipefail
     # shellcheck source=/dev/null
@@ -99,6 +100,8 @@ bash -c '
     export DRY_RUN
 
     stack_download_and_install() {
+        # Guarda o nome aleatorio real para confirmar que EXIT removeu.
+        printf "%s\n" "$STACK_SNAPSHOT_DIR" > "$CRIAS_TEST_SNAPSHOT_FILE"
         # Falha simulada no meio da instalacao (apos o deploy de scripts).
         deploy_stack_scripts
         # (CR-04) Simula o installer sobrescrevendo os extras declarados:
@@ -177,9 +180,15 @@ if [ -e "$server_dir/server.jar" ]; then
     exit 1
 fi
 
-# CONTRATO 5: snapshot dir nao vaza em /tmp.
-if ls "${TMPDIR:-/tmp}"/crias-stack-snapshot.* >/dev/null 2>&1; then
-    echo "FAIL: diretorio de snapshot nao foi limpo apos o rollback"
+# CONTRATO 5: o snapshot (novo modelo crias.XXXXXX) deve ser removido.
+# Validar o caminho exato evita falsas aprovacoes quando o prefixo muda.
+if [ ! -s "$tmp_dir/snapshot-path" ]; then
+    echo "FAIL: caminho do snapshot nao foi registrado no teste" >&2
+    exit 1
+fi
+snapshot_path="$(cat "$tmp_dir/snapshot-path")"
+if [ -e "$snapshot_path" ] || [ -L "$snapshot_path" ]; then
+    echo "FAIL: snapshot permaneceu apos rollback: $snapshot_path" >&2
     exit 1
 fi
 

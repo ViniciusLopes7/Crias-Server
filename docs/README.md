@@ -1,6 +1,6 @@
 # Documentação Crias-Server
 
-Índice central de toda a documentação. Para visão geral de alto nível, veja o [README principal](../README.md).
+Este índice organiza os guias por tarefa. Comece pelo tutorial para instalar; consulte os guias específicos para configurar, operar e diagnosticar problemas. Para uma visão geral, veja o [README principal](../README.md).
 
 ## Primeiros passos
 
@@ -10,6 +10,13 @@
 | [tutorial.md](tutorial.md) | Fluxo completo: instalar (bootstrap curl ou git clone) → operar → troubleshoot |
 | [../CHANGELOG.md](../CHANGELOG.md) | Histórico de versões |
 | [../ROADMAP.md](../ROADMAP.md) | Status de implementação e próximos passos |
+
+## Como usar esta documentação
+
+- **Primeira instalação ou atualização:** [tutorial](tutorial.md).
+- **Servidor não inicia ou TUI ausente:** [TUI e recuperação](tui.md) e [ajustes de memória](hardware-tuning.md).
+- **Importar modpack próprio:** [Minecraft e `.mrpack`](minecraft/modpacks.md).
+- **Restaurar mundo:** [procedimento de backup e restauração](restore.md), começando pela verificação do arquivo.
 
 ## Administração
 
@@ -48,7 +55,7 @@
 
 ## CI/CD
 
-Workflow único: [../.github/workflows/ci.yml](../.github/workflows/ci.yml) — 10 jobs (3 lint, 4 test, 2 build, 1 release consolidada).
+O workflow [CI/CD](../.github/workflows/ci.yml) executa lint, testes por linguagem, validações em container Arch, launchers Java 21/25 e uma VM QEMU com Arch Linux e systemd. Jobs de build e publicação são condicionados ao evento. Uma execução verde **não equivale** à validação de todos os cenários de produção.
 
 ### Lint + Test (paralelos, rodam em todo push/PR)
 
@@ -58,11 +65,20 @@ Workflow único: [../.github/workflows/ci.yml](../.github/workflows/ci.yml) — 
 | `lint-go` | `go vet` + `gofmt -l` (após `go mod tidy` + proto) |
 | `lint-python` | `ruff check` + `ruff format --check` |
 | `test-shell` | Quick tests + contracts + static-audit + stack-installer + mutation test |
-| `test-shell-arch` | `arch-smoke` + `arch-dry-install` (Arch container) |
-| `test-go` | `go test -race` (após `go mod tidy` + proto) |
-| `test-python` | `pytest` em Python 3.12 |
+| `test-shell-arch` | `arch-smoke` + `arch-dry-install` (container Arch, sem systemd como PID 1) |
+| `test-go` | `go test -race` (após `go mod tidy` e geração de protobuf) |
+| `test-python` | Testes Python com `pytest` |
 
-### Build (paralelos, só em push to main ou tag `v*`)
+### Integração real e QEMU
+
+| Job | O que valida |
+|---|---|
+| `test-minecraft-jvm` | Launcher de produção em Java 21 e 25, com servidor de teste inofensivo. |
+| `test-arch-vm` | Arch real em QEMU com systemd, serviços, download dos servidores, `.mrpack` e caminhos de falha. Os jogos Minecraft param na EULA. |
+
+Detalhes, evidências e limites de cobertura: [validação QEMU](testing-qemu.md).
+
+### Build (conforme evento do workflow)
 
 | Job | Função |
 |-----|--------|

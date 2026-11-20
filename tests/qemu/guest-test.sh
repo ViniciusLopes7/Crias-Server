@@ -9,6 +9,27 @@ bash tests/crias-bootstrap-test.sh
 bash tests/backup-integrity-test.sh
 bash tests/modpack-state-test.sh
 bash tests/temp-cleanup-test.sh
+
+# Executa contratos criticos tambem num Arch com systemd real.
+echo "[QEMU] Contratos de install, rollback, modpacks, memoria e TUI..."
+bash tests/install-contracts.sh
+bash tests/stack-rollback-test.sh
+bash tests/manager-safety-test.sh
+bash tests/custom-mrpack-test.sh
+bash tests/minecraft-tuning-test.sh
+bash tests/crias-tui-deploy-test.sh
+
+# Contraprova funcional do deploy: comando real em /usr/local/bin, permissao
+# root:root, modo executavel e --doctor independente de servico instalado.
+# shellcheck source=/dev/null
+source "$root/install.sh"
+DRY_RUN=false
+deploy_crias_tui
+test -x /usr/local/bin/crias-tui
+test "$(stat -c %U:%G /usr/local/bin/crias-tui)" = root:root
+/usr/local/bin/crias-tui --doctor > /tmp/crias-tui-doctor.log
+grep -q "Diagnostico do Crias-Server" /tmp/crias-tui-doctor.log
+echo "PASS: TUI instalado antecipadamente, fallback e doctor no host Arch"
 # Build a harmless JVM probe and run it through the actual systemd unit and
 # production launcher, with the same sandbox and a non-root service account.
 useradd -r -M -s /usr/bin/nologin criasvm
@@ -51,8 +72,49 @@ for i in $(seq 1 30); do
 done
 systemctl is-active --quiet minecraft.service
 journalctl -u minecraft.service --no-pager | grep -q CRIAS_VM_PROBE_STARTED
+# Teste do isolamento e dos limites reais da unit gerada.
+[ "$(systemctl show -p User --value minecraft.service)" = criasvm ]
+[ "$(systemctl show -p MemoryMax --value minecraft.service)" = 536870912 ]
+[ "$(systemctl show -p MemorySwapMax --value minecraft.service)" = 0 ]
+[ "$(systemctl show -p NoNewPrivileges --value minecraft.service)" = yes ]
+server_pid="$(systemctl show -p MainPID --value minecraft.service)"
+[ "$server_pid" -gt 1 ]
+[ "$(ps -o user= -p "$server_pid" | xargs)" = criasvm ]
+echo "PASS: unit systemd real isolada, sem root e com limites aplicados"
 systemctl stop minecraft.service
 ! systemctl is-active --quiet minecraft.service
+
+# Injeta OOM isolado para validar a observabilidade de falha de cgroup.
+# Nao altera a unit do jogo; a VM e descartavel e nao aceita EULA.
+cat > /etc/systemd/system/crias-oom-test.service <<EOF
+[Unit]
+Description=Crias CI OOM fault injection
+[Service]
+Type=simple
+User=criasvm
+WorkingDirectory=/opt/crias-qemu-test
+ExecStart=/usr/bin/java -Xms256m -Xmx256m -XX:+AlwaysPreTouch -cp /opt/crias-qemu-test Probe nogui
+MemoryMax=64M
+MemorySwapMax=0
+OOMPolicy=stop
+Restart=no
+EOF
+systemctl daemon-reload
+systemctl start crias-oom-test.service
+oom_result=""
+for i in $(seq 1 40); do
+    oom_result="$(systemctl show -p Result --value crias-oom-test.service)"
+    [ "$oom_result" = "oom-kill" ] && break
+    if ! systemctl is-active --quiet crias-oom-test.service; then break; fi
+    sleep 1
+done
+if [ "$oom_result" != "oom-kill" ]; then
+    systemctl status crias-oom-test.service --no-pager -l >&2 || true
+    journalctl -u crias-oom-test.service --no-pager >&2 || true
+    echo "FAIL: cgroup OOM nao foi detectado como oom-kill ($oom_result)" >&2
+    exit 1
+fi
+echo "PASS: fault injection OOM marcado corretamente pelo systemd"
 # Install in a fresh shell so Minecraft hook functions cannot leak into Terraria.
 env TERRARIA_SERVER_DIR=/opt/terraria-server TERRARIA_USER=terraria \
     TERRARIA_USE_TMODLOADER=false FORCE_HARDWARE_TIER=LOW \

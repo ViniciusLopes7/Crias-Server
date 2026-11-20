@@ -34,6 +34,23 @@ assert_match() {
     fi
 }
 
+
+# Reserve margem para memoria nativa da JVM e recursos do sistema.
+for ram in 1024 2048 4096 8192 16384; do
+    compute_minecraft_tuning "$ram" 4 SSD MID
+    xmx="${MC_MAX_RAM%M}"
+    xms="${MC_MIN_RAM%M}"
+    limit="$MC_SERVICE_MEMORY_MAX_MB"
+    if [ "$xms" -ge "$xmx" ] || [ "$xmx" -ge "$limit" ]; then
+        echo "FAIL: RAM $ram: invalid xms/xmx/MemoryMax ($xms/$xmx/$limit)" >&2
+        exit 1
+    fi
+    if [ "$ram" -ge 2048 ]; then
+        [ "$((limit - xmx))" -ge 512 ] || { echo "FAIL: JVM sem folga nativa ($ram)" >&2; exit 1; }
+        [ "$((ram - limit))" -ge 768 ] || { echo "FAIL: SO sem reserva ($ram)" >&2; exit 1; }
+    fi
+done
+
 compute_minecraft_tuning 4096 4 SSD MID
 assert_match "$MC_MIN_RAM" '^[0-9]+M$' 'MC_MIN_RAM format'
 assert_match "$MC_MAX_RAM" '^[0-9]+M$' 'MC_MAX_RAM format'

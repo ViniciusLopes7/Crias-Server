@@ -1,10 +1,10 @@
 # Segurança e Operação
 
-Pontos operacionais que não devem ficar espalhados nos scripts: firewall, logs, health checks, hardening systemd, cleanup do stack oposto.
+Referência de segurança e operação: firewall, SSH, permissões, logs, serviços systemd e políticas de limpeza. Execute comandos que modificam acesso remoto somente depois de validar como recuperar o host.
 
 ## Firewall
 
-O projeto **não** abre portas automaticamente. Se o servidor estiver em rede pública, libere apenas o necessário.
+Abertura de portas e permissões devem ser revistas no host de destino. Para servidores expostos à internet, permita apenas os serviços necessários; não presuma que as regras existentes foram alteradas pelo instalador.
 
 - **Minecraft**: porta configurada em `server.properties` (default: `25565`)
 - **Terraria**: porta configurada em `config/serverconfig.txt` (default: `7777`)
@@ -307,7 +307,7 @@ e **preserva a política de senha existente** (EXP-65): se o host já está
 configurado com `PasswordAuthentication no` (key-only), o instalador não
 reativa senha. A configuração é validada com `sshd -t` ANTES do restart.
 
-## Verificação adicional da release (limitação conhecida — CR-24)
+## Integridade e autenticidade da release
 
 O bootstrap valida o SHA-256 dos assets contra o `sha256sums.txt` da MESMA
 release. Isso protege contra corrupção/URL intermediária, mas não contra um
@@ -319,3 +319,24 @@ infraestrutura de assinatura ainda não está implementada.
 O bootstrap exibe a tag e o commit-alvo da release antes de instalar
 (EXP-40). A branch `main` pode estar à frente da release `latest`; para
 pinar: `CRIAS_RELEASE_TAG=v2026.11.19-<sha> crias-bootstrap`.
+
+## Diagnóstico sem ampliar privilégios
+
+O comando `sudo crias-tui --doctor` coleta informações de serviços, RAM/swap e mensagens OOM sem modificar unidades ou iniciar o jogo. Para um problema de memória, confira `systemctl show minecraft -p MemoryMax -p MemoryPeak -p MemorySwapMax -p NRestarts` e os logs do kernel antes de editar `MemoryMax`. Não use `chmod 777`, desative o sandbox ou execute o Java como root para contornar erros de permissão.
+
+## Arquivos temporários e snapshots
+
+Scripts que carregam `shared/lib/common.sh` criam arquivos temporários por `mktemp_crias_file` ou `mktemp_crias_dir`. O registro é privado (0600) e a limpeza em `EXIT` só remove caminhos gerados por modelos previamente autorizados; entradas desconhecidas, traversal e links simbólicos são ignorados. Unidades systemd temporárias são publicadas por renomeação atômica no diretório de destino e também registradas.
+
+Em execução privilegiada, `TMPDIR` herdado é ignorado: os temporários comuns são criados em `/tmp`, com nomes aleatórios e permissões restritas. O bootstrap igualmente usa `/tmp` diretamente. Isso evita confiar em diretórios de trabalho controláveis por outros usuários, mas **não substitui** a verificação de origem dos downloads.
+
+Snapshots de reinstalação agora são registrados e removidos mesmo quando a captura falha antes do início das alterações. O rollback precisa ocorrer antes da limpeza de temporários — alterar a ordem do `EXIT trap` pode destruir a cópia de recuperação.
+
+Para investigar resíduos sem apagar dados manualmente:
+
+```bash
+sudo find /tmp -maxdepth 1 -name 'crias.*' -printf '%TY-%Tm-%Td %TH:%TM %p\n'
+sudo journalctl -u minecraft -n 80 --no-pager
+```
+
+Não execute `sudo rm -rf /tmp/crias*` como rotina de manutenção. Confirme o processo proprietário e se existe uma instalação ou restauração ativa antes de remover qualquer arquivo.

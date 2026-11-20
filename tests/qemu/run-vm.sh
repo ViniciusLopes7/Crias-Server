@@ -3,9 +3,29 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 tmp="$(mktemp -d)"
+# CI publica os logs em artifact mesmo se uma etapa da VM falhar.
+log_dir="${QEMU_LOG_DIR:-${RUNNER_TEMP:-$root}/crias-qemu-artifacts}"
+mkdir -p "$log_dir"
+vm_ready=false
+vm_success=false
 cleanup() {
+    local status="$?"
+    trap - EXIT
+    if [ "$vm_success" != true ]; then
+        echo "QEMU falhou (exit=$status); diagnosticos em $log_dir" >&2
+        if [ "$vm_ready" = true ]; then
+            ssh "${ssh_opts[@]}" ci@127.0.0.1 \
+                "sudo journalctl -b --no-pager -n 250" \
+                > "$log_dir/failure-journal.log" 2>&1 || true
+            ssh "${ssh_opts[@]}" ci@127.0.0.1 \
+                "sudo systemctl --failed --no-pager; free -h; df -h" \
+                > "$log_dir/failure-system.log" 2>&1 || true
+        fi
+    fi
+    if [ -f "$tmp/serial.log" ]; then cp "$tmp/serial.log" "$log_dir/serial.log" || true; fi
     if [ -n "${vm_pid:-}" ]; then kill "$vm_pid" 2>/dev/null || true; wait "$vm_pid" 2>/dev/null || true; fi
     rm -rf "$tmp"
+    exit "$status"
 }
 trap cleanup EXIT
 base=https://fastly.mirror.pkgbuild.com/images/latest
@@ -48,7 +68,10 @@ for i in $(seq 1 120); do
     sleep 5
 done
 if [ "$ready" != true ]; then cat "$tmp/serial.log" >&2; exit 1; fi
+vm_ready=true
 ssh "${ssh_opts[@]}" ci@127.0.0.1 'sudo cloud-init status --wait'
-tar -C "$root" --exclude=.git -czf "$tmp/repo.tar.gz" .
+tar -C "$root" --exclude=.git --exclude=crias-qemu-artifacts -czf "$tmp/repo.tar.gz" .
 scp -q -i "$tmp/key" -P 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$tmp/repo.tar.gz" ci@127.0.0.1:/tmp/crias-repo.tar.gz
-ssh "${ssh_opts[@]}" ci@127.0.0.1 'mkdir -p /tmp/crias-repo && tar -xzf /tmp/crias-repo.tar.gz -C /tmp/crias-repo && sudo bash /tmp/crias-repo/tests/qemu/guest-test.sh /tmp/crias-repo'
+ssh "${ssh_opts[@]}" ci@127.0.0.1 'mkdir -p /tmp/crias-repo && tar -xzf /tmp/crias-repo.tar.gz -C /tmp/crias-repo && sudo bash /tmp/crias-repo/tests/qemu/guest-test.sh /tmp/crias-repo' 2>&1 | tee "$log_dir/guest.log"
+vm_success=true
+
