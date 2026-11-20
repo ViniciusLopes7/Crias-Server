@@ -2,6 +2,25 @@
 # Run inside a disposable Arch VM as root. No third-party game EULA is accepted.
 set -euo pipefail
 root="${1:?repository path required}"
+# Resumo legivel e logs integrais separados: coletados pelo runner QEMU
+# tanto em sucesso quanto em falha. Somente dados sinteticos de teste.
+MC_QEMU_LOG_DIR=/tmp/crias-qemu-minecraft
+mkdir -p "$MC_QEMU_LOG_DIR"
+: > "$MC_QEMU_LOG_DIR/summary.tsv"
+mc_ci_event() {
+    local kind="$1" scenario="$2" detail="${3:-}"
+    printf "[QEMU][MINECRAFT][%s] %s: %s\n" "$kind" "$scenario" "$detail"
+    printf "%s\t%s\t%s\n" "$kind" "$scenario" "$detail" >> "$MC_QEMU_LOG_DIR/summary.tsv"
+}
+mc_ci_preview() {
+    local scenario="$1" file="$2" count
+    echo "[QEMU][MINECRAFT][RESUMO] $scenario (logs completos no artefato)"
+    grep -m 1 "^Java:" "$file" || true
+    grep -m 1 -Ei "agree.*eula|eula.*agree" "$file" || true
+    count="$(grep -Eci "WARN|WARNING" "$file" || true)"
+    printf "[QEMU][MINECRAFT][AVISOS] %s: %s linha(s) contendo WARN/WARNING, sem supressao no arquivo original\n" "$scenario" "$count"
+}
+
 [ "$(ps -p 1 -o comm=)" = systemd ] || { echo 'systemd is not PID 1' >&2; exit 1; }
 pacman -Syu --noconfirm --needed bash coreutils gettext jq tar zstd zip unzip jdk21-openjdk
 cd "$root"
@@ -13,7 +32,9 @@ bash tests/temp-cleanup-test.sh
 # Executa contratos criticos tambem num Arch com systemd real.
 echo "[QEMU] Contratos de install, rollback, modpacks, memoria e TUI..."
 bash tests/install-contracts.sh
+mc_ci_event "ESPERADO" "rollback" "teste injeta falha para validar preservacao de dados"
 bash tests/stack-rollback-test.sh
+mc_ci_event "PASS" "rollback" "falha intencional detectada; artefatos restaurados"
 bash tests/manager-safety-test.sh
 bash tests/custom-mrpack-test.sh
 bash tests/minecraft-tuning-test.sh
@@ -65,6 +86,7 @@ STACK_SERVICE_MEMORY_MAX_MB=512
 DRY_RUN=false
 install_stack_service
 systemd-analyze verify /etc/systemd/system/minecraft.service
+mc_ci_event "INICIO" "systemd" "executar JVM inofensiva em usuario sem privilegios"
 systemctl start minecraft.service
 for i in $(seq 1 30); do
     journalctl -u minecraft.service --no-pager | grep -q CRIAS_VM_PROBE_STARTED && break
@@ -81,6 +103,7 @@ server_pid="$(systemctl show -p MainPID --value minecraft.service)"
 [ "$server_pid" -gt 1 ]
 [ "$(ps -o user= -p "$server_pid" | xargs)" = criasvm ]
 echo "PASS: unit systemd real isolada, sem root e com limites aplicados"
+mc_ci_event "PASS" "systemd" "servico como criasvm e MemoryMax/MemorySwapMax aplicados"
 systemctl stop minecraft.service
 ! systemctl is-active --quiet minecraft.service
 
@@ -100,6 +123,7 @@ OOMPolicy=stop
 Restart=no
 EOF
 systemctl daemon-reload
+mc_ci_event "ESPERADO" "oom-injetado" "limite artificial de 64 MB; nao e o Minecraft de producao"
 systemctl start crias-oom-test.service
 oom_result=""
 for i in $(seq 1 40); do
@@ -115,6 +139,7 @@ if [ "$oom_result" != "oom-kill" ]; then
     exit 1
 fi
 echo "PASS: fault injection OOM marcado corretamente pelo systemd"
+mc_ci_event "PASS" "oom-injetado" "systemd identificou oom-kill na unidade descartavel"
 # Install in a fresh shell so Minecraft hook functions cannot leak into Terraria.
 env TERRARIA_SERVER_DIR=/opt/terraria-server TERRARIA_USER=terraria \
     TERRARIA_USE_TMODLOADER=false FORCE_HARDWARE_TIER=LOW \
@@ -147,6 +172,7 @@ DRY_RUN=false
 MRPACK_INSTALL_VERSION=v0.23.0
 install_mrpack_install
 for loader in vanilla fabric quilt forge neoforge; do
+    mc_ci_event "INICIO" "$loader-1.21.1" "instalacao real do loader; EULA permanece false"
     real_server="/opt/crias-real-${loader}"
     mkdir -p "$real_server/.shared"
     cp "$root"/shared/lib/*.sh "$real_server/.shared/"
@@ -162,12 +188,15 @@ for loader in vanilla fabric quilt forge neoforge; do
     timeout 180 runuser -u criasvm -- env SERVER_DIR="$real_server" bash "$root/minecraft/start-server.sh" > "$real_server/output.log" 2>&1
     status=$?
     set -e
-    cat "$real_server/output.log"
-    if [ "$status" -eq 124 ] || ! grep -Ei 'agree.*eula|eula.*agree' "$real_server/output.log"; then
-        echo "FAIL: $loader did not reach the Minecraft EULA prompt" >&2
+    cp "$real_server/output.log" "$MC_QEMU_LOG_DIR/${loader}-1.21.1.log"
+    if [ "$status" -eq 124 ] || ! grep -Eiq "agree.*eula|eula.*agree" "$real_server/output.log"; then
+        mc_ci_event "FALHA" "$loader-1.21.1" "nao chegou ao prompt EULA; codigo=$status"
+        tail -n 100 "$real_server/output.log" >&2
         exit 1
     fi
-    grep -qx 'eula=false' "$real_server/eula.txt"
+    grep -qx "eula=false" "$real_server/eula.txt"
+    mc_ci_preview "$loader-1.21.1" "$real_server/output.log"
+    mc_ci_event "PASS" "$loader-1.21.1" "Java iniciou o loader real e chegou a EULA; status=$status"
     echo "PASS: real $loader server reached EULA prompt without acceptance"
 done
 
@@ -177,7 +206,7 @@ done
 # Os testes acima executam 1.21.1. Aqui verificamos a versao antiga do loader
 # com Java 17 de verdade, incluindo a escolha automatica do binario correto.
 # O teste termina na EULA: nao ha aceitacao, criacao de mundo ou multiplayer.
-echo "[QEMU][MINECRAFT] Inicio: Forge 1.20.1 com Java 17 (EULA=false)"
+mc_ci_event "INICIO" "forge-1.20.1" "Forge real + Java 17; EULA permanece false"
 pacman -S --needed --noconfirm jdk17-openjdk
 forge1201_dir=/opt/crias-real-forge-1201
 mkdir -p "$forge1201_dir/.shared"
@@ -194,16 +223,20 @@ set +e
 timeout 240 runuser -u criasvm -- env SERVER_DIR="$forge1201_dir" bash "$root/minecraft/start-server.sh" > "$forge1201_dir/output.log" 2>&1
 forge1201_rc=$?
 set -e
-cat "$forge1201_dir/output.log"
+cp "$forge1201_dir/output.log" "$MC_QEMU_LOG_DIR/forge-1.20.1.log"
 if [ "$forge1201_rc" -eq 124 ] || ! grep -Eiq "agree.*eula|eula.*agree" "$forge1201_dir/output.log"; then
-    echo "FAIL: Forge 1.20.1 nao chegou ao aviso da EULA; veja output.log" >&2
+    mc_ci_event "FALHA" "forge-1.20.1" "Forge nao chegou a EULA; codigo=$forge1201_rc"
+    tail -n 100 "$forge1201_dir/output.log" >&2
     exit 1
 fi
 if ! grep -Eq 'Java: .*"17[.]' "$forge1201_dir/output.log"; then
-    echo "FAIL: Forge 1.20.1 nao selecionou automaticamente Java 17" >&2
+    mc_ci_event "FALHA" "forge-1.20.1" "Java selecionado nao e 17"
+    tail -n 100 "$forge1201_dir/output.log" >&2
     exit 1
 fi
 grep -qx "eula=false" "$forge1201_dir/eula.txt"
+mc_ci_preview "forge-1.20.1" "$forge1201_dir/output.log"
+mc_ci_event "PASS" "forge-1.20.1" "Java 17 confirmado; EULA nao aceita; codigo=$forge1201_rc"
 echo "PASS: Minecraft Forge 1.20.1 iniciou com Java 17 e chegou a EULA sem aceitar"
 # Real mrpack-install with a locally generated personal pack (no EULA accepted).
 pack_dir="/tmp/personal-pack-fixture"
@@ -212,17 +245,20 @@ printf '%s\n' '{"formatVersion":1,"game":"minecraft","versionId":"test","name":"
 printf 'fixture=ok\n' > "$pack_dir/server-overrides/config/personal.txt"
 (cd "$pack_dir" && zip -qr '/tmp/personal pack.mrpack' modrinth.index.json server-overrides)
 _validate_custom_mrpack '/tmp/personal pack.mrpack'
-timeout 300 mrpack-install '/tmp/personal pack.mrpack' --server-dir /opt/crias-custom-pack --server-file server.jar
+mc_ci_event "INICIO" "mrpack-local" "pacote sintetico sem dependencias remotas; resposta Modrinth 404 nao invalida o teste"
+timeout 300 mrpack-install '/tmp/personal pack.mrpack' --server-dir /opt/crias-custom-pack --server-file server.jar 2>&1 | tee "$MC_QEMU_LOG_DIR/mrpack-local.log"
 grep -qx 'fixture=ok' /opt/crias-custom-pack/config/personal.txt
 MINECRAFT_SERVER_DIR=/opt/crias-custom-pack
 _resolve_modpack_effective_versions
 [ "$MC_EFFECTIVE_VERSION" = 1.21.1 ] && [ "$MINECRAFT_LOADER" = fabric ]
+mc_ci_event "PASS" "mrpack-local" "arquivo e overrides importados, loader/versao reconhecidos"
 echo 'PASS: real mrpack-install imported personal local archive and server overrides'
 
 # Download real optional mods for Forge 1.20.1 and verify duplicate detection.
 MINECRAFT_SERVER_DIR=/opt/crias-extra-test
 MINECRAFT_LOADER=forge
 MC_EFFECTIVE_VERSION=1.20.1
+mc_ci_event "INICIO" "extras-forge-1.20.1" "download de tres mods opcionais e deteccao de duplicatas"
 MINECRAFT_EXTRA_MODS=skinrestorer,spark,chunky
 MINECRAFT_PENDING_MODS=()
 stack_install_extra_mods
@@ -231,7 +267,10 @@ for mod in skinrestorer spark chunky; do unzip -tq "$MINECRAFT_SERVER_DIR/mods/$
 mv "$MINECRAFT_SERVER_DIR/mods/spark.jar" "$MINECRAFT_SERVER_DIR/mods/spark-versioned.jar"
 stack_install_extra_mods
 [ ! -e "$MINECRAFT_SERVER_DIR/mods/spark.jar" ]
+mc_ci_event "PASS" "extras-forge-1.20.1" "jars validados; duplicata spark evitada"
 echo 'PASS: real Forge 1.20.1 server extras downloaded and duplicates avoided'
 
 
-echo 'PASS: Arch VM, systemd PID 1, real service installer, backup restore, bootstrap and real server pre-EULA launch'
+echo "[QEMU][MINECRAFT][RESUMO-FINAL] Resultados por cenario:"
+cat "$MC_QEMU_LOG_DIR/summary.tsv"
+echo "PASS: Arch VM, systemd PID 1, real service installer, backup restore, bootstrap and real server pre-EULA launch"
