@@ -1,11 +1,14 @@
-# discord-agent — Crias Agent
+# Agente remoto Crias-Server (`crias-agent`)
 
-Go binary que faz ponte entre o servidor de jogo (Minecraft/Terraria) e o
-bot Discord. Escuta gRPC em `localhost:8473`, exposto externamente via
+Serviço em Go que conecta o servidor de jogo (Minecraft/Terraria) ao bot Discord. Escuta gRPC em `localhost:8473`, exposto externamente via
 **Tailscale Funnel** (HTTPS). Não replica lógica do `mc-manager.sh` —
 apenas delega via `sudo systemctl` e usa a biblioteca Go nativa
 [gorcon/rcon](https://github.com/gorcon/rcon) (sem binary externo) para
 comandos RCON.
+
+## Visão geral e limites
+
+O agente depende de permissões explícitas no host e de configuração correta do serviço, do canal de rede e do RCON (para comandos Minecraft que o exigem). Testes unitários de gRPC **não substituem** uma validação do caminho completo Discord → agente → systemd → jogo. Não compartilhe tokens nem exponha o serviço sem autenticação.
 
 ## Visão de Alto Nível
 
@@ -24,7 +27,7 @@ comandos RCON.
            │  Delegação (subprocess)
            ▼
    sudo systemctl start/stop/restart minecraft
-   sudo -u minecraft mc-manager.sh backup
+   sudo -u minecraft /usr/local/libexec/crias/mc-manager.sh backup
    gorcon (github.com/gorcon/rcon) say/list/save-*
 ```
 
@@ -257,7 +260,10 @@ sudo tailscale funnel 8473
 Isso expõe `https://<seu-host>.<seu-tailnet>.ts.net` publicamente.
 O bot Discord conecta neste endpoint sem precisar estar na VPN.
 
-## Segurança
+## Segurança e operação
+
+Antes do primeiro uso, valide `sudo systemctl status crias-agent`, `sudo journalctl -u crias-agent -n 80 --no-pager` e as permissões de `/etc/crias/agent.yaml`. O acesso remoto é opcional; o servidor de jogos deve continuar operável sem o bot.
+
 
 | Camada | Implementação |
 |--------|---------------|
