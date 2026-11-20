@@ -74,7 +74,8 @@ echo "0(root) root"
 EOF
 chmod +x "$stub_bin/id"
 
-# Bash interno: instala e falha no download; EXIT trap roda o rollback.
+# Bash interno: simula falha de download; EXIT trap roda o rollback.
+echo "[TESTE/INICIO] Minecraft: falha proposital + restauracao de dados e artefatos"
 INNER_RC=0
 PATH="$stub_bin:$PATH" \
 STACK_NAME="minecraft" \
@@ -109,7 +110,7 @@ bash -c '
         printf 'eula=true\n' > "'"$server_dir"'/eula.txt"
         printf 'icone-NOVO\n' > "'"$server_dir"'/server-icon.png"
         printf 'jar-baixado\n' > "'"$server_dir"'/server.jar"
-        echo "falha injetada" >&2
+        echo "[TESTE/ESPERADO] Falha de download Minecraft injetada para validar rollback." >&2
         return 1
     }
     # (CR-04) Extras declarados pelo stack: fotografa/restaura por manifesto.
@@ -192,4 +193,5 @@ if [ -e "$snapshot_path" ] || [ -L "$snapshot_path" ]; then
     exit 1
 fi
 
+echo "[TESTE/FIM] Falha proposital tratada; nenhum erro de instalacao real neste teste."
 echo "OK: stack-rollback-test (artefatos restaurados, dados preservados)"
