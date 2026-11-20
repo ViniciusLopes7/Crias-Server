@@ -171,7 +171,7 @@ rsync -avz user@origem:/path/backups/ /opt/minecraft-server/backups/
 
 - **`DRY_RUN`**: backups gerados em modo `DRY_RUN=true` (CI) **não são válidos** para restore em produção — são apenas simulações.
 - **Teste de restore**: deve ser parte do plano de manutenção (periodicidade recomendada: mensal).
-- **RCON save-lock**: backups do Minecraft com RCON habilitado são consistentes (sem chunks parcialmente salvos). Backups sem RCON são best-effort. Se um backup falhar no meio, o `save-on` é restaurado automaticamente (EXIT trap), mas o arquivo `.tar.zst` do ciclo falho não é publicado como consistente.
+- **RCON save-lock**: backups do Minecraft com RCON habilitado são consistentes (sem chunks parcialmente salvos). Sem RCON, o backup falha por padrão; `BACKUP_REQUIRE_CONSISTENT=false` permite explicitamente o modo best-effort, que pode ser inconsistente. Se um backup falhar no meio, o `save-on` é restaurado automaticamente (EXIT trap), mas o arquivo `.tar.zst` do ciclo falho não é publicado como consistente.
 - **Permissões**: sempre ajuste `chown` após extrair — o backup preserva permissões mas o `rsync` pode não aplicar corretamente se o usuário mudou.
 - **Backup não é imagem completa do host**: o archive cobre mundos + configuração essencial + mods, não o binário do servidor (re-baixável pelo installer) nem unidades systemd.
 

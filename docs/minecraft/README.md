@@ -87,12 +87,12 @@ Para garantir backups consistentes com servidor online, o `backup-cron.sh` usa R
 
 `mcrcon` não está nos repositórios oficiais do Arch Linux. Instale via AUR.
 
-> **Backup consistente (CR-06):** por padrão o backup roda best-effort —
-> sem `mcrcon`/RCON ele avisa e copia o mundo sem `save-off`/`save-all`.
-> Para EXIGIR consistência (abortar sem RCON), sete
-> `BACKUP_REQUIRE_CONSISTENT=true` no `config.env`. A instalação do agente
-> Discord também oferece ativar o RCON com senha forte automaticamente
-> (EXP-43).
+> **Backup consistente:** por padrão, backups de Minecraft exigem
+> `mcrcon`, RCON habilitado e senha válida. Sem eles, o backup falha e não
+> publica um arquivo potencialmente inconsistente. A instalação do agente
+> Discord oferece habilitar o RCON. Para instalações existentes, confira
+> `BACKUP_REQUIRE_CONSISTENT` em `runtime.env`: um valor `false` antigo é
+> preservado e deve ser alterado para `true` se desejar esta proteção.
 
 ```bash
 yay -S mcrcon
@@ -117,7 +117,7 @@ Depois reinicie o servidor: `sudo systemctl restart minecraft`.
 
 ### Sem RCON
 
-Se `mcrcon` não estiver disponível ou RCON desabilitado, o backup roda em modo **best-effort** (sem pausar saves) — pode haver inconsistência rara em chunks salvos no momento do `tar`.
+Sem `mcrcon` ou RCON configurado, o backup falha por padrão. A opção explícita `BACKUP_REQUIRE_CONSISTENT=false` em `runtime.env` habilita o modo best-effort; o arquivo produzido pode conter um mundo inconsistente.
 
 ## Mods
 

@@ -953,7 +953,7 @@ write_stack_env_file() {
         printf 'BACKUP_ZSTD_LEVEL=%q\n' "${BACKUP_ZSTD_LEVEL:-}"
         # (CR-06) Backup consistente exigido: sem RCON/mcrcon o backup ABORTA
         # (default false = best-effort com avisos claros, como antes).
-        printf 'BACKUP_REQUIRE_CONSISTENT=%q\n' "${BACKUP_REQUIRE_CONSISTENT:-false}"
+        printf 'BACKUP_REQUIRE_CONSISTENT=%q\n' "${BACKUP_REQUIRE_CONSISTENT:-true}"
         # Hardware tier thresholds.
         printf 'HW_LOW_TIER_MAX_RAM_MB=%q\n' "${HW_LOW_TIER_MAX_RAM_MB:-3072}"
         printf 'HW_LOW_TIER_MAX_CPU_CORES=%q\n' "${HW_LOW_TIER_MAX_CPU_CORES:-2}"
