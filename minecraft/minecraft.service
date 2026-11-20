@@ -1,10 +1,9 @@
 [Unit]
 Description=Minecraft Server
 After=network.target
-# Disjuntor persistente: no maximo 3 partidas ate reset-failed explicito.
-# Uma janela finita permite que um crash de inicializacao/OOM reinicie para
-# sempre quando a tentativa leva mais tempo que a janela.
-StartLimitIntervalSec=infinity
+# Limite de partidas rapidas (inclusive manuais) em cinco minutos.
+# OOM/crash nao gera reinicio automatico: preserva RAM e acesso remoto.
+StartLimitIntervalSec=300s
 StartLimitBurst=3
 Conflicts=terraria.service
 
@@ -17,7 +16,8 @@ ExecStart=${SERVER_DIR}/start-server.sh
 # Prefer SIGINT to give the JVM a chance to shutdown cleanly.
 KillSignal=SIGINT
 TimeoutStopSec=120
-Restart=on-failure
+# Fail-closed: um novo start exige acao explicita apos diagnostico.
+Restart=no
 RestartSec=30s
 OOMPolicy=stop
 LimitNOFILE=65536
