@@ -233,10 +233,15 @@ cmd_reconfigure_hardware() {
 
     # Nao reduza/aumente limites em processo ativo: pare o Minecraft antes
     # de reconciliar heap, MemoryMax e demais arquivos.
-    if systemctl is-active --quiet "$SERVICE_NAME.service"; then
-        err "Pare o Minecraft antes de recalibrar RAM: sudo systemctl stop $SERVICE_NAME"
-        return 1
-    fi
+    local unit_state
+    unit_state="$(systemctl show "$SERVICE_NAME.service" -p ActiveState --value 2>/dev/null || true)"
+    case "$unit_state" in
+        inactive|failed) ;;
+        *)
+            err "Minecraft deve estar completamente parado para recalibrar: estado=${unit_state:-desconhecido}. Execute sudo systemctl stop $SERVICE_NAME"
+            return 1
+            ;;
+    esac
     if ! systemctl cat "$SERVICE_NAME.service" >/dev/null 2>&1; then
         err "A unidade $SERVICE_NAME.service nao existe. Complete a instalacao antes de recalibrar."
         return 1
@@ -281,7 +286,7 @@ cmd_reconfigure_hardware() {
 
     echo "MemoryMax aplicado no systemd: ${MC_SERVICE_MEMORY_MAX_MB} MB"
     echo "Reserva para SO: ${MC_HOST_RESERVE_MB} MB | memoria JVM nativa: ${MC_NATIVE_OVERHEAD_MB} MB"
-    warn "Heap e MemoryMax sincronizados. Servico continua parado; inicie apos conferir os limites: sudo systemctl start $SERVICE_NAME"
+    warn "Heap e MemoryMax sincronizados. Servico continua parado; confira os limites e execute: sudo systemctl reset-failed $SERVICE_NAME; sudo systemctl start $SERVICE_NAME"
 }
 
 cmd_health() {
