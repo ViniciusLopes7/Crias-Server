@@ -265,6 +265,14 @@ jobs:
           if [ -e /dev/kvm ]; then sudo chmod a+rw /dev/kvm; fi
       - name: Boot and test Arch VM
         run: bash tests/qemu/run-vm.sh
+      - name: Preserve QEMU diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: qemu-arch-logs
+          path: ${{ runner.temp }}/crias-qemu-artifacts
+          if-no-files-found: warn
+          retention-days: 14
 
   test-go:
     name: Test Go (race)
