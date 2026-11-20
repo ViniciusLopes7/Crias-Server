@@ -1331,6 +1331,13 @@ install_ssh_if_enabled() {
         print_step "openssh ja instalado."
     fi
 
+    # Arch Linux pode nao ter host keys ainda em uma instalacao fresca.
+    # ssh-keygen -A cria apenas as ausentes, sem sobrescrever as existentes.
+    if ! ssh-keygen -A >/dev/null 2>&1; then
+        print_error "Nao foi possivel gerar/verificar as chaves do servidor SSH."
+        return 1
+    fi
+
     # 2. Cria usuario 'crias' com sudo (se nao existir).
     if ! id "$ssh_user" >/dev/null 2>&1; then
         print_step "Criando usuario '$ssh_user' com sudo..."
