@@ -1,18 +1,18 @@
 # Conexão via Tailscale
 
-Guia de conexão ao servidor via Tailscale (VPN mesh) e Tailscale Funnel (HTTPS público para o `crias-agent`).
+Como conectar jogadores por uma rede privada Tailscale e, quando necessário, publicar o agente remoto por HTTPS com Funnel. **Instalar o pacote, iniciar `tailscaled` e autenticar com `tailscale up` são três etapas distintas.**
 
 ## Por que Tailscale?
 
 - ✅ Não precisa abrir portas no roteador
 - ✅ Conexão criptografada WireGuard
-- ✅ IP fixo (100.x.x.x) — não muda
+- Endereço IP da tailnet (normalmente `100.x.x.x`), que deve ser consultado com `tailscale ip -4` e pode ser reatribuído
 - ✅ Funciona de qualquer lugar (NAT traversal)
 - ✅ Fácil de compartilhar com amigos
 
 ## 1. Configurar Tailscale no servidor
 
-O instalador oferece instalar Tailscale automaticamente (`INSTALL_TAILSCALE=true`, default). Se pulou:
+O instalador oferece instalar o pacote e ativar `tailscaled` (`INSTALL_TAILSCALE=true`, padrão). A autenticação da máquina deve ser feita separadamente com `tailscale up`. Se você pulou a instalação:
 
 ```bash
 sudo pacman -S tailscale
@@ -133,6 +133,10 @@ sudo tailscale ip -4
 # 4. Porta liberada?
 sudo ss -tlnp | grep 25565
 ```
+
+### O pacote está instalado, mas o comando não conecta
+
+Confira `pacman -Q tailscale`, `systemctl is-active tailscaled` e `tailscale status`. Se a unidade estiver inativa, use `sudo systemctl enable --now tailscaled`. **Não** execute `systemctl enable --now` sem o nome da unidade.
 
 ### Tailscale não conecta
 
