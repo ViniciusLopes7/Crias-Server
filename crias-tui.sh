@@ -66,13 +66,21 @@ show_diagnostics() {
         for service in minecraft terraria; do
             if systemctl list-unit-files "$service.service" --no-legend 2>/dev/null | grep -Fq "$service.service"; then
                 echo "--- $service: status e limites ---"
-                systemctl show "$service.service" --no-pager -p ActiveState -p SubState -p Result -p NRestarts -p MemoryMax -p MemoryCurrent -p MemoryPeak -p MemorySwapMax 2>/dev/null || true
+                systemctl show "$service.service" --no-pager -p ActiveState -p SubState -p Result -p NRestarts -p Restart -p StartLimitBurst -p StartLimitIntervalUSec -p MemoryMax -p MemoryCurrent -p MemoryPeak -p MemorySwapMax 2>/dev/null || true
             fi
         done
     fi
     if command -v journalctl >/dev/null 2>&1; then
         echo "--- Ultimos eventos OOM (se disponiveis) ---"
         journalctl -k -b --no-pager 2>/dev/null | grep -Ei "memory cgroup out of memory|out of memory: killed process|oom-kill" | tail -n 8 || true
+    fi
+    echo "--- Acesso remoto ---"
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl is-active sshd.service 2>/dev/null || true
+        systemctl is-active tailscaled.service 2>/dev/null || true
+    fi
+    if command -v tailscale >/dev/null 2>&1; then
+        tailscale ip -4 2>/dev/null || true
     fi
     echo "Logs: sudo journalctl -u minecraft -n 80 --no-pager"
     echo "Instalador: sudo /opt/crias-server/install.sh"
