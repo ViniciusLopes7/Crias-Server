@@ -1,6 +1,6 @@
 # Restore de Backups
 
-Runbook para restaurar mundos e configuração a partir de backups gerados pelo `backup-cron.sh`.
+Procedimento de restauração para mundos e configurações salvos pelo `backup-cron.sh`. **A restauração pode sobrescrever dados**: verifique o arquivo, pare o serviço e preserve uma cópia do estado atual antes de prosseguir.
 
 ## Escopo do backup
 
@@ -21,7 +21,7 @@ ter `world_nether/`; servidores vanilla guardam as dimensões dentro do próprio
 ## Pré-requisitos
 
 - Acesso SSH ao host com permissão `sudo`
-- Backup disponível em `/opt/<stack>/backups/` ou em armazenamento externo
+- Backup disponível em `/opt/minecraft-server/backups/`, `/opt/terraria-server/backups/` ou em armazenamento externo
 - Servidor parado durante o restore
 
 ## Passo a passo (exemplo Minecraft)
@@ -166,6 +166,10 @@ scp user@origem:/path/backup.tar.zst /opt/minecraft-server/backups/
 # Ou via rsync (mais eficiente para backups grandes)
 rsync -avz user@origem:/path/backups/ /opt/minecraft-server/backups/
 ```
+
+## Antes de declarar a recuperação concluída
+
+Valide permissões de arquivos, estado do systemd e logs do jogo; confira também mundo, inventários e dimensões ao entrar com um cliente compatível. Um `tar` válido não comprova consistência lógica do mundo.
 
 ## Observações
 
