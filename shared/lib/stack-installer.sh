@@ -144,7 +144,7 @@ snapshot_stack_artifacts() {
     fi
 
     STACK_SNAPSHOT_MANIFEST="$(mktemp_crias_file)" || return 1
-    STACK_SNAPSHOT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/crias-stack-snapshot.XXXXXX")" || {
+    STACK_SNAPSHOT_DIR="$(mktemp_crias_dir)" || {
         STACK_SNAPSHOT_DIR=""
         print_error "Falha ao criar diretorio de snapshot (mktemp)."
         return 1
@@ -251,8 +251,10 @@ rollback_stack_install() {
             esac
         done < "$STACK_SNAPSHOT_MANIFEST"
 
-        rm -rf "$STACK_SNAPSHOT_DIR" 2>/dev/null || true
+        remove_crias_temp_dir "$STACK_SNAPSHOT_DIR" >/dev/null 2>&1 || true
     elif [ "${STACK_SNAPSHOT_COMPLETE:-false}" != "true" ]; then
+        # O snapshot parcial criado por mktemp_crias_dir permanece registrado
+        # e e removido pelo EXIT trap, inclusive quando o snapshot aborta.
         # (AUDIT-A P2-3) Preexistente com snapshot INCOMPLETO: esta execucao
         # abortou ANTES de modificar qualquer coisa (o snapshot roda primeiro)
         # — o rollback e NO-OP. A limpeza legacy apagaria artefatos que nem
@@ -453,7 +455,11 @@ install_stack_service() {
     }
     # Registrar no limpador de temporarios do common.sh (cobre caminhos de
     # erro antecipados antes do rm -f explicito abaixo).
-    printf '%s\n' "$unit_tmp" >> "$CRIAS_TEMPS_FILE" 2>/dev/null || true
+    if ! _crias_register_temp "$unit_tmp"; then
+        rm -f -- "$unit_tmp"
+        print_error "Falha ao registrar temporario da unit do systemd."
+        return 1
+    fi
 
     if ! env SERVER_USER="$STACK_USER" SERVER_DIR="$STACK_SERVER_DIR" \
             MEMORY_MAX_MB="${STACK_SERVICE_MEMORY_MAX_MB:-2048}" SERVICE_NAME="$STACK_NAME" \
@@ -662,6 +668,6 @@ run_stack_install() {
     # mais caminho de rollback para corromper. Sem isto o mktemp -d vaza em
     # /tmp a cada reinstalacao bem-sucedida.
     if [ -n "${STACK_SNAPSHOT_DIR:-}" ] && [ -d "$STACK_SNAPSHOT_DIR" ]; then
-        rm -rf "$STACK_SNAPSHOT_DIR" 2>/dev/null || true
+        remove_crias_temp_dir "$STACK_SNAPSHOT_DIR" >/dev/null 2>&1 || true
     fi
 }
