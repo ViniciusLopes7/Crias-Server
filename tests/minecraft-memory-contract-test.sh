@@ -63,6 +63,14 @@ if cgroup_v2_available_memory_mb "$tmp/cg" /../outside >/dev/null; then
     echo "FAIL: traversal aceito em memory.current" >&2; exit 1
 fi
 
+# Inactive file cache no memory.stat pode ser reclamado parcialmente.
+printf '4294967296\n' > "$tmp/cg/parent/memory.max"
+printf '3221225472\n' > "$tmp/cg/parent/memory.current"
+printf 'inactive_file 2147483648\n' > "$tmp/cg/parent/memory.stat"
+[ "$(cgroup_v2_available_memory_mb "$tmp/cg" /parent/child)" = 2048 ] || {
+    echo "FAIL: cache inativo nao foi considerado com margem conservadora" >&2; exit 1;
+}
+
 # Heap reduzido por pressao: nunca ultrapassar a folga real de RAM.
 compute_minecraft_tuning 4096 4 SSD MID 2048
 [ "$((MC_SERVICE_MEMORY_MAX_MB + MC_PRESSURE_RESERVE_MB))" -le 2048 ] || {
