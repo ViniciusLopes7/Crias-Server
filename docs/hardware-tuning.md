@@ -124,3 +124,12 @@ O cálculo do Minecraft agora reserva RAM para o sistema operacional e para o co
 O erro `Memory cgroup out of memory: Killed process (java)` não comprova, isoladamente, vazamento de memória: pode significar que o serviço atingiu o limite do systemd. Consulte `sudo crias-tui --doctor`, `systemctl show minecraft -p MemoryMax -p MemoryPeak -p NRestarts` e `journalctl -k -b` antes de aumentar os limites. O ajuste do instalador não reescreve automaticamente os limites de serviços já instalados; a mudança exige reconfiguração deliberada, validação do arquivo `.service` e reinicialização controlada.
 
 Em hosts de aproximadamente 1 GB de RAM, o modo conservador não garante que um modpack moderno seja viável. Recomenda-se RAM suficiente e teste real.
+
+## Limite de reinícios após OOM
+
+O template do `minecraft.service` usa `Restart=on-failure`, mas limita falhas repetidas a três tentativas em cinco minutos (`StartLimitIntervalSec=300s`, `StartLimitBurst=3`). `OOMPolicy=stop` encerra a unidade quando o cgroup sofre falta de memória. Isso evita ciclos ilimitados de reinício.
+
+A mudança só entra em vigor quando a unidade do systemd é instalada/atualizada. Para interromper um ciclo ativo use `sudo systemctl stop minecraft.service`. Para impedir a partida automática enquanto investiga, `sudo systemctl disable --now minecraft.service` (reative depois). Após corrigir o problema, `sudo systemctl reset-failed minecraft.service` limpa o bloqueio de tentativas.
+
+Os eventos do kernel não identificam sozinhos qual perfil ou mod causou o problema. Confira journal, memória do cgroup e limite efetivo antes de aumentar heap ou `MemoryMax`.
+
