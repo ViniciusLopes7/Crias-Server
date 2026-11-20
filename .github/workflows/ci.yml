@@ -15,6 +15,7 @@
 #   - push tag v*.*.*       → lint + test + build + release (stable)
 #   - PR to main            → lint + test only (no build, no release)
 #   - workflow_dispatch     → full pipeline + optional release
+#   - push main com [release] → full pipeline + release (opt-in, gates iguais)
 
 name: CI
 
@@ -35,7 +36,9 @@ on:
 # false para tags (nao cancelar releases em andamento).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  # Releases e outros runs na main preservam a fila: um push posterior nao
+  # cancela a release depois da publicacao dos artefatos ou tag.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
   contents: read
@@ -473,7 +476,8 @@ jobs:
     needs: [build-agent, build-bot, lint-shell, test-shell, test-shell-arch, test-minecraft-jvm, test-arch-vm]
     if: |
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.create_release)
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.create_release) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release]'))
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     permissions:
@@ -588,8 +592,10 @@ jobs:
           fi
           echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
 
-      - name: Create and push tag (if workflow_dispatch)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Create and push tag (manual or explicit main release)
+        if: |
+          github.event_name == 'workflow_dispatch' ||
+          (github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release]'))
         env:
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
         run: |
