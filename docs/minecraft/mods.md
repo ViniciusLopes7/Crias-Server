@@ -1,6 +1,6 @@
 # Mods do Minecraft — Guias
 
-Os mods abaixo são instalados automaticamente quando `MINECRAFT_INSTALL_QOL_MODS=true` (default) e `MINECRAFT_LOADER=fabric` (ou `quilt`). A lista é configurável via `MINECRAFT_QOL_MODS` em `config.env` (formato CSV `file_name:slug,file_name:slug,...`).
+Os mods desta página fazem parte da lista QoL padrão para Fabric/Quilt. A instalação depende de `MINECRAFT_INSTALL_QOL_MODS=true` e de versões compatíveis encontradas no Modrinth. A lista pode ser alterada em `config.env` (`file_name:slug,file_name:slug,...`). Para modpacks próprios, confira primeiro o conteúdo existente: instalar mods duplicados ou incompatíveis pode impedir o servidor de iniciar.
 
 | Mod | Slug Modrinth | Função |
 |-----|---------------|--------|
@@ -172,4 +172,9 @@ sudo chown minecraft:minecraft /opt/minecraft-server/mods/meu-mod.jar
 sudo systemctl restart minecraft
 ```
 
-> **Atenção:** o installer pula a instalação de QoL mods se `/opt/minecraft-server/mods/` já contiver `.jar`s. Isso previne conflitos. Se quiser reinstalar QoL, limpe o diretório primeiro.
+> **Atenção:** o installer pula a instalação de QoL mods se `/opt/minecraft-server/mods/` já contiver `.jar`s. Isso ajuda a evitar conflitos. **Não apague a pasta `mods/` em um mundo existente**: faça um backup e compare as dependências antes de remover ou reinstalar arquivos.
+
+## Utilitários opcionais independentes
+
+Além da lista QoL padrão, o instalador oferece opções individuais de utilitários do servidor, como Spark, Chunky e Skin Restorer, conforme a compatibilidade do loader e da versão do jogo. Esses recursos não devem ser confundidos com os mods inclusos no próprio `.mrpack`. Consulte o [guia do stack Minecraft](README.md).
+
