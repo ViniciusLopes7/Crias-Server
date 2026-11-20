@@ -1,13 +1,12 @@
 # ROADMAP — Crias-Server
 
-> Status de implementação e próximos passos.
-> Última atualização: pós-F1 (v1.3.0).
+> Visão consolidada do produto e das lacunas de validação. Registros de fases antigas permanecem como referência histórica; o estado atual deve ser conferido na branch `main` e nas execuções recentes do CI.
 
 ## ✅ Implementado (v1.3.0)
 
 > **Nota**: ISO customizada removida — use a ISO oficial do Arch Linux. ISO customizada é um objetivo futuro quando o projeto tiver maturidade.
 
-### Branch `main` (única, monorepo)
+### Componentes do repositório
 
 | Componente | Status | Detalhes |
 |------------|--------|----------|
@@ -17,7 +16,7 @@
 | **OpenSSH na ISO + host** | ✅ (v1.2.0) | `openssh` em `packages.x86_64`; `install.sh` pergunta se habilita SSH no host → cria usuário `crias` com sudo, `PermitRootLogin no` |
 | **TUI (gum)** | ✅ (v1.2.0) | `shared/lib/tui.sh` — wrapper `gum` com fallback `read` automático; `gum` pré-instalado na ISO |
 | **Versão MC dinâmica** | ✅ (v1.2.0) | `shared/lib/mc-manifests.sh` — busca manifests Mojang/Fabric/Quilt/NeoForge/Forge; seleção fuzzy; snapshots marcados |
-| **Seletor de modpacks Modrinth** | ✅ (v1.2.0) | Top-10 / busca / vanilla / slug manual; compatibilidade server-side; sugestão de MC mais próxima |
+| **Seletor de modpacks Minecraft** | ✅ (código) | Top-10 e busca Modrinth, slug, vanilla, `.mrpack` local/pendrive e URL HTTPS; valida o pacote e reconcilia versão/loader. |
 | **Loaders** | ✅ (v1.2.0) | `fabric | quilt | vanilla | forge | neoforge` — `paper` **removido** |
 | **Refactoring shell** | ✅ | 3 novas libs compartilhadas (`stack-installer.sh`, `backup-engine.sh`, `setup-cron.sh`) + `tui.sh` + `mc-manifests.sh` |
 | **Hardening systemd** | ✅ | `envsubst` em templates `.service`, `CapabilityBoundingSet=`, `SystemCallFilter=@system-service`, etc. |
@@ -28,8 +27,8 @@
 | **Bot Discord** (`discord-bot/`) | ✅ | discord.py 2.x, slash commands `/mc start|stop|restart|status|players|say|console|health` |
 | **Eventos push** | ✅ | `ServerStarted`/`Stopped`, `PlayerJoined`/`Left`, `HealthWarning` → bot posta em `#controle` |
 | **Streaming console** | ✅ | `StreamConsole` RPC (journalctl -f) → bot posta em `#console` |
-| **CI/CD** | ✅ | Workflow único `ci.yml` com 10 jobs; release gated por TODOS os testes (CR-19) |
-| **Testes** | ✅ (unitário/contrato) / ⚠️ (integração) | Bateria bash + Python + Go. Sem E2E em VM com systemd real, RCON real, SteamCMD ou restore em host limpo — coberturas mockadas não substituem homologação |
+| **CI/CD** | ✅ (automação) | Workflow `ci.yml` com lint, testes por linguagem, Java 21/25, Arch container, Arch QEMU com systemd e build/release condicionais. |
+| **Testes** | ✅ (Bash/Go/Python/VM) / ⚠️ (homologação) | Há VM Arch + systemd, serviços reais e instalação até a EULA. Continuam faltando jogo com mundo ativo, RCON real completo e modpack grande de usuário. Consulte `docs/testing-qemu.md`. |
 
 ### Decisões arquiteturais finais
 
@@ -85,7 +84,7 @@
 
 ---
 
-## 📊 Cobertura de testes atual
+## 📊 Cobertura e lacunas de testes
 
 | Suíte | Tests | Status |
 |-------|-------|--------|
@@ -116,4 +115,10 @@
 ## 📝 Changelog
 
 Veja [CHANGELOG.md](CHANGELOG.md) para o histórico detalhado de versões.
+
+## Estado atual de integração (novembro de 2026)
+
+O seletor de `.mrpack` local/HTTPS e o conjunto de utilitários opcionais foram incorporados à `main`. A atualização antecipada do TUI, a recuperação em modo `--doctor` e a melhoria do cálculo de memória estão em revisão no [PR #12](https://github.com/ViniciusLopes7/Crias-Server/pull/12); o conteúdo desse PR **não deve ser descrito como já distribuído** até o merge e a publicação de uma nova release. O endurecimento do QEMU e a revisão editorial estão sendo avaliados na mesma branch.
+
+A documentação de cenários validados e não validados encontra-se em [docs/testing-qemu.md](docs/testing-qemu.md).
 
