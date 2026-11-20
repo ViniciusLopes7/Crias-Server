@@ -187,6 +187,12 @@ classify_hardware_tier() {
     local low_cpu="${HW_LOW_TIER_MAX_CPU_CORES:-2}"
     local mid_ram="${HW_MID_TIER_MAX_RAM_MB:-12288}"
     local mid_cpu="${HW_MID_TIER_MAX_CPU_CORES:-6}"
+    # Valores manuais invalidos nao podem causar comparacoes aritmeticas
+    # imprevisiveis ou promover um host fraco ao tier HIGH.
+    [[ "$low_ram" =~ ^[0-9]{1,7}$ ]] && [ "$low_ram" -gt 0 ] || low_ram=3072
+    [[ "$low_cpu" =~ ^[0-9]{1,5}$ ]] && [ "$low_cpu" -gt 0 ] || low_cpu=2
+    [[ "$mid_ram" =~ ^[0-9]{1,7}$ ]] && [ "$mid_ram" -ge "$low_ram" ] || mid_ram=12288
+    [[ "$mid_cpu" =~ ^[0-9]{1,5}$ ]] && [ "$mid_cpu" -ge "$low_cpu" ] || mid_cpu=6
 
     if [ "$total_ram_mb" -lt "$low_ram" ] || [ "$cpu_cores" -le "$low_cpu" ]; then
         echo "LOW"
@@ -246,6 +252,7 @@ cgroup_v2_effective_cpu_cores() {
     cur="${root%/}${rel}"
     while :; do
         if [ -r "$cur/cpu.max" ]; then
+            quota="" period=""
             read -r quota period < "$cur/cpu.max" || true
             if [[ "$quota" =~ ^[0-9]{1,15}$ ]] && [[ "$period" =~ ^[0-9]{1,12}$ ]] && [ "$period" -gt 0 ]; then
                 cores=$((quota / period))
@@ -264,7 +271,7 @@ cgroup_v2_effective_cpu_cores() {
 # Folga do cgroup, nao apenas seu teto. memory.current e conservador
 # (inclui cache reclamavel); reduz risco de alocar em slice ja pressionada.
 cgroup_v2_available_memory_mb() {
-    local root="${1:-/sys/fs/cgroup}" rel="${2:-}" cur max_bytes current_bytes available_mb min_available=""
+    local root="${1:-/sys/fs/cgroup}" rel="${2:-}" cur max_bytes current_bytes inactive_file used_bytes available_mb min_available=""
     if [ "$#" -lt 2 ]; then
         rel="$(awk -F: '$1=="0" && $2=="" {print $3; exit}' /proc/self/cgroup 2>/dev/null || true)"
     fi
@@ -277,10 +284,19 @@ cgroup_v2_available_memory_mb() {
             read -r max_bytes < "$cur/memory.max" || max_bytes=""
             read -r current_bytes < "$cur/memory.current" || current_bytes=""
             if [[ "$max_bytes" =~ ^[0-9]{1,18}$ ]] && [[ "$current_bytes" =~ ^[0-9]{1,18}$ ]] && [ "$max_bytes" -gt 0 ]; then
-                if [ "$current_bytes" -ge "$max_bytes" ]; then
+                # Parte de inactive_file e cache potencialmente reclamavel.
+                # Credita apenas metade, para nao prometer toda a RAM de cache.
+                inactive_file=0
+                if [ -r "$cur/memory.stat" ]; then
+                    inactive_file="$(awk '$1=="inactive_file" {print $2; exit}' "$cur/memory.stat" 2>/dev/null || true)"
+                    [[ "$inactive_file" =~ ^[0-9]{1,18}$ ]] || inactive_file=0
+                fi
+                [ "$inactive_file" -le "$current_bytes" ] || inactive_file="$current_bytes"
+                used_bytes=$((current_bytes - inactive_file / 2))
+                if [ "$used_bytes" -ge "$max_bytes" ]; then
                     available_mb=0
                 else
-                    available_mb=$(((max_bytes - current_bytes) / 1048576))
+                    available_mb=$(((max_bytes - used_bytes) / 1048576))
                 fi
                 if [ -z "$min_available" ] || [ "$available_mb" -lt "$min_available" ]; then min_available="$available_mb"; fi
             fi
