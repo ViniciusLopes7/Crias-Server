@@ -8,6 +8,10 @@ choice="$(printf "2\n" | bash -c 'source "$1"; hub_choose "Teste" "Primeiro" "Se
 [ "$choice" = "Segundo" ] || { echo "FAIL: menu numerado" >&2; exit 1; }
 bash "$root/crias-tui.sh" --doctor >/dev/null
 bash "$root/crias-tui.sh" --help | grep -q -- "--doctor"
+# O submenu Minecraft deve expor visoes sem esconder logs completos.
+for option in "logs recent" "logs alerts" "logs boot" "logs follow"; do
+    grep -Fq "$option" "$root/crias-tui.sh" || { echo "FAIL: opcao TUI ausente: $option" >&2; exit 1; }
+done
 
 # Deploy happens before the heavyweight stack installer begins.
 first="$(grep -n "^    deploy_crias_tui$" "$root/install.sh" | head -n1 | cut -d: -f1)"
