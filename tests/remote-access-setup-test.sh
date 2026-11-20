@@ -60,7 +60,10 @@ unit="$root/minecraft/minecraft.service"
 grep -qx "Restart=on-failure" "$unit"
 grep -qx "RestartSec=30s" "$unit"
 grep -qx "OOMPolicy=stop" "$unit"
-grep -qx "StartLimitIntervalSec=300s" "$unit"
+grep -qx "StartLimitIntervalSec=infinity" "$unit"
+grep -qx "OOMScoreAdjust=200" "$unit"
+# Janela infinita obriga intervenção manual após falhas repetidas.
+! grep -Eq "^StartLimitIntervalSec=[0-9]+s$" "$unit"
 grep -qx "StartLimitBurst=3" "$unit"
 
 echo "OK: Tailscale idempotente/não interativo, SSH antecipado e proteção anti-loop OOM"
