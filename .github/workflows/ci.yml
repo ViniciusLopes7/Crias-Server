@@ -201,6 +201,7 @@ jobs:
           bash tests/backup-integrity-test.sh
           bash tests/manager-safety-test.sh
           bash tests/readiness-regression-test.sh
+          bash tests/crias-tui-deploy-test.sh
           bash tests/modpack-state-test.sh
           bash tests/temp-cleanup-test.sh
           bash tests/custom-mrpack-test.sh
