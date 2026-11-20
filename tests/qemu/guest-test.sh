@@ -38,6 +38,7 @@ mc_ci_event "PASS" "rollback" "falha intencional detectada; artefatos restaurado
 bash tests/manager-safety-test.sh
 bash tests/custom-mrpack-test.sh
 bash tests/minecraft-tuning-test.sh
+bash tests/minecraft-logs-test.sh
 bash tests/crias-tui-deploy-test.sh
 
 # Contraprova funcional do deploy: comando real em /usr/local/bin, permissao
