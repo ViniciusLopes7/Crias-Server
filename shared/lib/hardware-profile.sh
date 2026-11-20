@@ -197,6 +197,37 @@ classify_hardware_tier() {
     fi
 }
 
+# Le o menor limite memory.max da hierarquia cgroup v2 (incluindo os pais).
+# Opcionalmente recebe raiz e caminho relativo para testes sem root.
+cgroup_v2_effective_memory_mb() {
+    local root="${1:-/sys/fs/cgroup}" rel="${2:-}" cur bytes limit_mb min_mb=""
+    if [ "$#" -lt 2 ]; then
+        rel="$(awk -F: '$1=="0" && $2=="" {print $3; exit}' /proc/self/cgroup 2>/dev/null || true)"
+    fi
+    # Nao aceite traversal, barras duplas ou caracteres inesperados em path.
+    if ! [[ "$rel" =~ ^(/[-A-Za-z0-9_.:@]+)*$ ]]; then
+        return 1
+    fi
+    cur="${root%/}${rel}"
+    while :; do
+        if [ -f "$cur/memory.max" ]; then
+            bytes="$(cat "$cur/memory.max" 2>/dev/null || true)"
+            if [[ "$bytes" =~ ^[0-9]{1,18}$ ]] && [ "$bytes" -gt 0 ]; then
+                limit_mb=$((bytes / 1048576))
+                [ "$limit_mb" -gt 0 ] || limit_mb=1
+                if [ -z "$min_mb" ] || [ "$limit_mb" -lt "$min_mb" ]; then
+                    min_mb="$limit_mb"
+                fi
+            fi
+        fi
+        [ "$cur" = "${root%/}" ] && break
+        cur="${cur%/*}"
+        # A raiz e fixa; nao percorra caminhos fora dela.
+        case "$cur" in "${root%/}"|"${root%/}/"*) ;; *) break ;; esac
+    done
+    [ -n "$min_mb" ] || return 1
+    printf "%s\n" "$min_mb"
+}
 detect_hardware_profile() {
     local target_path="$1"
     local forced_tier
@@ -218,34 +249,26 @@ detect_hardware_profile() {
         HW_AVAILABLE_RAM_MB=0
         HW_SWAP_MB=0
     fi
-    # (EXP-60) Limite de memoria do cgroup: em container a cota pode ser
-    # menor que a RAM fisica do host; heap/MemoryMax calculados sobre a RAM
-    # fisica estourariam a cota e o jogo morreria por OOM do cgroup. Usa o
-    # MINIMO entre fisico e limite efetivo (v2 memory.max; v1 limit_in_bytes).
-    local cg_limit_mb=""
-    local cg_bytes=""
-    if [ -r /sys/fs/cgroup/memory.max ]; then
-        cg_bytes="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || true)"
-        case "$cg_bytes" in
-            ""|max) ;;
-            *[!0-9]*) ;;
-            *) if [ "$cg_bytes" -gt 0 ]; then cg_limit_mb=$((cg_bytes / 1048576)); fi ;;
-        esac
+    # Cotas de memoria podem estar em qualquer ancestral do cgroup atual.
+    # Ler somente /sys/fs/cgroup/memory.max perde os limites da slice.
+    local cg_limit_mb="" cg_bytes=""
+    if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
+        cg_limit_mb="$(cgroup_v2_effective_memory_mb || true)"
     elif [ -r /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
         cg_bytes="$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || true)"
-        case "$cg_bytes" in
-            ""|*[!0-9]*) ;;
-            *) if [ "$cg_bytes" -gt 0 ] && [ "$cg_bytes" -lt 4611686018427387904 ]; then
-                   cg_limit_mb=$((cg_bytes / 1048576))
-               fi ;;
-        esac
+        if [[ "$cg_bytes" =~ ^[0-9]{1,18}$ ]] && [ "$cg_bytes" -gt 0 ] \
+            && [ "$cg_bytes" -lt 4611686018427387904 ]; then
+            cg_limit_mb=$((cg_bytes / 1048576))
+        fi
     fi
+    HW_CGROUP_LIMIT_MB="${cg_limit_mb:-0}"
     if [ -n "$cg_limit_mb" ] && [ "$cg_limit_mb" -gt 0 ] \
         && [ "$HW_TOTAL_RAM_MB" -gt 0 ] && [ "$cg_limit_mb" -lt "$HW_TOTAL_RAM_MB" ]; then
         if command -v print_warning >/dev/null 2>&1; then
-            print_warning "Limite de cgroup (${cg_limit_mb}MB) menor que a RAM fisica (${HW_TOTAL_RAM_MB}MB); tuning usa a cota (EXP-60)."
+            print_warning "Cgroup limita RAM a ${cg_limit_mb}MB (host ${HW_TOTAL_RAM_MB}MB): orcamento ajustado."
         fi
         HW_TOTAL_RAM_MB="$cg_limit_mb"
+        [ "$HW_AVAILABLE_RAM_MB" -le "$HW_TOTAL_RAM_MB" ] || HW_AVAILABLE_RAM_MB="$HW_TOTAL_RAM_MB"
     fi
 
     HW_CPU_CORES=$(nproc 2>/dev/null)
@@ -274,6 +297,7 @@ detect_hardware_profile() {
     export HW_TARGET_DEVICE
     export HW_TOTAL_RAM_MB
     export HW_AVAILABLE_RAM_MB
+    export HW_CGROUP_LIMIT_MB
     export HW_CPU_CORES
     export HW_CPU_THREADS
     export HW_SWAP_MB
@@ -291,6 +315,7 @@ HW_FS_TYPE="$HW_FS_TYPE"
 HW_TARGET_DEVICE="$HW_TARGET_DEVICE"
 HW_TOTAL_RAM_MB="$HW_TOTAL_RAM_MB"
 HW_AVAILABLE_RAM_MB="$HW_AVAILABLE_RAM_MB"
+HW_CGROUP_LIMIT_MB="${HW_CGROUP_LIMIT_MB:-0}"
 HW_CPU_CORES="$HW_CPU_CORES"
 HW_CPU_THREADS="$HW_CPU_THREADS"
 HW_SWAP_MB="$HW_SWAP_MB"
