@@ -117,6 +117,13 @@ server_pid="$(systemctl show -p MainPID --value minecraft.service)"
 [ "$(ps -o user= -p "$server_pid" | xargs)" = criasvm ]
 echo "PASS: unit systemd real isolada, sem root e com limites aplicados"
 mc_ci_event "PASS" "systemd" "servico como criasvm e MemoryMax/MemorySwapMax aplicados"
+# A recalibracao NAO pode alterar MemoryMax com a JVM ativa.
+if CRIS_MANAGER_ALLOW_UNSAFE=1 SERVER_DIR="$server" SERVER_USER=criasvm \
+    bash "$root/minecraft/mc-manager.sh" reconfigure-hardware LOW >/tmp/crias-memory-active-test.log 2>&1; then
+    echo "FAIL: reconfigure-hardware aceitou alterar RAM com JVM ativa" >&2
+    exit 1
+fi
+grep -q "completamente parado" /tmp/crias-memory-active-test.log
 systemctl stop minecraft.service
 ! systemctl is-active --quiet minecraft.service
 # Valide o limite persistente de memoria usando systemd real e drop-in.
@@ -125,6 +132,19 @@ write_minecraft_systemd_memory_limit 640
 write_minecraft_systemd_memory_limit 768
 [ "$(systemctl show -p MemoryMax --value minecraft.service)" = 805306368 ]
 echo "PASS: MemoryMax sincronizado via drop-in e validado pelo systemd real"
+# Integre a reconfiguracao de ponta a ponta (manager -> env -> systemd).
+CRIS_MANAGER_ALLOW_UNSAFE=1 SERVER_DIR="$server" SERVER_USER=criasvm \
+    bash "$root/minecraft/mc-manager.sh" reconfigure-hardware LOW > /tmp/crias-mc-memory-reconfig.log 2>&1 || {
+        cat /tmp/crias-mc-memory-reconfig.log >&2
+        echo "FAIL: manager nao sincronizou heap/MemoryMax" >&2
+        exit 1
+    }
+configured_mb="$(sed -n 's/^MC_SERVICE_MEMORY_MAX_MB="\([0-9][0-9]*\)"$/\1/p' "$server/hardware-profile.env")"
+[ -n "$configured_mb" ]
+[ "$(systemctl show minecraft.service -p MemoryMax --value)" = "$((configured_mb * 1048576))" ]
+grep -q "^NATIVE_OVERHEAD_MB=" "$server/runtime.env"
+echo "PASS: manager recalibrou RAM com unit parada e sincronizou Xmx/MemoryMax"
+mc_ci_event "PASS" "reconfigure-memory" "manager validou limites efetivos no systemd"
 
 # Injeta OOM isolado para validar a observabilidade de falha de cgroup.
 # Nao altera a unit do jogo; a VM e descartavel e nao aceita EULA.
