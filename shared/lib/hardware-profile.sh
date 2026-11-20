@@ -208,6 +208,10 @@ cgroup_v2_effective_memory_mb() {
     if [ "$rel" != "/" ] && ! [[ "$rel" =~ ^(/[-A-Za-z0-9_.:@]+)+$ ]]; then
         return 1
     fi
+    # O regex de caracteres sozinho nao impede componentes /../ ou /./.
+    if [[ "$rel" =~ (^|/)\.\.(/|$) || "$rel" =~ (^|/)\.(/|$) ]]; then
+        return 1
+    fi
     if [ "$rel" = "/" ]; then rel=""; fi
     cur="${root%/}${rel}"
     while :; do
