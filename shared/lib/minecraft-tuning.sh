@@ -142,6 +142,53 @@ compute_minecraft_tuning() {
     export MC_HOST_RESERVE_MB
 }
 
+# Atualiza somente o limite MemoryMax da unidade Minecraft. Mantem unit
+# principal e preferencias administradas pelo operador intactas. Chamado
+# SOMENTE com o servico parado pelo manager, para nao reduzir cota em jogo.
+write_minecraft_systemd_memory_limit() {
+    local max_mb="${1:-}" dir="${2:-/etc/systemd/system/minecraft.service.d}"
+    local target="$dir/20-crias-memory.conf" staged="" previous="" verify_out=""
+    if ! [[ "$max_mb" =~ ^[0-9]{3,6}$ ]] || [ "$max_mb" -lt 640 ]; then
+        print_error "MemoryMax invalido para Minecraft: ${max_mb:-vazio} MB"
+        return 1
+    fi
+    if [ -L "$dir" ] || [ -L "$target" ]; then
+        print_error "Recusando drop-in systemd por link simbolico: $target"
+        return 1
+    fi
+    mkdir -p -- "$dir" || return 1
+    staged="$(mktemp "$dir/.crias-memory.XXXXXXXX")" || return 1
+    if ! printf "[Service]\nMemoryMax=%sM\n" "$max_mb" > "$staged" || ! chmod 0644 "$staged"; then
+        rm -f -- "$staged"
+        return 1
+    fi
+    if [ -e "$target" ]; then
+        if [ ! -f "$target" ]; then rm -f -- "$staged"; return 1; fi
+        previous="$(mktemp "$dir/.crias-previous.XXXXXXXX")" || { rm -f -- "$staged"; return 1; }
+        if ! cp -a -- "$target" "$previous"; then
+            rm -f -- "$staged" "$previous"
+            return 1
+        fi
+    fi
+    if ! mv -T -- "$staged" "$target"; then
+        rm -f -- "$staged" "$previous"
+        return 1
+    fi
+    # Validacao apos publicar usa o verdadeiro loader de unit + drop-ins.
+    if ! systemctl daemon-reload || ! verify_out="$(systemd-analyze verify minecraft.service 2>&1)"; then
+        print_error "Validacao do MemoryMax no systemd falhou; restaurando configuracao anterior."
+        [ -z "$verify_out" ] || printf "%s\n" "$verify_out" >&2
+        if [ -n "$previous" ]; then
+            mv -T -- "$previous" "$target" || return 1
+        else
+            rm -f -- "$target" || return 1
+        fi
+        systemctl daemon-reload || true
+        return 1
+    fi
+    [ -z "$previous" ] || rm -f -- "$previous"
+    return 0
+}
 write_minecraft_runtime_env() {
     local file_path="$1"
 
