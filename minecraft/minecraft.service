@@ -1,8 +1,8 @@
 [Unit]
 Description=Minecraft Server
 After=network.target
-# Limite de partidas rapidas (inclusive manuais) em cinco minutos.
-# OOM/crash nao gera reinicio automatico: preserva RAM e acesso remoto.
+# Sem restart automatico: OOM/crash exige diagnostico e inicio manual.
+# Limite adicional de tentativas rapidas realizadas pelo operador.
 StartLimitIntervalSec=300s
 StartLimitBurst=3
 Conflicts=terraria.service
@@ -16,7 +16,6 @@ ExecStart=${SERVER_DIR}/start-server.sh
 # Prefer SIGINT to give the JVM a chance to shutdown cleanly.
 KillSignal=SIGINT
 TimeoutStopSec=120
-# Fail-closed: um novo start exige acao explicita apos diagnostico.
 Restart=no
 RestartSec=30s
 OOMPolicy=stop
@@ -27,8 +26,8 @@ MemorySwapMax=0
 Nice=-5
 IOSchedulingClass=best-effort
 IOSchedulingPriority=0
-# Minecraft e descartavel; preserve SSH e servicos criticos se o host
-# entrar em OOM global. Limite cgroup continua sendo a primeira defesa.
+# JVM pode ser encerrada antes de SSH/tailscaled no OOM global;
+# MemoryMax isola falhas do cgroup antes de saturar o host.
 OOMScoreAdjust=200
 
 # --- Hardening systemd (itens S6/S7 + checklist 6.2) ---

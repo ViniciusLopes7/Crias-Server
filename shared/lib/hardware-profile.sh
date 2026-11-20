@@ -132,7 +132,7 @@ detect_disk_type_for_path() {
                 ;;
         esac
         if command -v print_warning >/dev/null 2>&1; then
-            print_warning "Nao foi possivel inferir o tipo de disco para $target_path; usando UNKNOWN."
+            print_warning "Nao foi possivel inferir o tipo de disco para $target_path; usando UNKNOWN." >&2
         fi
         echo "UNKNOWN"
         return 0
@@ -168,7 +168,7 @@ detect_disk_type_for_path() {
     fi
 
     if command -v print_warning >/dev/null 2>&1; then
-        print_warning "Nao foi possivel inferir o tipo de disco para $target_path; usando UNKNOWN."
+        print_warning "Nao foi possivel inferir o tipo de disco para $target_path; usando UNKNOWN." >&2
     fi
     echo "UNKNOWN"
 }
@@ -187,6 +187,12 @@ classify_hardware_tier() {
     local low_cpu="${HW_LOW_TIER_MAX_CPU_CORES:-2}"
     local mid_ram="${HW_MID_TIER_MAX_RAM_MB:-12288}"
     local mid_cpu="${HW_MID_TIER_MAX_CPU_CORES:-6}"
+    # Valores manuais invalidos nao podem causar comparacoes aritmeticas
+    # imprevisiveis ou promover um host fraco ao tier HIGH.
+    [[ "$low_ram" =~ ^[0-9]{1,7}$ ]] && [ "$low_ram" -gt 0 ] || low_ram=3072
+    [[ "$low_cpu" =~ ^[0-9]{1,5}$ ]] && [ "$low_cpu" -gt 0 ] || low_cpu=2
+    [[ "$mid_ram" =~ ^[0-9]{1,7}$ ]] && [ "$mid_ram" -ge "$low_ram" ] || mid_ram=12288
+    [[ "$mid_cpu" =~ ^[0-9]{1,5}$ ]] && [ "$mid_cpu" -ge "$low_cpu" ] || mid_cpu=6
 
     if [ "$total_ram_mb" -lt "$low_ram" ] || [ "$cpu_cores" -le "$low_cpu" ]; then
         echo "LOW"
@@ -206,6 +212,10 @@ cgroup_v2_effective_memory_mb() {
     fi
     # Nao aceite traversal, barras duplas ou caracteres inesperados em path.
     if [ "$rel" != "/" ] && ! [[ "$rel" =~ ^(/[-A-Za-z0-9_.:@]+)+$ ]]; then
+        return 1
+    fi
+    # O regex de caracteres sozinho nao impede componentes /../ ou /./.
+    if [[ "$rel" =~ (^|/)\.\.(/|$) || "$rel" =~ (^|/)\.(/|$) ]]; then
         return 1
     fi
     if [ "$rel" = "/" ]; then rel=""; fi
@@ -229,32 +239,110 @@ cgroup_v2_effective_memory_mb() {
     [ -n "$min_mb" ] || return 1
     printf "%s\n" "$min_mb"
 }
+# Cotas efetivas de CPU podem estar em qualquer ancestral da slice systemd.
+# Arredondamento para baixo evita superdimensionar um host com 1,5 vCPU.
+cgroup_v2_effective_cpu_cores() {
+    local root="${1:-/sys/fs/cgroup}" rel="${2:-}" cur quota period cores min_cores=""
+    if [ "$#" -lt 2 ]; then
+        rel="$(awk -F: '$1=="0" && $2=="" {print $3; exit}' /proc/self/cgroup 2>/dev/null || true)"
+    fi
+    if [ "$rel" != "/" ] && ! [[ "$rel" =~ ^(/[-A-Za-z0-9_.:@]+)+$ ]]; then return 1; fi
+    if [[ "$rel" =~ (^|/)\.\.(/|$) || "$rel" =~ (^|/)\.(/|$) ]]; then return 1; fi
+    [ "$rel" = "/" ] && rel=""
+    cur="${root%/}${rel}"
+    while :; do
+        if [ -r "$cur/cpu.max" ]; then
+            quota="" period=""
+            read -r quota period < "$cur/cpu.max" || true
+            if [[ "$quota" =~ ^[0-9]{1,15}$ ]] && [[ "$period" =~ ^[0-9]{1,12}$ ]] && [ "$period" -gt 0 ]; then
+                cores=$((quota / period))
+                [ "$cores" -ge 1 ] || cores=1
+                if [ -z "$min_cores" ] || [ "$cores" -lt "$min_cores" ]; then min_cores="$cores"; fi
+            fi
+        fi
+        [ "$cur" = "${root%/}" ] && break
+        cur="${cur%/*}"
+        case "$cur" in "${root%/}"|"${root%/}/"*) ;; *) break ;; esac
+    done
+    [ -n "$min_cores" ] || return 1
+    printf '%s\n' "$min_cores"
+}
+
+# Folga do cgroup, nao apenas seu teto. memory.current e conservador
+# (inclui cache reclamavel); reduz risco de alocar em slice ja pressionada.
+cgroup_v2_available_memory_mb() {
+    local root="${1:-/sys/fs/cgroup}" rel="${2:-}" cur max_bytes current_bytes inactive_file used_bytes available_mb min_available=""
+    if [ "$#" -lt 2 ]; then
+        rel="$(awk -F: '$1=="0" && $2=="" {print $3; exit}' /proc/self/cgroup 2>/dev/null || true)"
+    fi
+    if [ "$rel" != "/" ] && ! [[ "$rel" =~ ^(/[-A-Za-z0-9_.:@]+)+$ ]]; then return 1; fi
+    if [[ "$rel" =~ (^|/)\.\.(/|$) || "$rel" =~ (^|/)\.(/|$) ]]; then return 1; fi
+    [ "$rel" = "/" ] && rel=""
+    cur="${root%/}${rel}"
+    while :; do
+        if [ -r "$cur/memory.max" ] && [ -r "$cur/memory.current" ]; then
+            read -r max_bytes < "$cur/memory.max" || max_bytes=""
+            read -r current_bytes < "$cur/memory.current" || current_bytes=""
+            if [[ "$max_bytes" =~ ^[0-9]{1,18}$ ]] && [[ "$current_bytes" =~ ^[0-9]{1,18}$ ]] && [ "$max_bytes" -gt 0 ]; then
+                # Parte de inactive_file e cache potencialmente reclamavel.
+                # Credita apenas metade, para nao prometer toda a RAM de cache.
+                inactive_file=0
+                if [ -r "$cur/memory.stat" ]; then
+                    inactive_file="$(awk '$1=="inactive_file" {print $2; exit}' "$cur/memory.stat" 2>/dev/null || true)"
+                    [[ "$inactive_file" =~ ^[0-9]{1,18}$ ]] || inactive_file=0
+                fi
+                [ "$inactive_file" -le "$current_bytes" ] || inactive_file="$current_bytes"
+                used_bytes=$((current_bytes - inactive_file / 2))
+                if [ "$used_bytes" -ge "$max_bytes" ]; then
+                    available_mb=0
+                else
+                    available_mb=$(((max_bytes - used_bytes) / 1048576))
+                fi
+                if [ -z "$min_available" ] || [ "$available_mb" -lt "$min_available" ]; then min_available="$available_mb"; fi
+            fi
+        fi
+        [ "$cur" = "${root%/}" ] && break
+        cur="${cur%/*}"
+        case "$cur" in "${root%/}"|"${root%/}/"*) ;; *) break ;; esac
+    done
+    [ -n "$min_available" ] || return 1
+    printf '%s\n' "$min_available"
+}
 detect_hardware_profile() {
-    local target_path="$1"
-    local forced_tier
-    local meminfo_file="/proc/meminfo"
+    local target_path="${1:-/}" forced_tier
+    local meminfo_file="${3:-/proc/meminfo}"
+    local cg_limit_mb="" cg_available_mb="" cg_bytes="" cg_cpu_cores=""
+    local free_output=""
 
     HW_TARGET_PATH="$target_path"
     HW_FS_TYPE=$(resolve_mount_fstype_for_path "$target_path")
     HW_TARGET_DEVICE=$(resolve_block_device_for_path "$target_path")
-    if command -v free >/dev/null 2>&1; then
-        HW_TOTAL_RAM_MB=$(free -m | awk '/^Mem:/{print $2}')
-        HW_AVAILABLE_RAM_MB=$(free -m | awk '/^Mem:/{print $7}')
-        HW_SWAP_MB=$(free -m | awk '/^Swap:/{print $2}')
-    elif [ -r "$meminfo_file" ]; then
-        HW_TOTAL_RAM_MB=$(awk '/^MemTotal:/ {print int($2 / 1024)}' "$meminfo_file")
-        HW_AVAILABLE_RAM_MB=$(awk '/^MemAvailable:/ {print int($2 / 1024)}' "$meminfo_file")
-        HW_SWAP_MB=$(awk '/^SwapTotal:/ {print int($2 / 1024)}' "$meminfo_file")
-    else
-        HW_TOTAL_RAM_MB=0
-        HW_AVAILABLE_RAM_MB=0
-        HW_SWAP_MB=0
+
+    # Um snapshot /proc/meminfo evita que tres chamadas a free produzam
+    # valores de instantes diferentes. Caminho alternativo serve aos testes.
+    if [ -r "$meminfo_file" ]; then
+        read -r HW_TOTAL_RAM_MB HW_AVAILABLE_RAM_MB HW_SWAP_MB < <(
+            awk '/^MemTotal:/ {t=int($2/1024)}
+                 /^MemAvailable:/ {a=int($2/1024)}
+                 /^SwapTotal:/ {s=int($2/1024)}
+                 END {printf "%d %d %d\n", t, a, s}' "$meminfo_file"
+        )
+    elif command -v free >/dev/null 2>&1; then
+        free_output="$(free -m 2>/dev/null || true)"
+        HW_TOTAL_RAM_MB="$(awk '/^Mem:/{print $2; exit}' <<< "$free_output")"
+        HW_AVAILABLE_RAM_MB="$(awk '/^Mem:/{print $7; exit}' <<< "$free_output")"
+        HW_SWAP_MB="$(awk '/^Swap:/{print $2; exit}' <<< "$free_output")"
     fi
-    # Cotas de memoria podem estar em qualquer ancestral do cgroup atual.
-    # Ler somente /sys/fs/cgroup/memory.max perde os limites da slice.
-    local cg_limit_mb="" cg_bytes=""
+    for field in HW_TOTAL_RAM_MB HW_AVAILABLE_RAM_MB HW_SWAP_MB; do
+        if ! [[ "${!field:-}" =~ ^[0-9]{1,9}$ ]]; then printf -v "$field" '%s' 0; fi
+    done
+    [ "$HW_AVAILABLE_RAM_MB" -le "$HW_TOTAL_RAM_MB" ] || HW_AVAILABLE_RAM_MB="$HW_TOTAL_RAM_MB"
+
+    # A slice que executa o instalador pode ser menor que a RAM da maquina.
     if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
         cg_limit_mb="$(cgroup_v2_effective_memory_mb || true)"
+        cg_available_mb="$(cgroup_v2_available_memory_mb || true)"
+        cg_cpu_cores="$(cgroup_v2_effective_cpu_cores || true)"
     elif [ -r /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
         cg_bytes="$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || true)"
         if [[ "$cg_bytes" =~ ^[0-9]{1,18}$ ]] && [ "$cg_bytes" -gt 0 ] \
@@ -262,49 +350,38 @@ detect_hardware_profile() {
             cg_limit_mb=$((cg_bytes / 1048576))
         fi
     fi
+
     HW_CGROUP_LIMIT_MB="${cg_limit_mb:-0}"
-    if [ -n "$cg_limit_mb" ] && [ "$cg_limit_mb" -gt 0 ] \
+    HW_CGROUP_AVAILABLE_MB="${cg_available_mb:-0}"
+    HW_CPU_QUOTA_CORES="${cg_cpu_cores:-0}"
+    if [[ "$cg_limit_mb" =~ ^[0-9]+$ ]] && [ "$cg_limit_mb" -gt 0 ] \
         && [ "$HW_TOTAL_RAM_MB" -gt 0 ] && [ "$cg_limit_mb" -lt "$HW_TOTAL_RAM_MB" ]; then
         if command -v print_warning >/dev/null 2>&1; then
-            print_warning "Cgroup limita RAM a ${cg_limit_mb}MB (host ${HW_TOTAL_RAM_MB}MB): orcamento ajustado."
+            print_warning "Cgroup limita RAM a ${cg_limit_mb}MB (host ${HW_TOTAL_RAM_MB}MB): orcamento ajustado." >&2
         fi
         HW_TOTAL_RAM_MB="$cg_limit_mb"
         [ "$HW_AVAILABLE_RAM_MB" -le "$HW_TOTAL_RAM_MB" ] || HW_AVAILABLE_RAM_MB="$HW_TOTAL_RAM_MB"
     fi
+    if [[ "$cg_available_mb" =~ ^[0-9]+$ ]] && [ "$cg_available_mb" -lt "$HW_AVAILABLE_RAM_MB" ]; then
+        HW_AVAILABLE_RAM_MB="$cg_available_mb"
+    fi
 
-    HW_CPU_CORES=$(nproc 2>/dev/null)
-    HW_CPU_THREADS=$(grep -c '^processor' /proc/cpuinfo 2>/dev/null)
+    HW_CPU_CORES="$(nproc 2>/dev/null || true)"
+    HW_CPU_THREADS="$(grep -c '^processor' /proc/cpuinfo 2>/dev/null || true)"
+    if ! [[ "$HW_CPU_CORES" =~ ^[0-9]+$ ]] || [ "$HW_CPU_CORES" -le 0 ]; then HW_CPU_CORES=1; fi
+    if [[ "$cg_cpu_cores" =~ ^[0-9]+$ ]] && [ "$cg_cpu_cores" -gt 0 ] && [ "$cg_cpu_cores" -lt "$HW_CPU_CORES" ]; then
+        HW_CPU_CORES="$cg_cpu_cores"
+    fi
+    if ! [[ "$HW_CPU_THREADS" =~ ^[0-9]+$ ]] || [ "$HW_CPU_THREADS" -le 0 ]; then HW_CPU_THREADS="$HW_CPU_CORES"; fi
     HW_DISK_TYPE=$(detect_disk_type_for_path "$target_path")
 
-    # Fallbacks: if nproc or /proc/cpuinfo fail, use 1 core minimum.
-    if [ -z "$HW_CPU_CORES" ] || ! [[ "$HW_CPU_CORES" =~ ^[0-9]+$ ]] || [ "$HW_CPU_CORES" -le 0 ]; then
-        HW_CPU_CORES=1
-    fi
-    if [ -z "$HW_CPU_THREADS" ] || [ "$HW_CPU_THREADS" -le 0 ]; then
-        HW_CPU_THREADS="$HW_CPU_CORES"
-    fi
-
     HW_DETECTED_TIER=$(classify_hardware_tier "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES")
-    forced_tier=$(normalize_tier "$2")
+    forced_tier=$(normalize_tier "${2:-}")
+    if [ -n "$forced_tier" ]; then HW_TIER="$forced_tier"; else HW_TIER="$HW_DETECTED_TIER"; fi
 
-    if [ -n "$forced_tier" ]; then
-        HW_TIER="$forced_tier"
-    else
-        HW_TIER="$HW_DETECTED_TIER"
-    fi
-
-    export HW_TARGET_PATH
-    export HW_FS_TYPE
-    export HW_TARGET_DEVICE
-    export HW_TOTAL_RAM_MB
-    export HW_AVAILABLE_RAM_MB
-    export HW_CGROUP_LIMIT_MB
-    export HW_CPU_CORES
-    export HW_CPU_THREADS
-    export HW_SWAP_MB
-    export HW_DISK_TYPE
-    export HW_DETECTED_TIER
-    export HW_TIER
+    export HW_TARGET_PATH HW_FS_TYPE HW_TARGET_DEVICE HW_TOTAL_RAM_MB HW_AVAILABLE_RAM_MB
+    export HW_CGROUP_LIMIT_MB HW_CGROUP_AVAILABLE_MB HW_CPU_QUOTA_CORES
+    export HW_CPU_CORES HW_CPU_THREADS HW_SWAP_MB HW_DISK_TYPE HW_DETECTED_TIER HW_TIER
 }
 
 write_hardware_profile_state() {
@@ -317,6 +394,8 @@ HW_TARGET_DEVICE="$HW_TARGET_DEVICE"
 HW_TOTAL_RAM_MB="$HW_TOTAL_RAM_MB"
 HW_AVAILABLE_RAM_MB="$HW_AVAILABLE_RAM_MB"
 HW_CGROUP_LIMIT_MB="${HW_CGROUP_LIMIT_MB:-0}"
+HW_CGROUP_AVAILABLE_MB="${HW_CGROUP_AVAILABLE_MB:-0}"
+HW_CPU_QUOTA_CORES="${HW_CPU_QUOTA_CORES:-0}"
 HW_CPU_CORES="$HW_CPU_CORES"
 HW_CPU_THREADS="$HW_CPU_THREADS"
 HW_SWAP_MB="$HW_SWAP_MB"

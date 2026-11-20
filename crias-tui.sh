@@ -66,7 +66,7 @@ show_diagnostics() {
         for service in minecraft terraria; do
             if systemctl list-unit-files "$service.service" --no-legend 2>/dev/null | grep -Fq "$service.service"; then
                 echo "--- $service: status e limites ---"
-                systemctl show "$service.service" --no-pager -p ActiveState -p SubState -p Result -p NRestarts -p Restart -p OOMPolicy -p StartLimitBurst -p StartLimitIntervalUSec -p MemoryMax -p MemoryHigh -p MemoryCurrent -p MemoryPeak -p MemorySwapMax 2>/dev/null || true
+                systemctl show "$service.service" --no-pager -p ActiveState -p SubState -p Result -p NRestarts -p Restart -p OOMPolicy -p StartLimitBurst -p StartLimitIntervalUSec -p MemoryMax -p EffectiveMemoryMax -p MemoryHigh -p MemoryCurrent -p MemoryPeak -p MemorySwapMax 2>/dev/null || true
                 if [ "$service" = minecraft ]; then
                     local cg_unit
                     cg_unit="$(systemctl show -p ControlGroup --value minecraft.service 2>/dev/null || true)"
