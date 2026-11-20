@@ -1,6 +1,10 @@
-# discord-bot/README.md
+# Bot Discord do Crias-Server
 
-Bot Discord em Python (discord.py 2.x) para controle remoto do **Crias-Server**. Conecta ao agente Go via gRPC sobre Tailscale Funnel (HTTPS).
+Bot em Python (`discord.py`) para consultar e controlar servidores Crias-Server por meio do agente Go. A publicação do agente via HTTPS exige configuração, autenticação e permissões independentes do bot.
+
+## Pré-requisitos e segurança
+
+É necessário configurar o token do bot, o endereço do agente e a credencial de acesso. Não publique tokens em issues, logs ou repositórios. **Ter o bot online não prova que um comando chega ao serviço systemd ou ao servidor Minecraft/Terraria.** Faça um teste autorizado de cada operação no ambiente de destino.
 
 ## Como funciona
 
