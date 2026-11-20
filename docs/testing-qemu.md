@@ -70,3 +70,7 @@ O teste é demorado e baixa imagens e instaladores reais. Ele é adequado a CI o
 - [Runner QEMU](../tests/qemu/run-vm.sh)
 - [Instalação e recuperação](tutorial.md)
 - [Tuning de memória](hardware-tuning.md)
+
+## Casos adversariais para temporários
+
+`tests/temp-cleanup-test.sh` e o job QEMU exercitam registro privado, permissões 0600/0700, recusa de caminhos não cadastrados, recusa de traversal, troca por link simbólico e isolamento de `TMPDIR` quando o instalador atua como root. O teste de rollback valida a restauração de artefatos existentes. A proteção não garante imunidade a todas as corridas do sistema de arquivos, especialmente se a conta administrativa já estiver comprometida.
