@@ -1,6 +1,6 @@
 # Tuning por Hardware
 
-O Crias-Server detecta hardware automaticamente e ajusta parâmetros de servidor e host.
+O Crias-Server detecta os recursos do host e propõe parâmetros conservadores para cada servidor. O ajuste automático é uma estimativa inicial: modpacks pesados e múltiplos serviços devem ser validados no hardware real.
 
 ## Sinais detectados
 
@@ -33,7 +33,7 @@ HW_MID_TIER_MAX_CPU_CORES=6
 
 - `max-players`, `view-distance`, `simulation-distance` (Minecraft)
 - `maxplayers`, `npcstream`, `autocreate` (Terraria)
-- Heap JVM (`-Xms`, `-Xmx`) baseado em RAM disponível (Minecraft)
+- Heap JVM (`-Xms`, `-Xmx`) estimado a partir da RAM física, com folga para o SO e a memória nativa do processo Java (Minecraft)
 - `MemoryMax` do systemd (acima do heap para acomodar JVM overhead)
 - G1 GC region size baseado no heap
 - Retenção de backup (LOW=5, MID=7, HIGH=10 dias)
@@ -117,7 +117,7 @@ Mostra `HW_TOTAL_RAM_MB`, `HW_CPU_CORES`, `HW_DISK_TYPE`, `HW_TIER` e todos os p
 - [tutorial.md](tutorial.md) — Tutorial de operação (seção 3: tuning)
 - [../README.md](../README.md) — README principal (tabela de tiers)
 
-## Folga para JVM nativa e host (OOM)
+## Falha de memória: heap Java versus limite do systemd
 
 O cálculo do Minecraft agora reserva RAM para o sistema operacional e para o consumo **fora do heap Java** (metaspace, stacks de threads, buffers, compilador JIT). O limite `MemoryMax` permanece maior que `MAX_RAM`, mas não deve ocupar praticamente toda a RAM física. Em máquinas pequenas, o heap calculado será menor que nas versões anteriores; isso prioriza estabilidade, não FPS ou TPS máximos. Modpacks pesados podem exigir mais RAM física.
 
