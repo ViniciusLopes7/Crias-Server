@@ -122,8 +122,8 @@ systemctl stop minecraft.service
 # Valide o limite persistente de memoria usando systemd real e drop-in.
 write_minecraft_systemd_memory_limit 640
 [ "$(systemctl show -p MemoryMax --value minecraft.service)" = 671088640 ]
-write_minecraft_systemd_memory_limit 512
-[ "$(systemctl show -p MemoryMax --value minecraft.service)" = 536870912 ]
+write_minecraft_systemd_memory_limit 768
+[ "$(systemctl show -p MemoryMax --value minecraft.service)" = 805306368 ]
 echo "PASS: MemoryMax sincronizado via drop-in e validado pelo systemd real"
 
 # Injeta OOM isolado para validar a observabilidade de falha de cgroup.
