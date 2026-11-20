@@ -969,8 +969,10 @@ remove_alias_autoload_entry() {
 write_stack_env_file() {
     local env_file
 
-    env_file="$(mktemp "${TMPDIR:-/tmp}/crias_stack_env.XXXXXX")"
-    chmod 600 "$env_file"
+    # Arquivo de configuracao temporario com segredos (webhook, paths).
+    # O registro garante limpeza mesmo se o processo falhar antes do subshell.
+    env_file="$(mktemp_crias_file)" || return 1
+    chmod 0600 "$env_file" || return 1
     # Caller cleans up; validate write before returning path.
     if ! {
         printf 'FORCE_HARDWARE_TIER=%q\n' "$FORCE_HARDWARE_TIER"
