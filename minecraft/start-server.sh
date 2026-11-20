@@ -131,7 +131,8 @@ if [ -z "${JAVA_BIN:-}" ]; then
     if [ -x "/usr/lib/jvm/java-${REQUIRED_JAVA_MAJOR}-openjdk/bin/java" ]; then
         JAVA_BIN="/usr/lib/jvm/java-${REQUIRED_JAVA_MAJOR}-openjdk/bin/java"
     else
-        JAVA_BIN=java
+        echo "ERRO: JDK $REQUIRED_JAVA_MAJOR nao encontrado em /usr/lib/jvm. Instale jdk${REQUIRED_JAVA_MAJOR}-openjdk ou configure JAVA_BIN explicitamente." >&2
+        exit 1
     fi
 fi
 if ! command -v "$JAVA_BIN" >/dev/null 2>&1; then
