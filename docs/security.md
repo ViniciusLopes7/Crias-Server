@@ -1,10 +1,10 @@
 # Segurança e Operação
 
-Pontos operacionais que não devem ficar espalhados nos scripts: firewall, logs, health checks, hardening systemd, cleanup do stack oposto.
+Referência de segurança e operação: firewall, SSH, permissões, logs, serviços systemd e políticas de limpeza. Execute comandos que modificam acesso remoto somente depois de validar como recuperar o host.
 
 ## Firewall
 
-O projeto **não** abre portas automaticamente. Se o servidor estiver em rede pública, libere apenas o necessário.
+Abertura de portas e permissões devem ser revistas no host de destino. Para servidores expostos à internet, permita apenas os serviços necessários; não presuma que as regras existentes foram alteradas pelo instalador.
 
 - **Minecraft**: porta configurada em `server.properties` (default: `25565`)
 - **Terraria**: porta configurada em `config/serverconfig.txt` (default: `7777`)
@@ -307,7 +307,7 @@ e **preserva a política de senha existente** (EXP-65): se o host já está
 configurado com `PasswordAuthentication no` (key-only), o instalador não
 reativa senha. A configuração é validada com `sshd -t` ANTES do restart.
 
-## Verificação adicional da release (limitação conhecida — CR-24)
+## Integridade e autenticidade da release
 
 O bootstrap valida o SHA-256 dos assets contra o `sha256sums.txt` da MESMA
 release. Isso protege contra corrupção/URL intermediária, mas não contra um
@@ -319,3 +319,8 @@ infraestrutura de assinatura ainda não está implementada.
 O bootstrap exibe a tag e o commit-alvo da release antes de instalar
 (EXP-40). A branch `main` pode estar à frente da release `latest`; para
 pinar: `CRIAS_RELEASE_TAG=v2026.11.19-<sha> crias-bootstrap`.
+
+## Diagnóstico sem ampliar privilégios
+
+O comando `sudo crias-tui --doctor` coleta informações de serviços, RAM/swap e mensagens OOM sem modificar unidades ou iniciar o jogo. Para um problema de memória, confira `systemctl show minecraft -p MemoryMax -p MemoryPeak -p MemorySwapMax -p NRestarts` e os logs do kernel antes de editar `MemoryMax`. Não use `chmod 777`, desative o sandbox ou execute o Java como root para contornar erros de permissão.
+
