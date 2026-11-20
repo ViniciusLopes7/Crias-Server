@@ -60,59 +60,104 @@ err_ts() {
 # Idempotent across multiple sources (common.sh is sourced by many scripts).
 # ---------------------------------------------------------------------------
 if ! declare -F _crias_cleanup_temps >/dev/null 2>&1; then
-    # Do not trust a predictable /tmp/crias-temps.<pid> or inherited registry.
-    # Root uses sticky /tmp so another user cannot replace the private file.
-    _crias_registry_dir="${TMPDIR:-/tmp}"
-    if [ "$EUID" -eq 0 ]; then _crias_registry_dir=/tmp; fi
-    CRIAS_TEMPS_FILE="$(mktemp "${_crias_registry_dir%/}/crias-temps.XXXXXXXX")" || {
-        printf 'ERRO: nao foi possivel criar registro privado de temporarios\n' >&2
+    # Ignore an untrusted TMPDIR in privileged runs. For unprivileged
+    # processes, accept only an existing absolute directory and canonicalize
+    # it once: creation, validation and cleanup share the same base.
+    _crias_temp_root=/tmp
+    if [ "$EUID" -ne 0 ]; then
+        _crias_candidate="${TMPDIR:-/tmp}"
+        if [[ "$_crias_candidate" = /* && "$_crias_candidate" != *$'\n'* ]] \
+            && [ -d "$_crias_candidate" ] && [ ! -L "$_crias_candidate" ]; then
+            _crias_temp_root="$(cd -- "$_crias_candidate" && pwd -P)" || return 1 2>/dev/null || exit 1
+        fi
+        unset _crias_candidate
+    fi
+    CRIAS_TEMPS_FILE="$(mktemp "${_crias_temp_root%/}/crias-temps.XXXXXXXX")" || {
+        printf "ERRO: nao foi possivel criar registro privado de temporarios\n" >&2
         return 1 2>/dev/null || exit 1
     }
-    unset _crias_registry_dir
-    _crias_cleanup_temps() {
-        if [ -f "$CRIAS_TEMPS_FILE" ]; then
-            while IFS= read -r t || [ -n "$t" ]; do
-                [ -n "$t" ] && rm -rf -- "$t" 2>/dev/null || true
-            done < "$CRIAS_TEMPS_FILE"
-            rm -f -- "$CRIAS_TEMPS_FILE" 2>/dev/null || true
+    chmod 0600 -- "$CRIAS_TEMPS_FILE" || {
+        rm -f -- "$CRIAS_TEMPS_FILE"
+        printf "ERRO: nao foi possivel proteger registro de temporarios\n" >&2
+        return 1 2>/dev/null || exit 1
+    }
+
+    # Only paths from trusted mktemp templates can be deleted by the EXIT
+    # handler. Systemd units use the destination filesystem for atomic mv.
+    _crias_temp_path_allowed() {
+        local candidate="${1:-}"
+        case "$candidate" in
+            "${_crias_temp_root%/}"/crias.??????|/etc/systemd/system/crias-unit.??????.service) ;;
+            *) return 1 ;;
+        esac
+        [ ! -L "$candidate" ] || return 1
+    }
+
+    _crias_register_temp() {
+        local candidate="${1:-}"
+        if ! _crias_temp_path_allowed "$candidate"; then
+            print_warning "Temporario fora da politica: $candidate"
+            return 1
         fi
+        if ! printf "%s\n" "$candidate" >> "$CRIAS_TEMPS_FILE"; then
+            print_error "Falha ao registrar temporario: $candidate"
+            return 1
+        fi
+    }
+
+    _crias_cleanup_temps() {
+        local t
+        # Never follow or trust a replaced registry.
+        if [ ! -f "$CRIAS_TEMPS_FILE" ] || [ -L "$CRIAS_TEMPS_FILE" ]; then
+            return 0
+        fi
+        while IFS= read -r t || [ -n "$t" ]; do
+            [ -n "$t" ] || continue
+            if ! _crias_temp_path_allowed "$t"; then
+                print_warning "Ignorando entrada de temporario nao reconhecida: $t"
+                continue
+            fi
+            if [ -e "$t" ]; then
+                rm -rf -- "$t" || print_warning "Falha ao limpar temporario: $t"
+            fi
+        done < "$CRIAS_TEMPS_FILE"
+        rm -f -- "$CRIAS_TEMPS_FILE" || true
     }
     trap _crias_cleanup_temps EXIT
 fi
 
 mktemp_crias_file() {
     local f
-    f="$(mktemp "${TMPDIR:-/tmp}/crias.XXXXXX")" || return 1
-    printf '%s\n' "$f" >> "$CRIAS_TEMPS_FILE"
-    printf '%s\n' "$f"
+    f="$(mktemp "${_crias_temp_root%/}/crias.XXXXXX")" || return 1
+    _crias_register_temp "$f" || { rm -f -- "$f"; return 1; }
+    printf "%s\n" "$f"
 }
 
 mktemp_crias_dir() {
     local d
-    d="$(mktemp -d "${TMPDIR:-/tmp}/crias.XXXXXX")" || return 1
-    printf '%s\n' "$d" >> "$CRIAS_TEMPS_FILE"
-    printf '%s\n' "$d"
+    d="$(mktemp -d "${_crias_temp_root%/}/crias.XXXXXX")" || return 1
+    _crias_register_temp "$d" || { rmdir -- "$d" 2>/dev/null || true; return 1; }
+    printf "%s\n" "$d"
 }
 
-# Remove only a directory allocated by mktemp_crias_dir in this process.
-# Server directory validation deliberately rejects /tmp and must not be used here.
+# Remove only an exact registered temporary directory, never a symlink.
 remove_crias_temp_dir() {
-    local target="${1:-}" temp_root="${TMPDIR:-/tmp}"
-    case "$target" in
-        "${temp_root%/}"/crias.??????) ;;
-        *) print_warning "Diretorio temporario nao reconhecido: '$target'"; return 1 ;;
-    esac
-    if [ ! -f "$CRIAS_TEMPS_FILE" ] || ! grep -Fxq -- "$target" "$CRIAS_TEMPS_FILE"; then
-        print_warning "Diretorio temporario nao registrado: '$target'"
+    local target="${1:-}"
+    if ! _crias_temp_path_allowed "$target" || [[ "$target" != "${_crias_temp_root%/}"/crias.?????? ]]; then
+        print_warning "Diretorio temporario nao reconhecido: $target"
         return 1
     fi
-    if [ -L "$target" ]; then
-        print_warning "Diretorio temporario virou symlink: '$target'"
+    if [ ! -f "$CRIAS_TEMPS_FILE" ] || [ -L "$CRIAS_TEMPS_FILE" ] \
+        || ! grep -Fxq -- "$target" "$CRIAS_TEMPS_FILE"; then
+        print_warning "Diretorio temporario nao registrado: $target"
+        return 1
+    fi
+    if [ -e "$target" ] && [ ! -d "$target" ]; then
+        print_warning "Temporario nao e mais diretorio: $target"
         return 1
     fi
     [ ! -e "$target" ] || rm -rf -- "$target"
 }
-
 # ---------------------------------------------------------------------------
 # Banner and step helpers.
 # ---------------------------------------------------------------------------
