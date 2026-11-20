@@ -20,7 +20,9 @@ printf '4294967296\n' > "$tmp/cg/parent/child/memory.max"
 printf '1073741824\n' > "$tmp/cg/parent/child/memory.max"
 [ "$(cgroup_v2_effective_memory_mb "$tmp/cg" /parent/child)" = 1024 ]
 printf 'max\n' > "$tmp/cg/parent/child/memory.max"
-[ "$(cgroup_v2_effective_memory_mb "$tmp/cg" /)" = "" ] || true
+if cgroup_v2_effective_memory_mb "$tmp/cg" / >/dev/null; then
+    echo "FAIL: cgroup root sem cota retornou limite" >&2; exit 1
+fi
 if cgroup_v2_effective_memory_mb "$tmp/cg" /../outside >/dev/null; then
     echo "FAIL: cgroup path traversal permitido" >&2; exit 1
 fi
