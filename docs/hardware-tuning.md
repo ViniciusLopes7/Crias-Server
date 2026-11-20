@@ -8,7 +8,7 @@ O Crias-Server detecta os recursos do host e propõe parâmetros conservadores p
 - Threads visíveis e CPUs utilizáveis (`nproc` limitado pela menor cota `cpu.max` da hierarquia cgroup v2; limites fracionários arredondados para baixo, mínimo 1)
 - Tipo de disco (HDD, SSD, NVME)
 - Filesystem (ZFS/Btrfs/LVM detectados — tuning de bloco pode ser pulado)
-- Teto de RAM de cgroups (`memory.max`) e folga `memory.max - memory.current`, incluindo ancestrais
+- Teto de RAM de cgroups (`memory.max`) e folga estimada incluindo ancestrais; considera metade de `inactive_file` como cache potencialmente reclamável, mantendo margem de segurança
 - Virtualização (`systemd-detect-virt`) — tuning global de host é pulado em container/VPS
 
 ## Tiers
@@ -160,6 +160,8 @@ Os eventos do kernel não identificam sozinhos qual perfil ou mod causou o probl
 - `MemorySwapMax=0` continua impedindo que o **processo Minecraft** use swap; isso não impede que o host utilize ZRAM para outros processos. A opção prioriza limitar pausas graves de JVM, mas não substitui memória física suficiente.
 
 **Memória sob pressão:** se o orçamento seguro for inferior ao heap mínimo, o instalador/recalibrador recusa gerar uma configuração inválida; não aumenta automaticamente o limite e não encerra processos concorrentes. O operador pode liberar RAM, encerrar outro servidor de jogo ou revisar as cotas antes de tentar novamente. A disponibilidade é uma medição de um instante; processos futuros ainda podem consumir memória.
+
+**Disco incerto:** se o filesystem ou dispositivo não puder ser classificado com segurança, `sync-chunk-writes=true` é mantido, em vez de presumir SSD. Isso pode reduzir throughput, mas evita um ajuste agressivo baseado em detecção inconclusiva.
 
 **Modpacks grandes:** o tuning é um orçamento inicial e não garante que todos os mods caibam no heap. Analise `MemoryPeak`, `MemoryMax`, logs do Java e uso do host antes de escolher o heap; não aumente `-Xmx` sozinho sem ajustar o cgroup.
 
