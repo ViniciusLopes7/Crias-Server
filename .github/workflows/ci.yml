@@ -208,6 +208,7 @@ jobs:
           bash tests/server-extras-test.sh
           bash tests/terraria-tuning-test.sh
           bash tests/download-modrinth-test.sh
+          python3 tests/docs-links-test.py
 
   test-shell-arch:
     name: Test Shell (Arch container)
@@ -553,6 +554,15 @@ jobs:
           rm -rf release-assets/_pkg/slim/docs
           rm -rf release-assets/_pkg/slim/tests
           rm -rf release-assets/_pkg/slim/.github/workflows
+          # Falha se um zip distribuido estiver sem componentes basicos.
+          for pkg in full slim; do
+            for mandatory in install.sh crias-bootstrap.sh crias-tui.sh config.env shared/lib/common.sh; do
+              test -s "release-assets/_pkg/$pkg/$mandatory" || {
+                echo "ERROR: $pkg sem arquivo obrigatorio: $mandatory" >&2
+                exit 1
+              }
+            done
+          done
           (cd release-assets/_pkg/full && zip -qr ../../crias-server-full.zip .)
           (cd release-assets/_pkg/slim && zip -qr ../../crias-server-slim.zip .)
 
