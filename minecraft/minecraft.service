@@ -1,9 +1,10 @@
 [Unit]
 Description=Minecraft Server
 After=network.target
-# Limita falhas repetidas no boot/OOM: se o Java cai 3 vezes em 5 min,
-# pare de reiniciar. Antes 60s permitia loops indefinidos em startups lentos.
-StartLimitIntervalSec=300s
+# Disjuntor persistente: no maximo 3 partidas ate reset-failed explicito.
+# Uma janela finita permite que um crash de inicializacao/OOM reinicie para
+# sempre quando a tentativa leva mais tempo que a janela.
+StartLimitIntervalSec=infinity
 StartLimitBurst=3
 Conflicts=terraria.service
 
@@ -26,7 +27,9 @@ MemorySwapMax=0
 Nice=-5
 IOSchedulingClass=best-effort
 IOSchedulingPriority=0
-OOMScoreAdjust=-800
+# Minecraft e descartavel; preserve SSH e servicos criticos se o host
+# entrar em OOM global. Limite cgroup continua sendo a primeira defesa.
+OOMScoreAdjust=200
 
 # --- Hardening systemd (itens S6/S7 + checklist 6.2) ---
 # Nota: Minecraft roda em JVM (JIT). Por isso:
