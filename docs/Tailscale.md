@@ -12,7 +12,7 @@ Como conectar jogadores por uma rede privada Tailscale e, quando necessário, pu
 
 ## 1. Configurar Tailscale no servidor
 
-O instalador oferece instalar o pacote e ativar `tailscaled` (`INSTALL_TAILSCALE=true`, padrão). A autenticação da máquina deve ser feita separadamente com `tailscale up`. Se você pulou a instalação:
+O instalador agora apresenta uma etapa **Acesso remoto** antes do Minecraft: instala e ativa `tailscaled`, oferece autenticação opcional pelo link de `tailscale up` e pergunta sobre OpenSSH. Se a máquina já estiver autenticada, preserva a conexão. Em modo não interativo, não abre URL nem guarda chaves de acesso. Se você pulou a etapa:
 
 ```bash
 sudo pacman -S tailscale
@@ -155,6 +155,32 @@ sudo tailscale funnel status
 # Funnel requer conta Tailscale ativa e node aprovado no admin console
 # Veja: https://login.tailscale.com/admin/settings/features
 ```
+
+## SSH pela rede Tailscale (porta 22)
+
+**Tailscale cria a rede; OpenSSH atende conexões na porta 22.** `Connection refused` geralmente significa ausência de um servidor SSH escutando ou rejeição ativa da conexão. O instalador pergunta sobre SSH antes de instalar o Minecraft, para que uma falha no jogo não impeça a recuperação remota.
+
+No console físico:
+
+```bash
+sudo pacman -S --needed openssh
+sudo sshd -t
+sudo systemctl enable --now sshd.service
+systemctl is-active sshd.service
+sudo ss -ltnp 'sport = :22'
+tailscale status
+tailscale ip -4
+```
+
+Conecte de outro dispositivo da mesma tailnet com `ssh USUARIO_EXISTENTE@IP_TAILSCALE`. Se o SSH estiver configurado para autenticação apenas com chaves, configure `~/.ssh/authorized_keys` corretamente.
+
+**Tailscale SSH** é uma alternativa que intercepta a porta 22 da VPN e usa políticas de autorização próprias. Não é habilitada automaticamente pelo Crias-Server. Consulte a [documentação oficial](https://tailscale.com/docs/features/tailscale-ssh) antes de ativá-la.
+
+## Diagnosticar OOM antes de aumentar a RAM
+
+Se surgirem mensagens repetidas de `Memory cgroup out of memory` mesmo sem o jogo disponível, verifique se `minecraft.service` está em um ciclo de reinício: `sudo systemctl stop minecraft.service`, `systemctl show minecraft -p Restart -p NRestarts -p MemoryMax -p Result` e `sudo journalctl -u minecraft -b -n 100 --no-pager`.
+
+Em versões atualizadas, o template protege contra loops contínuos ao limitar as tentativas. Instalações antigas precisam atualizar a unidade; atualizar apenas o ZIP do instalador não modifica serviços já instalados.
 
 ## 7. Alternativas ao Tailscale
 
