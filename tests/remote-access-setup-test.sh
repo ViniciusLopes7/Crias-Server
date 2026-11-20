@@ -55,12 +55,14 @@ line_ssh="$(grep -n '^    install_ssh_if_enabled$' "$root/install.sh" | cut -d: 
 line_stack="$(grep -n '^    run_selected_stack_installer$' "$root/install.sh" | cut -d: -f1)"
 [ "$line_tailscale" -lt "$line_ssh" ] && [ "$line_ssh" -lt "$line_stack" ]
 
-# Evita ciclos de OOM indefinidos sem desativar auto-restart de falhas curtas.
+# Fail-closed: OOM/crash nao dispara nova JVM ate start manual.
 unit="$root/minecraft/minecraft.service"
-grep -qx "Restart=on-failure" "$unit"
+grep -qx "Restart=no" "$unit"
 grep -qx "RestartSec=30s" "$unit"
 grep -qx "OOMPolicy=stop" "$unit"
 grep -qx "StartLimitIntervalSec=300s" "$unit"
+grep -qx "OOMScoreAdjust=200" "$unit"
+! grep -qx "StartLimitIntervalSec=infinity" "$unit"
 grep -qx "StartLimitBurst=3" "$unit"
 
 echo "OK: Tailscale idempotente/não interativo, SSH antecipado e proteção anti-loop OOM"

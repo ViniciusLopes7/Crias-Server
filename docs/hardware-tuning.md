@@ -143,11 +143,13 @@ Em hosts de aproximadamente 1 GB de RAM, o modo conservador não garante que um 
 
 ## Limite de reinícios após OOM
 
-O template do `minecraft.service` usa `Restart=on-failure`, mas limita falhas repetidas a três tentativas em cinco minutos (`StartLimitIntervalSec=300s`, `StartLimitBurst=3`). `OOMPolicy=stop` encerra a unidade quando o cgroup sofre falta de memória. Isso evita ciclos ilimitados de reinício.
+O template do `minecraft.service` usa **`Restart=no`**: se o Java cair por OOM ou outra falha, o systemd não tentará iniciar novamente sozinho. Isso impede que um boot de modpack pesado cause mortes repetidas por OOM. O operador deve diagnosticar a causa antes de executar `sudo systemctl start minecraft.service` novamente. `StartLimitIntervalSec=300s` e `StartLimitBurst=3` continuam limitando partidas manuais muito próximas, sem criar bloqueio permanente por contagem de starts bem-sucedidos. `OOMPolicy=stop` encerra a unidade em OOM do cgroup.
 
-A mudança só entra em vigor quando a unidade do systemd é instalada/atualizada. Para interromper um ciclo ativo use `sudo systemctl stop minecraft.service`. Para impedir a partida automática enquanto investiga, `sudo systemctl disable --now minecraft.service` (reative depois). Após corrigir o problema, `sudo systemctl reset-failed minecraft.service` limpa o bloqueio de tentativas.
+A mudança só entra em vigor quando a unidade do systemd é instalada/atualizada. Para interromper um ciclo ativo use `sudo systemctl stop minecraft.service`. Para impedir a partida automática enquanto investiga, `sudo systemctl disable --now minecraft.service` (reative depois). Após corrigir o problema, inicie manualmente com `sudo systemctl start minecraft.service`. Se o limite de partidas manuais for atingido, `sudo systemctl reset-failed minecraft.service` limpa o contador antes de uma nova tentativa deliberada.
 
 Os eventos do kernel não identificam sozinhos qual perfil ou mod causou o problema. Confira journal, memória do cgroup e limite efetivo antes de aumentar heap ou `MemoryMax`.
+
+A unidade usa `OOMScoreAdjust=200` em vez de `-800`: diante de OOM **global do host**, o Java pode ser encerrado antes de serviços de recuperação remota, como SSH. Essa prioridade não evita OOM dentro do `MemoryMax` nem garante que outros serviços nunca sejam afetados. O sistema deve permanecer acessível para investigar a causa. Se desabilitar a partida automática durante diagnóstico, reative apenas depois da correção.
 
 
 ## Contratos de memória revisados
@@ -155,7 +157,7 @@ Os eventos do kernel não identificam sozinhos qual perfil ou mod causou o probl
 - A cota do host considera limites `memory.max` do cgroup atual **e de seus ancestrais**, não apenas o arquivo da raiz. A RAM disponível é limitada à cota efetiva identificada.
 - O cálculo reserva memória para o SO e para o consumo nativo da JVM; se não houver orçamento suficiente, **falha antes de gerar configurações inválidas**. Não aumenta artificialmente o heap mínimo para exceder a cota.
 - `-Xms` automático foi reduzido para cerca de 30% de `-Xmx` (com piso de 256 MB), e a pré-alocação `AlwaysPreTouch` foi removida do launcher padrão para reduzir pressão na inicialização.
-- O launcher verifica a memória do cgroup antes de executar Java e recusa `user_jvm_args.txt` Forge/NeoForge com parâmetros duplicados de heap/MaxRAM que poderiam sobrescrever o tuning.
+- O launcher verifica a memória do cgroup antes de executar Java e recusa `user_jvm_args.txt` Forge/NeoForge e variáveis `JAVA_TOOL_OPTIONS`, `JDK_JAVA_OPTIONS`, `_JAVA_OPTIONS` com parâmetros conflitantes de heap/MaxRAM ou memória direta que poderiam sobrescrever o tuning.
 - `reconfigure-hardware` **exige Minecraft parado**. Atualiza `MemoryMax` por drop-in persistente em `/etc/systemd/system/minecraft.service.d/20-crias-memory.conf`, valida com `systemd-analyze`, confere tanto `MemoryMax` quanto `EffectiveMemoryMax` (que inclui cotas da slice pai) e restaura o drop-in anterior se a validação falhar. O comando não reinicia o serviço automaticamente.
 - `MemorySwapMax=0` continua impedindo que o **processo Minecraft** use swap; isso não impede que o host utilize ZRAM para outros processos. A opção prioriza limitar pausas graves de JVM, mas não substitui memória física suficiente.
 
@@ -167,5 +169,5 @@ Os eventos do kernel não identificam sozinhos qual perfil ou mod causou o probl
 
 ## Prioridade no OOM global do Linux
 
-O template anterior marcava o Minecraft com `OOMScoreAdjust=-800`, dando proteção alta ao Java perante o OOM **global** e potencialmente tornando outros processos mais expostos. A unidade passa a usar `OOMScoreAdjust=100`, preservando prioridade operacional para o host e seu acesso remoto; o `MemoryMax` continua regulando o OOM **do próprio cgroup**. Isso não impede interrupção do Minecraft: backup/recuperação e RAM física suficiente continuam necessários.
+O template anterior marcava o Minecraft com `OOMScoreAdjust=-800`, dando proteção alta ao Java perante o OOM **global** e potencialmente tornando outros processos mais expostos. A unidade passa a usar `OOMScoreAdjust=200`, preservando prioridade operacional para o host e seu acesso remoto; o `MemoryMax` continua regulando o OOM **do próprio cgroup**. Isso não impede interrupção do Minecraft: backup/recuperação e RAM física suficiente continuam necessários.
 

@@ -84,6 +84,19 @@ if [ "$min_ram_mb" -gt "$max_ram_mb" ]; then
     exit 1
 fi
 
+# Variaveis de ambiente da JVM podem ser processadas antes/depois dos args
+# de linha de comando e alterar silenciosamente o heap validado pelo tuning.
+# Nao elimine opcoes nao relacionadas (p.ex. certificados/agentes); aborte
+# apenas quando houver conflito explicito com o orcamento de memoria.
+memory_override_re='(^|[[:space:]])-(Xmx|Xms|XX:(MaxRAM|MinRAM|InitialRAM|MaxRAMPercentage|MinRAMPercentage|InitialRAMPercentage|MaxDirectMemorySize))'
+for java_env_name in JAVA_TOOL_OPTIONS JDK_JAVA_OPTIONS _JAVA_OPTIONS; do
+    java_env_value="${!java_env_name:-}"
+    if [[ "$java_env_value" =~ $memory_override_re ]]; then
+        echo "ERRO: $java_env_name define limite de memoria JVM e pode sobrescrever runtime.env; remova o parametro conflitante." >&2
+        exit 1
+    fi
+done
+
 # ---------------------------------------------------------------------------
 # JAVA_OPTS as native array. Replaces concatenated string + read -a split
 # which broke on paths with spaces.
@@ -223,8 +236,8 @@ LAUNCH_ARGS=()
 if { [ "$MINECRAFT_LOADER" = "forge" ] || [ "$MINECRAFT_LOADER" = "neoforge" ]; } \
     && [ -f "$SERVER_DIR/user_jvm_args.txt" ]; then
     if grep -Ev '^[[:space:]]*(#|$)' "$SERVER_DIR/user_jvm_args.txt" | \
-        grep -Eq '(^|[[:space:]])-(Xmx|Xms|XX:(MaxRAM|InitialRAM|MaxRAMPercentage|InitialRAMPercentage))'; then
-        echo "ERRO: user_jvm_args.txt contem Xmx/Xms/MaxRAM. Defina heap somente em runtime.env para respeitar MemoryMax." >&2
+        grep -Eq "$memory_override_re"; then
+        echo "ERRO: user_jvm_args.txt contem opcao conflitante de memoria JVM. Defina heap somente em runtime.env para respeitar MemoryMax." >&2
         exit 1
     fi
     LAUNCH_ARGS+=("@user_jvm_args.txt")
