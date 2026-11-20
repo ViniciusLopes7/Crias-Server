@@ -125,13 +125,22 @@ compute_minecraft_tuning() {
     MC_MIN_RAM="${xms_mb}M"
     MC_MAX_RAM="${xmx_mb}M"
 
-    if [ "$disk_type" = "HDD" ]; then
-        MC_SYNC_CHUNK_WRITES="true"
-        MC_BACKUP_ZSTD_LEVEL="-3"
-    else
-        MC_SYNC_CHUNK_WRITES="false"
-        MC_BACKUP_ZSTD_LEVEL="-1"
-    fi
+    # Discos desconhecidos/abstratos nao devem ser presumidos SSD.
+    # Priorize consistencia das gravacoes ate tipo de armazenamento confirmado.
+    case "$disk_type" in
+        HDD)
+            MC_SYNC_CHUNK_WRITES="true"
+            MC_BACKUP_ZSTD_LEVEL="-3"
+            ;;
+        SSD|NVME)
+            MC_SYNC_CHUNK_WRITES="false"
+            MC_BACKUP_ZSTD_LEVEL="-1"
+            ;;
+        *)
+            MC_SYNC_CHUNK_WRITES="true"
+            MC_BACKUP_ZSTD_LEVEL="-1"
+            ;;
+    esac
 
     if [ "$tier" = "LOW" ]; then
         MC_BACKUP_RETENTION_DAYS=5
