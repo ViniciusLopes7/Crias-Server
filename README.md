@@ -1,217 +1,101 @@
 # Crias-Server
 
-Instalador e conjunto de ferramentas para operar servidores **Minecraft** e **Terraria** no Arch Linux, com serviços systemd, backup, ajustes de hardware e administração pelo terminal. A integração com Discord é opcional.
-
 <p align="center">
-    <img src="assets/images/branding/EscudoCrias.png" alt="Escudo Crias" width="180" />
+  <img src="assets/images/branding/EscudoCrias.png" alt="Escudo do Crias-Server" width="150">
 </p>
 
 <p align="center">
-    <strong>Instalador modular para servidor de Minecraft e Terraria em Arch Linux.</strong><br>
-    Tuning automático por hardware, hardening systemd, backup com RCON, controle remoto via Discord.
+  <strong>Instalação e gerenciamento de servidores Minecraft e Terraria no Arch Linux.</strong>
 </p>
 
 <p align="center">
-    <a href="https://github.com/ViniciusLopes7/Crias-Server/releases"><img src="https://img.shields.io/github/v/release/ViniciusLopes7/Crias-Server?style=flat-square&color=blue" alt="Release"></a>
-    <a href="https://github.com/ViniciusLopes7/Crias-Server/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ViniciusLopes7/Crias-Server/ci.yml?style=flat-square" alt="CI"></a>
-    <a href="LICENSE"><img src="https://img.shields.io/github/license/ViniciusLopes7/Crias-Server?style=flat-square" alt="License"></a>
+  <a href="https://github.com/ViniciusLopes7/Crias-Server/releases"><img src="https://img.shields.io/github/v/release/ViniciusLopes7/Crias-Server?style=flat-square" alt="Última release"></a>
+  <a href="https://github.com/ViniciusLopes7/Crias-Server/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ViniciusLopes7/Crias-Server/ci.yml?style=flat-square" alt="Estado do CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/ViniciusLopes7/Crias-Server?style=flat-square" alt="Licença"></a>
 </p>
 
----
+O **Crias-Server** reúne um instalador interativo, scripts de operação e serviços `systemd` para hospedar **Minecraft** ou **Terraria** em um computador com Arch Linux. Ele configura o servidor, aplica ajustes iniciais de hardware e oferece ferramentas de administração e backup. Recursos como Tailscale e controle por Discord são opcionais.
 
-## O que é
+## Instalação rápida
 
-Crias-Server é um instalador e gerenciador para servidor de jogos em Arch Linux. Você escolhe entre Minecraft ou Terraria, e ele cuida do resto: instala o servidor, configura tuning de hardware, hardening systemd, backup automático e controle remoto via Discord.
+**Requisitos:** Arch Linux instalado, acesso `sudo` e conexão com a internet. O projeto não distribui mais uma ISO personalizada; use a [imagem oficial do Arch Linux](https://archlinux.org/download/) para instalar o sistema primeiro.
 
-### Recursos em resumo
-
-- **Sem Docker, sem overhead**: roda direto no Arch com systemd. Máximo de performance para o servidor de jogos.
-- **Tuning automático**: detecta RAM, CPU e disco. Aplica LOW/MID/HIGH tier que ajusta heap, max-players, MemoryMax e políticas do host.
-- **Hardening de verdade**: `ProtectSystem=strict`, `NoNewPrivileges`, `SystemCallFilter=@system-service`, `CapabilityBoundingSet=` em todos os serviços.
-- **Backup inteligente**: RCON `save-off` + `save-all` antes do tar, `save-on` depois (com trap EXIT). Retenção por tier, compressão zstd, rsync remoto opcional.
-- **TUI com gum**: menus interativos, busca fuzzy, mini-wiki, preview de MOTD colorido. Hub central (`crias-tui`) sem precisar lembrar comandos.
-- **Controle remoto via Discord**: bot Python + agente Go com slash commands `/mc start|stop|status|players|say|console|health`.
-
-## Comece por aqui
-
-- **Instalação inicial:** siga o [guia passo a passo](docs/tutorial.md).
-- **Modpack próprio `.mrpack`:** [importação local ou HTTPS](docs/minecraft/modpacks.md).
-- **Gerenciamento e diagnóstico:** `sudo crias-tui` e `sudo crias-tui --doctor` ([manual](docs/tui.md)).
-- **Falhas de memória:** [tuning de hardware](docs/hardware-tuning.md).
-- **Testes QEMU e limites de cobertura:** [validação em VM](docs/testing-qemu.md).
-
-## Instalação
-
-### Pré-requisitos
-
-- Arch Linux instalado ([ISO oficial](https://archlinux.org/download/) + `archinstall`)
-- Acesso `sudo`
-- Conexão com internet
-
-### Passo a passo
+No terminal do Arch Linux:
 
 ```bash
-# 1. Instale o Arch Linux (se ainda não tem)
-#    Baixe a ISO oficial, boot, rode: archinstall
-#    Crie usuário, timezone, disco, network → reboot
-
-# 2. Baixe o Crias-Server (bootstrap com verificação SHA256)
 curl -fsSL https://raw.githubusercontent.com/ViniciusLopes7/Crias-Server/main/crias-bootstrap.sh | sudo bash
-
-# 3. Siga o TUI interativo (menus com gum)
-#    Stack → opções globais → opções do jogo → resumo → confirmar
-
-# 4. Pronto! Gerencie via hub TUI:
-sudo crias-tui
-# Em instalações parciais, diagnostique sem alterar serviços:
-sudo crias-tui --doctor
 ```
 
-### Alternativa (git clone)
+O bootstrap baixa a **última release publicada**, verifica o checksum SHA-256 do pacote e abre o instalador. Siga os menus para escolher o jogo, a versão, os mods e as opções do sistema.
+
+> **Atenção:** a `main` pode conter correções mais recentes que a última release. Consulte [Releases](https://github.com/ViniciusLopes7/Crias-Server/releases) antes de atualizar um servidor existente. Faça backup dos mundos e configurações antes de reinstalar ou trocar modpacks.
+
+Se você preferir inspecionar o instalador antes da execução, consulte o [código do bootstrap](crias-bootstrap.sh) e siga o [guia completo de instalação](docs/tutorial.md).
+
+## Depois da instalação
+
+Use o hub no terminal para acessar as operações habituais:
+
+```bash
+sudo crias-tui             # menu de gerenciamento
+sudo crias-tui --doctor    # diagnóstico de somente leitura
+```
+
+O comando `--doctor` e a instalação antecipada do TUI pertencem às melhorias do [PR #12](https://github.com/ViniciusLopes7/Crias-Server/pull/12). **Enquanto o PR não for incorporado e uma nova release publicada, esses recursos podem não estar disponíveis** na instalação baixada pelo bootstrap.
+
+Os serviços também podem ser operados diretamente pelo `systemd`:
+
+```bash
+sudo systemctl status minecraft   # ou terraria
+sudo journalctl -u minecraft -n 80 --no-pager
+```
+
+Para comandos de backup, console, reconfiguração e restauração, consulte o [manual de operação](docs/tutorial.md) e os guias específicos de cada jogo.
+
+## O que você pode configurar
+
+| Área | Recursos disponíveis |
+|---|---|
+| **Minecraft** | Vanilla, Fabric, Quilt, Forge e NeoForge; seleção de versões e modpacks pelo Modrinth |
+| **Modpacks próprios** | Importação de arquivos `.mrpack` locais, de pendrive ou por URL HTTPS direta |
+| **Terraria** | Servidor vanilla e opção de tModLoader com mods |
+| **Administração** | Serviços `systemd`, terminal de gerenciamento, logs e ajustes iniciais de RAM/CPU |
+| **Backup e recuperação** | Backups comprimidos, retenção e restauração; consistência online do Minecraft depende de RCON configurado |
+| **Integrações opcionais** | Tailscale, acesso SSH, monitoramento e bot Discord com agente Go |
+
+O instalador usa `config.env` para definir os padrões. A maior parte das escolhas também pode ser feita nos menus interativos. Para instalações automatizadas, consulte a [configuração não interativa](docs/tutorial.md).
+
+## Documentação
+
+Escolha um guia conforme a tarefa:
+
+| Preciso de... | Consulte |
+|---|---|
+| Instalar, atualizar ou recuperar uma instalação | [Tutorial de operação](docs/tutorial.md) |
+| Usar um `.mrpack` de pendrive ou link | [Modpacks Minecraft](docs/minecraft/modpacks.md) |
+| Gerenciar Minecraft ou Terraria | [Minecraft](docs/minecraft/README.md) · [Terraria](docs/terraria/README.md) |
+| Entender o hub e seus erros | [Interface TUI](docs/tui.md) |
+| Ajustar RAM e investigar encerramento por OOM | [Tuning por hardware](docs/hardware-tuning.md) |
+| Configurar VPN, segurança ou restaurar mundos | [Tailscale](docs/Tailscale.md) · [Segurança](docs/security.md) · [Restauração](docs/restore.md) |
+| Conectar o bot e o agente Discord | [Agente Go](discord-agent/README.md) · [Bot Python](discord-bot/README.md) |
+| Entender os testes e seus limites | [Validação QEMU](docs/testing-qemu.md) |
+
+O [índice da documentação](docs/README.md) reúne todos os guias. Mudanças entre versões estão no [Changelog](CHANGELOG.md), e os recursos planejados no [Roadmap](ROADMAP.md).
+
+## Qualidade e limites
+
+A integração contínua executa testes Bash, Go e Python, valida caminhos de inicialização com Java 21/25 e utiliza uma VM QEMU com Arch Linux e `systemd` reais. A VM também exercita cenários de falha e serviços instalados, mas **não comprova que um modpack grande inicia um mundo jogável ou que clientes conseguem se conectar**. Os testes Minecraft atualmente param na EULA sem aceitá-la.
+
+Para trabalhar no repositório:
 
 ```bash
 git clone https://github.com/ViniciusLopes7/Crias-Server.git
 cd Crias-Server
-sudo ./install.sh
+bash tests/run-all.sh
 ```
 
-### Não-interativo (CI/automação)
+Veja o [guia de validação](docs/testing-qemu.md) antes de considerar uma instalação pronta para jogadores. O conteúdo do PR #12 ainda depende de integração e publicação para chegar ao bootstrap.
 
-```bash
-sudo -E NON_INTERACTIVE=true ACCEPT_EULA=true SERVER_TYPE=minecraft ./install.sh
-```
+## Contribuição e licença
 
-## Recursos
-
-### Servidor de jogos
-
-| Recurso | Minecraft | Terraria |
-|---------|:---------:|:--------:|
-| Start/stop/restart via systemd | ✅ | ✅ |
-| Tuning automático (heap, max-players, view-distance) | ✅ | ✅ |
-| Console interativo (RCON) | ✅ | — |
-| Backup com save-lock | ✅ | ✅ |
-| Restore | ✅ | ✅ |
-| Server icon (URL → server-icon.png) | ✅ | — |
-| MOTD personalizado (com preview) | ✅ | — |
-
-### Minecraft específico
-
-- **Loaders**: fabric, quilt, vanilla, forge, neoforge
-- **Versão dinâmica**: busca do manifest oficial do loader (Mojang/Fabric/Quilt/NeoForge/Forge)
-- **Modpacks**: top-10 Modrinth, busca por nome, vanilla, ou slug manual
-- **Mods QoL**: Chunky, EssentialCommands, Universal Graves, TabTPS, StyledChat
-- **tModLoader** (Terraria): catálogo curado (Calamity, Thorium, Magic Storage, Recipe Browser)
-
-### Sistema
-
-- **Tiers LOW/MID/HIGH**: detecção automática de RAM/CPU/disco com override manual
-- **Hardening systemd**: todos os `.service` com `ProtectSystem=strict`, `NoNewPrivileges`, etc.
-- **SSH**: usuário customizável (validação + bloqueio de reservados), `PermitRootLogin no`
-- **Tailscale**: VPN mesh + Funnel para expor o crias-agent via HTTPS
-- **Monitoramento**: `btop` (CPU/RAM), `ncdu` (disco), integrados ao `crias-tui` hub
-- **Backup remoto**: rsync para `BACKUP_REMOTE_PATH` + notificação Discord via webhook
-
-### Controle remoto Discord
-
-- **crias-agent** (Go): gRPC em localhost:8473, hardening (`MemoryMax=128M`, `CPUQuota=10%`)
-- **crias-bot** (Python): discord.py 2.x, slash commands, deploy via Dockerfile
-- **Eventos**: server start/stop, player join/leave, health warnings → postados no canal `#controle`
-
-## Estrutura do projeto
-
-```
-crias-server/
-├── install.sh              # Instalador principal (TUI gum)
-├── crias-bootstrap.sh      # Bootstrap: baixa release do GitHub + verifica SHA256
-├── crias-tui.sh            # Hub TUI central (menu: servidor/monitor/backup/sistema)
-├── config.env              # Configuração global (PT-BR comentado)
-├── shared/lib/             # Bibliotecas bash compartilhadas
-│   ├── common.sh           #   log, dry-run, mktemp_crias, prompts
-│   ├── tui.sh              #   TUI: gum wrapper + fallback + motd_preview + tui_help
-│   ├── manager-common.sh   #   Manager compartilhado (dispatch, show_help, monitor)
-│   ├── backup-engine.sh    #   Backup com flock + retenção + rsync + webhook
-│   └── ...                 #   mc-manifests, tmodloader, hardware-profile, etc.
-├── minecraft/              # Stack Minecraft
-├── terraria/               # Stack Terraria (espelho)
-├── discord-agent/          # Agente Go (gRPC + RCON + eventos)
-├── discord-bot/            # Bot Python (discord.py + slash commands)
-└── tests/                  # Bateria de testes bash + mutation testing
-```
-
-## Configuração
-
-Todas as opções em `config.env` (comentado em PT-BR). Principais:
-
-| Variável | Default | Descrição |
-|----------|---------|-----------|
-| `SERVER_TYPE` | `""` | `minecraft` ou `terraria` (vazio = pergunta) |
-| `FORCE_HARDWARE_TIER` | `""` | `LOW`/`MID`/`HIGH` ou vazio para auto |
-| `MINECRAFT_LOADER` | `fabric` | `fabric`/`quilt`/`vanilla`/`forge`/`neoforge` |
-| `MINECRAFT_VERSION` | `26.3` | Vazio = busca dinâmica do manifest |
-| `MINECRAFT_MOTD` | `§6§l🏰...` | MOTD com códigos § (ver gerador em tutorial.md) |
-| `MINECRAFT_SERVER_ICON_URL` | `""` | URL de PNG 64x64 para server-icon.png |
-| `SSH_USER` | `crias` | Nome do usuário SSH (com validação) |
-| `INSTALL_MONITOR_TOOLS` | `false` | Instala btop + ncdu no host |
-| `BACKUP_REMOTE_PATH` | `""` | `user@host:/path/` para rsync remoto |
-| `BACKUP_NOTIFY_WEBHOOK` | `""` | URL webhook Discord para notificações de backup |
-
-## Testes
-
-```bash
-# Bateria completa
-bash tests/run-all.sh   # bateria Bash
-make test-all           # bash + go + python (CR-29)
-
-# Mutation testing (valida qualidade dos testes)
-bash tests/mutation-test.sh
-
-# Self-test das libs
-bash shared/lib/tui.sh selftest
-bash shared/lib/mc-manifests.sh selftest
-```
-
-## Documentação
-
-| Documento | Descrição |
-|-----------|-----------|
-| [docs/tutorial.md](docs/tutorial.md) | Tutorial completo: instalar → operar → troubleshoot |
-| [docs/hardware-tuning.md](docs/hardware-tuning.md) | Tiers LOW/MID/HIGH, thresholds, recalibração |
-| [docs/security.md](docs/security.md) | Firewall, SSH, hardening, health checks |
-| [docs/restore.md](docs/restore.md) | Restore de backups passo-a-passo |
-| [docs/tui.md](docs/tui.md) | Como o TUI (gum) funciona + fallback |
-| [docs/gui-feasibility.md](docs/gui-feasibility.md) | Estudo de viabilidade de GUI web (futuro) |
-| [CHANGELOG.md](CHANGELOG.md) | Histórico de versões |
-| [ROADMAP.md](ROADMAP.md) | Status e próximos passos |
-
-## Qualidade e limites dos testes
-
-A CI automatiza lint, testes Bash/Go/Python, launchers com Java 21/25 e uma VM QEMU que instala e verifica serviços reais. **O Minecraft não é testado com EULA aceita nem jogadores conectados na VM.** Consulte o [plano de validação](docs/testing-qemu.md) antes de homologar para produção.
-
-## CI/CD
-
-Workflow único `.github/workflows/ci.yml`:
-
-- **Lint**: shellcheck, `go vet`, `gofmt -l`, `ruff check`
-- **Test**: bash (33+ testes), Go (`-race`), Python (`pytest`), mutation testing
-- **Build**: binário Go linux/amd64 + Docker smoke do bot
-- **Release**: tag `v*.*.*` ou `workflow_dispatch` → GitHub release com binário + bot zip + source archives + checksums SHA256 + SLSA attestation
-
-## Roadmap
-
-- [ ] **GUI web** estilo CasaOS (dashboard com ícones, tier-gated) — [estudo](docs/gui-feasibility.md)
-- [ ] **ISO customizada** (archiso com Crias-Server pré-instalado) — quando o projeto tiver maturidade
-- [ ] **Bridge chat Discord ↔ Minecraft** (mensagens bidirecionais)
-- [ ] **Métricas Prometheus** no agente
-- [ ] **Agente Discord para Terraria** (tModLoader sem RCON nativo)
-
-Veja [ROADMAP.md](ROADMAP.md) para o status completo.
-
-## Comunidade
-
-- **Issues**: [github.com/ViniciusLopes7/Crias-Server/issues](https://github.com/ViniciusLopes7/Crias-Server/issues)
-- **Discussions**: [github.com/ViniciusLopes7/Crias-Server/discussions](https://github.com/ViniciusLopes7/Crias-Server/discussions)
-
-## Licença
-
-MIT — veja [LICENSE](LICENSE).
+Bugs e sugestões podem ser registrados em [Issues](https://github.com/ViniciusLopes7/Crias-Server/issues). Para detalhes internos, consulte os [diretórios do projeto](docs/README.md) e o histórico das alterações. O projeto é distribuído sob licença [MIT](LICENSE).
