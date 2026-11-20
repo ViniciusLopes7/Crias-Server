@@ -75,6 +75,25 @@ if compute_minecraft_tuning 4096 4 SSD MID 8192 >/dev/null 2>&1; then
     echo "FAIL: MemAvailable maior que MemTotal foi aceito" >&2; exit 1
 fi
 
+# Captura consistente de /proc/meminfo, independente de execucoes de free.
+cat > "$tmp/meminfo" <<'EOF'
+MemTotal:        8388608 kB
+MemAvailable:    4194304 kB
+SwapTotal:       2097152 kB
+EOF
+detect_hardware_profile "$tmp" "" "$tmp/meminfo"
+[ "$HW_TOTAL_RAM_MB" -ge 1 ] && [ "$HW_TOTAL_RAM_MB" -le 8192 ]
+[ "$HW_AVAILABLE_RAM_MB" -ge 0 ] && [ "$HW_AVAILABLE_RAM_MB" -le 4096 ]
+[ "$HW_SWAP_MB" = 2048 ]
+[ "$HW_CPU_CORES" -ge 1 ]
+[ "$HW_CPU_QUOTA_CORES" -ge 0 ]
+
+# Nunca modificar governor, dispositivos ou zram no host sem opt-in.
+grep -qx 'APPLY_SYSTEM_TUNING="false"' "$root/config.env"
+grep -qx 'SYSTEM_TUNING_SCOPE="none"' "$root/config.env"
+grep -qx 'CRIAS_TUNE_CPU_GOVERNOR="false"' "$root/config.env"
+grep -qx 'CRIAS_TUNE_BLOCK_DEVICE="false"' "$root/config.env"
+
 # Em hosts pequenos um heap minimo artificial nao pode exceder a cota.
 for mb in 0 128 512 768 1000; do
     if compute_minecraft_tuning "$mb" 4 SSD MID >/dev/null 2>&1; then
