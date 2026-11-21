@@ -208,7 +208,9 @@ write_minecraft_systemd_memory_limit() {
     fi
     mkdir -p -- "$dir" || return 1
     staged="$(mktemp "$dir/.crias-memory.XXXXXXXX")" || return 1
-    if ! printf "[Service]\nMemoryHigh=%sM\nMemoryMax=%sM\n" "$high_mb" "$max_mb" > "$staged" || ! chmod 0644 "$staged"; then
+    # Drop-in atualiza tambem unidades antigas sem reinstalar modpacks.
+    # Restart=no impede loops antigos de OOM que prejudicavam o SSH.
+    if ! printf "[Service]\\nMemoryHigh=%sM\\nMemoryMax=%sM\\nMemorySwapMax=512M\\nOOMPolicy=stop\\nRestart=no\\n" "$high_mb" "$max_mb" > "$staged" || ! chmod 0644 "$staged"; then
         rm -f -- "$staged"
         return 1
     fi
