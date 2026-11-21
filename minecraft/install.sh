@@ -353,7 +353,7 @@ stack_download_and_install() {
             if [ -n "$MINECRAFT_ADRENALINE_VERSION" ]; then
                 run_mrpack_install_with_timeout adrenaline "$MINECRAFT_ADRENALINE_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
             else
-                timeout 300 mrpack-install adrenaline --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
+                run_mrpack_install_with_timeout adrenaline --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
             fi
             ;;
         modrinth)
@@ -364,9 +364,9 @@ stack_download_and_install() {
             # "mrpack-install <slug> [version]").
             local slug="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
             if [ -n "${MINECRAFT_ADRENALINE_VERSION:-}" ]; then
-                timeout 300 mrpack-install "$slug" "$MINECRAFT_ADRENALINE_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
+                run_mrpack_install_with_timeout "$slug" "$MINECRAFT_ADRENALINE_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
             else
-                timeout 300 mrpack-install "$slug" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
+                run_mrpack_install_with_timeout "$slug" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
             fi
             ;;
         arquivo|link)
@@ -390,7 +390,7 @@ stack_download_and_install() {
                 rm -f "$curl_cfg"
             fi
             if ! _validate_custom_mrpack "$custom_pack"; then return 1; fi
-            timeout 300 mrpack-install "$custom_pack" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
+            run_mrpack_install_with_timeout "$custom_pack" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
             ;;
         vanilla)
             _install_minecraft_server_base
@@ -424,7 +424,7 @@ _install_minecraft_server_base() {
     if [ "$MINECRAFT_LOADER" = "quilt" ]; then
         server_file="mc.jar"
     fi
-    timeout 300 mrpack-install server "$MINECRAFT_LOADER" \
+    run_mrpack_install_with_timeout server "$MINECRAFT_LOADER" \
         --minecraft-version "$MINECRAFT_VERSION" \
         --server-dir "$MINECRAFT_SERVER_DIR" \
         --server-file "$server_file"
