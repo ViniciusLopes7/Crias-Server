@@ -121,6 +121,11 @@ stack_validate_inputs() {
 }
 
 validate_minecraft_inputs() {
+    # Reject invalid installation deadlines before any download or disk change.
+    if ! [[ "$MINECRAFT_INSTALL_TIMEOUT_SECONDS" =~ ^[1-9][0-9]{0,4}$ ]] || [ "$MINECRAFT_INSTALL_TIMEOUT_SECONDS" -gt 86400 ]; then
+        print_error "MINECRAFT_INSTALL_TIMEOUT_SECONDS invalido: $MINECRAFT_INSTALL_TIMEOUT_SECONDS (use 1 a 86400 segundos)."
+        return 1
+    fi
     case "$MINECRAFT_LOADER" in
         fabric|quilt|vanilla|forge|neoforge)
             ;;
