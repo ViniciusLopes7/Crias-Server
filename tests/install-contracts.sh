@@ -347,11 +347,12 @@ exit 0
 EOF
     chmod +x "$bin_dir/mrpack-install"
 
-    # Stub do timeout: executa o comando direto (stub ja registra os args).
+    # Stub do timeout: ignora as opcoes GNU e a duracao, mas preserva
+    # TODOS os argumentos enviados ao mrpack-install.
     cat > "$bin_dir/timeout" << 'EOF'
 #!/bin/bash
-# Uso: timeout 300 <cmd> <args...> — ignora a duracao e executa.
-shift
+while [[ "${1:-}" == --* ]]; do shift; done
+shift # duration (e.g. 3600s)
 exec "$@"
 EOF
     chmod +x "$bin_dir/timeout"
@@ -428,6 +429,68 @@ EOF
     )
 }
 
+# Contratos do timeout com o comando GNU real: retorno 124 ao esgotar prazo,
+# propagacao de erros do instalador e validacao de entradas.
+run_mrpack_timeout_contract() {
+    local bin_dir="$TMP_TEST_DIR/timeout-stub-bin"
+    local log_file="$TMP_TEST_DIR/timeout-contract.log"
+    mkdir -p "$bin_dir"
+    cat > "$bin_dir/mrpack-install" <<'EOF'
+#!/bin/bash
+case "${1:-}" in
+    slow) sleep 3 ;;
+    fail) exit 23 ;;
+    *) exit 0 ;;
+esac
+EOF
+    chmod +x "$bin_dir/mrpack-install"
+    (
+        export PATH="$bin_dir:$PATH"
+        export DRY_RUN=true
+        # shellcheck source=/dev/null
+        source "$ROOT_DIR/minecraft/install.sh"
+        MINECRAFT_INSTALL_TIMEOUT_SECONDS=1
+        local rc
+        if run_mrpack_install_with_timeout slow > "$log_file" 2>&1; then
+            echo "[install-contracts] Timeout de 1s nao foi respeitado" >&2
+            exit 1
+        else
+            rc=$?
+        fi
+        [ "$rc" -eq 124 ] && grep -q 'excedeu 1s' "$log_file" || {
+            echo "[install-contracts] Timeout: retorno/diagnostico inesperados ($rc)" >&2
+            cat "$log_file" >&2
+            exit 1
+        }
+        MINECRAFT_INSTALL_TIMEOUT_SECONDS=3600
+        run_mrpack_install_with_timeout ok > "$log_file" 2>&1
+        if run_mrpack_install_with_timeout fail > "$log_file" 2>&1; then
+            echo "[install-contracts] Erro de mrpack-install foi ignorado" >&2
+            exit 1
+        else
+            rc=$?
+        fi
+        [ "$rc" -eq 23 ] || { echo "[install-contracts] Erro 23 nao propagado" >&2; exit 1; }
+        MINECRAFT_INSTALL_TIMEOUT_SECONDS=invalid
+        if run_mrpack_install_with_timeout ok > "$log_file" 2>&1; then
+            echo "[install-contracts] Timeout invalido foi aceito" >&2
+            exit 1
+        else
+            rc=$?
+        fi
+        [ "$rc" -eq 2 ] && grep -q 'MINECRAFT_INSTALL_TIMEOUT_SECONDS invalido' "$log_file"
+    )
+    # Exercita a entrada direta (e nao apenas 'source' do instalador).
+    NON_INTERACTIVE=true ACCEPT_EULA=true DRY_RUN=true \
+        MINECRAFT_SERVER_DIR=/tmp/crias-contracts/direct-install \
+        MINECRAFT_INSTALL_MODPACK=false \
+        bash "$ROOT_DIR/minecraft/install.sh" > "$log_file" 2>&1 || {
+            echo "[install-contracts] Entrada direta do instalador falhou" >&2
+            cat "$log_file" >&2
+            exit 1
+        }
+}
+
 echo "[install-contracts] Validando falha rapida para configuracoes invalidas..."
 run_missing_server_type_contract
 run_invalid_server_type_contract
@@ -450,5 +513,8 @@ run_paper_loader_rejected_contract
 
 echo "[install-contracts] Validando repasse da versao do modpack ao mrpack-install..."
 run_modpack_version_passthrough_contract
+
+echo "[install-contracts] Validando prazo real de instalacao e entrada direta..."
+run_mrpack_timeout_contract
 
 echo "[install-contracts] OK"
