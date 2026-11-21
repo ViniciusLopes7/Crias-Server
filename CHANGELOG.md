@@ -7,7 +7,19 @@ e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
-Sem alterações funcionais pendentes nesta entrada; a validação em servidor físico e do modpack completo permanece como etapa de aceitação operacional.
+Nenhuma alteração adicional aguardando publicação.
+
+## [2026-11-21] — Proteções de operação após auditoria de prontidão
+
+### Corrigido
+
+- **SSH/sudo (PR #18):** a instalação não cria mais uma regra `%wheel` global capaz de modificar `sudo` de contas existentes. Somente contas administrativas recém-criadas recebem uma regra individual validada; políticas legadas são sinalizadas sem remoção automática.
+- **QEMU/diagnósticos (PR #18):** a coleta do log integral dos loaders Minecraft é agora obrigatória para o CI aprovar. A contraprova identificou os seis avisos do Forge 1.20.1 como mensagens de inicialização sem erro fatal até a EULA.
+- **Integridade dos mundos (PR #19):** `sync-chunk-writes=true` passa a ser o padrão para todos os tipos de disco, inclusive SSD/NVMe. A desativação requer configuração explícita `MINECRAFT_SYNC_CHUNK_WRITES=false`, com testes para opções inválidas.
+
+### Critério de liberação
+
+CI e QEMU validam código, instaladores e carregadores básicos. **Não equivalem à homologação de um mundo Minecraft real**: o CriasRealms completo, o primeiro boot após a EULA, backups/restauração, Tailscale entre computadores e 4–5 jogadores simultâneos ainda dependem de prova no host de destino.
 
 ## [2026-11-20] — Servidor estabilizado e pronto para testes de aceitação
 
