@@ -25,9 +25,9 @@ cleanup() {
     # Recupere todos os logs Minecraft, inclusive quando o convidado falhou.
     # Apenas dados sinteticos sao usados no CI; mantenha o conteudo completo
     # para investigar avisos Forge e erros de download nao resumidos.
-    if [ "$vm_ready" = true ]; then
+    if [ "$vm_ready" = true ] && [ ! -s "$log_dir/minecraft-logs.tar.gz" ]; then
         if ssh "${ssh_opts[@]}" ci@127.0.0.1 \
-            "sudo test -d /tmp/crias-qemu-minecraft && sudo tar -C /tmp -czf - crias-qemu-minecraft" \
+            "sudo -n test -d /tmp/crias-qemu-minecraft && sudo -n tar -C /tmp -czf - crias-qemu-minecraft" \
             > "$log_dir/minecraft-logs.tar.gz" 2> "$log_dir/minecraft-log-collection.log"; then
             echo "Logs Minecraft individuais: $log_dir/minecraft-logs.tar.gz"
         else
@@ -86,5 +86,18 @@ ssh "${ssh_opts[@]}" ci@127.0.0.1 'sudo cloud-init status --wait'
 tar -C "$root" --exclude=.git --exclude=crias-qemu-artifacts -czf "$tmp/repo.tar.gz" .
 scp -q -i "$tmp/key" -P 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$tmp/repo.tar.gz" ci@127.0.0.1:/tmp/crias-repo.tar.gz
 ssh "${ssh_opts[@]}" ci@127.0.0.1 'mkdir -p /tmp/crias-repo && tar -xzf /tmp/crias-repo.tar.gz -C /tmp/crias-repo && sudo bash /tmp/crias-repo/tests/qemu/guest-test.sh /tmp/crias-repo' 2>&1 | tee "$log_dir/guest.log"
+# Artefatos de loader sao parte do gate: nao aceitar CI verde quando a
+# politica SSH/sudo torna os WARN do Forge invisiveis para o operador.
+if ! ssh "${ssh_opts[@]}" ci@127.0.0.1 \
+    "sudo -n test -d /tmp/crias-qemu-minecraft && sudo -n tar -C /tmp -czf - crias-qemu-minecraft" \
+    > "$log_dir/minecraft-logs.tar.gz" 2> "$log_dir/minecraft-log-collection.log"; then
+    echo "FAIL: QEMU concluido, mas log Minecraft nao foi coletado (ver minecraft-log-collection.log)" >&2
+    exit 1
+fi
+if ! tar -tzf "$log_dir/minecraft-logs.tar.gz" | grep -Fxq 'crias-qemu-minecraft/forge-1.20.1.log'; then
+    echo 'FAIL: artefato QEMU sem log completo Forge 1.20.1' >&2
+    exit 1
+fi
+echo "PASS: logs individuais Minecraft coletados e validados no QEMU"
 vm_success=true
 
