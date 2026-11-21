@@ -1412,7 +1412,7 @@ install_ssh_if_enabled() {
             print_error "Arquivo sudoers ja existe ou e symlink: $sudoers_file; preservando a politica do host."
             return 1
         fi
-        (umask 077; printf '%s ALL=(ALL) ALL\\n' "$ssh_user" > "$sudoers_file") || return 1
+        (umask 077; printf '%s ALL=(ALL) ALL\n' "$ssh_user" > "$sudoers_file") || return 1
         chmod 0440 "$sudoers_file"
         if ! command -v visudo >/dev/null 2>&1 || ! visudo -cf "$sudoers_file" >/dev/null 2>&1; then
             print_error "Regra sudoers invalida; removendo $sudoers_file."
