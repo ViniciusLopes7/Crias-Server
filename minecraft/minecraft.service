@@ -21,8 +21,11 @@ RestartSec=30s
 OOMPolicy=stop
 LimitNOFILE=65536
 LimitNPROC=4096
+# MemoryHigh: reclaim gradual antes do limite de emergencia.
+MemoryHigh=${MEMORY_HIGH_MB}M
 MemoryMax=${MEMORY_MAX_MB}M
-MemorySwapMax=0
+# Swap emergencial limitado; nao depende de ZRAM estar habilitada.
+MemorySwapMax=512M
 Nice=-5
 IOSchedulingClass=best-effort
 IOSchedulingPriority=0
