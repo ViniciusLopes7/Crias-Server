@@ -51,6 +51,8 @@ MINECRAFT_MODPACK_FILE="${MINECRAFT_MODPACK_FILE:-}"
 MINECRAFT_MODPACK_URL="${MINECRAFT_MODPACK_URL:-}"
 # mrpack-install version pin.
 MRPACK_INSTALL_VERSION="${MRPACK_INSTALL_VERSION:-v0.23.0}"
+# Deadline for mrpack-install (modpack or clean loader), in seconds (default: 60 min).
+MINECRAFT_INSTALL_TIMEOUT_SECONDS="${MINECRAFT_INSTALL_TIMEOUT_SECONDS:-3600}"
 # (CR-17) strict: pendencias de mods transformam-se em falha da instalacao.
 MINECRAFT_MODS_STRICT="${MINECRAFT_MODS_STRICT:-false}"
 FORCE_HARDWARE_TIER="${FORCE_HARDWARE_TIER:-}"
@@ -119,6 +121,11 @@ stack_validate_inputs() {
 }
 
 validate_minecraft_inputs() {
+    # Reject invalid installation deadlines before any download or disk change.
+    if ! [[ "$MINECRAFT_INSTALL_TIMEOUT_SECONDS" =~ ^[1-9][0-9]{0,4}$ ]] || [ "$MINECRAFT_INSTALL_TIMEOUT_SECONDS" -gt 86400 ]; then
+        print_error "MINECRAFT_INSTALL_TIMEOUT_SECONDS invalido: $MINECRAFT_INSTALL_TIMEOUT_SECONDS (use 1 a 86400 segundos)."
+        return 1
+    fi
     case "$MINECRAFT_LOADER" in
         fabric|quilt|vanilla|forge|neoforge)
             ;;
@@ -293,6 +300,26 @@ _verify_mrpack_version() {
     print_step "mrpack-install $installed_ver confere com o pin."
 }
 
+# A single timeout for all mrpack-install paths, including local packs and
+# clean loader installation. Large modpacks and slow networks may exceed 5 min.
+# GNU timeout: 124 = deadline reached; 137 may indicate forced SIGKILL.
+run_mrpack_install_with_timeout() {
+    local seconds="${MINECRAFT_INSTALL_TIMEOUT_SECONDS:-3600}"
+    if ! [[ "$seconds" =~ ^[1-9][0-9]{0,4}$ ]] || [ "$seconds" -gt 86400 ]; then
+        print_error "MINECRAFT_INSTALL_TIMEOUT_SECONDS invalido: $seconds (use 1 a 86400 segundos)."
+        return 2
+    fi
+    print_step "mrpack-install: prazo de ate ${seconds}s para instalacao."
+    local result=0
+    timeout --signal=TERM --kill-after=30s "${seconds}s" mrpack-install "$@" || result=$?
+    if [ "$result" -eq 124 ]; then
+        print_error "mrpack-install excedeu ${seconds}s; aumente MINECRAFT_INSTALL_TIMEOUT_SECONDS ou verifique a rede."
+    elif [ "$result" -ne 0 ]; then
+        print_error "mrpack-install falhou (codigo $result); veja o erro acima. Se houve desconexao, verifique a rede e tente novamente."
+    fi
+    return "$result"
+}
+
 stack_download_and_install() {
     print_step "Instalando base do servidor Minecraft..."
 
@@ -329,9 +356,9 @@ stack_download_and_install() {
     case "$MINECRAFT_MODPACK_SOURCE" in
         adrenaline)
             if [ -n "$MINECRAFT_ADRENALINE_VERSION" ]; then
-                timeout 300 mrpack-install adrenaline "$MINECRAFT_ADRENALINE_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
+                run_mrpack_install_with_timeout adrenaline "$MINECRAFT_ADRENALINE_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
             else
-                timeout 300 mrpack-install adrenaline --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
+                run_mrpack_install_with_timeout adrenaline --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
             fi
             ;;
         modrinth)
@@ -342,9 +369,9 @@ stack_download_and_install() {
             # "mrpack-install <slug> [version]").
             local slug="${MINECRAFT_MODPACK_SLUG:-adrenaline}"
             if [ -n "${MINECRAFT_ADRENALINE_VERSION:-}" ]; then
-                timeout 300 mrpack-install "$slug" "$MINECRAFT_ADRENALINE_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
+                run_mrpack_install_with_timeout "$slug" "$MINECRAFT_ADRENALINE_VERSION" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
             else
-                timeout 300 mrpack-install "$slug" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
+                run_mrpack_install_with_timeout "$slug" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
             fi
             ;;
         arquivo|link)
@@ -360,7 +387,7 @@ stack_download_and_install() {
                 chmod 600 "$curl_cfg"
                 printf 'url = "%s"\n' "$MINECRAFT_MODPACK_URL" > "$curl_cfg"
                 print_step "Baixando o modpack pelo link HTTPS..."
-                if ! curl --config "$curl_cfg" --proto '=https' --proto-redir '=https' --location --fail --silent --show-error --connect-timeout 20 --max-time 900 --max-filesize 2147483648 --output "$custom_pack"; then
+                if ! curl --config "$curl_cfg" --proto '=https' --proto-redir '=https' --location --fail --silent --show-error --connect-timeout 20 --max-time "$MINECRAFT_INSTALL_TIMEOUT_SECONDS" --retry 3 --retry-connrefused --retry-max-time "$MINECRAFT_INSTALL_TIMEOUT_SECONDS" --max-filesize 2147483648 --output "$custom_pack"; then
                     rm -f "$curl_cfg"
                     print_error "Falha ao baixar o arquivo; confirme que o link e direto e publico."
                     return 1
@@ -368,7 +395,7 @@ stack_download_and_install() {
                 rm -f "$curl_cfg"
             fi
             if ! _validate_custom_mrpack "$custom_pack"; then return 1; fi
-            timeout 300 mrpack-install "$custom_pack" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
+            run_mrpack_install_with_timeout "$custom_pack" --server-dir "$MINECRAFT_SERVER_DIR" --server-file "$modpack_server_file"
             ;;
         vanilla)
             _install_minecraft_server_base
@@ -402,7 +429,7 @@ _install_minecraft_server_base() {
     if [ "$MINECRAFT_LOADER" = "quilt" ]; then
         server_file="mc.jar"
     fi
-    timeout 300 mrpack-install server "$MINECRAFT_LOADER" \
+    run_mrpack_install_with_timeout server "$MINECRAFT_LOADER" \
         --minecraft-version "$MINECRAFT_VERSION" \
         --server-dir "$MINECRAFT_SERVER_DIR" \
         --server-file "$server_file"
@@ -882,10 +909,6 @@ apply_minecraft_system_tuning() {
     apply_stack_system_tuning
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    run_minecraft_install
-fi
-
 download_server_icon_if_set() {
     if [ -z "${MINECRAFT_SERVER_ICON_URL:-}" ]; then
         return 0
@@ -908,3 +931,10 @@ download_server_icon_if_set() {
         print_step "Tipo do arquivo: $icon_info"
     fi
 }
+
+# Direct entrypoint must come AFTER all function declarations. When this file is
+# sourced by install.sh, no installation is started here.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    run_minecraft_install
+fi
+

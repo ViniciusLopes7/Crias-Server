@@ -129,6 +129,12 @@ lista e guias.
 
 Use o URL **direto** de um asset público. Confira se ele continua acessível e não exige cookies ou autenticação.
 
+### Prazo de instalação de modpacks grandes
+
+`MINECRAFT_INSTALL_TIMEOUT_SECONDS=3600` em `config.env` define o tempo máximo padrão de **60 minutos** para `mrpack-install`, tanto ao baixar um `.mrpack` quanto ao instalar um loader/servidor limpo. Para conexão lenta, por exemplo, configure `7200` (2 horas); são aceitos valores inteiros de **1 a 86400 segundos**. A configuração é repassada pelo instalador principal ao instalador Minecraft.
+
+Se o prazo terminar, o comando retorna normalmente **124** e o instalador informa como ajustar a variável. Aumentar o prazo não resolve um download individual encerrado por erro de rede: nesse caso, confira a mensagem original e tente novamente.
+
 ### `mrpack-install` falha ao instalar
 
 - Verifique a versão do `mrpack-install` (`MRPACK_INSTALL_VERSION` no

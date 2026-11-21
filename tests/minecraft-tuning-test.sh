@@ -59,9 +59,22 @@ for ram in 1024 2048 4096 8192 16384 32768; do
     fi
     if [ "$ram" -ge 2048 ]; then
         [ "$((limit - xmx))" -ge 512 ] || { echo "FAIL: JVM sem folga nativa ($ram)" >&2; exit 1; }
-        [ "$((ram - limit))" -ge 512 ] || { echo "FAIL: SO sem reserva ($ram)" >&2; exit 1; }
+        [ "$((ram - limit))" -ge 384 ] || { echo "FAIL: SO sem reserva ($ram)" >&2; exit 1; }
     fi
 done
+# Host Arch minimal: limites de servico deixam somente 256-768 MiB para
+# kernel, OpenSSH e Tailscale (sem reserva percentual por tier).
+for profile in "1024:256" "2048:384" "4096:512" "8192:682" "16384:768" "32768:768"; do
+    ram="${profile%:*}"
+    reserve="${profile#*:}"
+    for tier in LOW MID HIGH; do
+        compute_minecraft_tuning "$ram" 8 SSD "$tier"
+        assert_eq "$reserve" "$MC_HOST_RESERVE_MB" "reserva SO minima ($ram/$tier)"
+        assert_eq "$((ram - reserve))" "$MC_SERVICE_MEMORY_MAX_MB" "cota do servico ($ram/$tier)"
+    done
+done
+compute_minecraft_tuning 32768 8 SSD HIGH
+
 # Hosts grandes nao podem ficar presos ao antigo teto de heap.
 [ "${MC_MAX_RAM%M}" -gt 12288 ] || { echo "FAIL: heap artificialmente limitado" >&2; exit 1; }
 
