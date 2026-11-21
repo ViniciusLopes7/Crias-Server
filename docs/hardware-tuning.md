@@ -39,6 +39,7 @@ HW_MID_TIER_MAX_CPU_CORES=6
 - G1 GC region size baseado no heap
 - Retenção de backup (LOW=5, MID=7, HIGH=10 dias)
 - Nível de compressão zstd (HDD=-3, SSD/NVME=-1)
+- `sync-chunk-writes=true` no Minecraft, inclusive em SSD/NVMe: prioriza integridade do mundo. O antigo auto-tuning desativava sincronizacao em discos rapidos e aumentava a janela de perda de dados apos crash/OOM. Um opt-out explicito `MINECRAFT_SYNC_CHUNK_WRITES=false` continua disponivel se o operador medir o custo de I/O, aceitar o risco e manter backups consistentes.
 
 ### No host (opcional, desativado por padrão)
 
@@ -163,7 +164,7 @@ A unidade usa `OOMScoreAdjust=200` em vez de `-800`: diante de OOM **global do h
 
 **Memória sob pressão:** se o orçamento seguro for inferior ao heap mínimo, o instalador/recalibrador recusa gerar uma configuração inválida; não aumenta automaticamente o limite e não encerra processos concorrentes. O operador pode liberar RAM, encerrar outro servidor de jogo ou revisar as cotas antes de tentar novamente. A disponibilidade é uma medição de um instante; processos futuros ainda podem consumir memória.
 
-**Disco incerto:** se o filesystem ou dispositivo não puder ser classificado com segurança, `sync-chunk-writes=true` é mantido, em vez de presumir SSD. Isso pode reduzir throughput, mas evita um ajuste agressivo baseado em detecção inconclusiva.
+**Gravações de chunks:** `sync-chunk-writes=true` é mantido para HDD, SSD, NVMe ou disco incerto. Detectar um SSD não elimina quedas de energia, OOM ou risco de corrupção de região. O administrador pode optar por `MINECRAFT_SYNC_CHUNK_WRITES=false` em `config.env`, sabendo que a opção pode reduzir durabilidade após crash; a recalibração respeita esse opt-out. Referência oficial: [Minecraft Java Nether Update](https://www.minecraft.net/en-us/article/nether-update-java).
 
 **Modpacks grandes:** o tuning é um orçamento inicial e não garante que todos os mods caibam no heap. Analise `MemoryPeak`, `MemoryMax`, logs do Java e uso do host antes de escolher o heap; não aumente `-Xmx` sozinho sem ajustar o cgroup.
 

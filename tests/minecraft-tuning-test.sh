@@ -62,6 +62,22 @@ for ram in 1024 2048 4096 8192 16384; do
     fi
 done
 
+# Contrato de seguranca: um SSD nao justifica desligar sync-chunk-writes.
+for disk in SSD NVME HDD UNKNOWN; do
+    unset MINECRAFT_SYNC_CHUNK_WRITES
+    compute_minecraft_tuning 4096 4 "$disk" MID
+    assert_eq true "$MC_SYNC_CHUNK_WRITES" "sync-chunk-writes seguro para $disk"
+done
+MINECRAFT_SYNC_CHUNK_WRITES=false
+compute_minecraft_tuning 4096 4 SSD MID
+assert_eq false "$MC_SYNC_CHUNK_WRITES" 'opt-out explicito de sync-chunk-writes'
+MINECRAFT_SYNC_CHUNK_WRITES=invalid
+if compute_minecraft_tuning 4096 4 SSD MID >/dev/null 2>&1; then
+    echo "FAIL: MINECRAFT_SYNC_CHUNK_WRITES invalido foi aceito" >&2
+    exit 1
+fi
+unset MINECRAFT_SYNC_CHUNK_WRITES
+
 compute_minecraft_tuning 4096 4 SSD MID
 assert_match "$MC_MIN_RAM" '^[0-9]+M$' 'MC_MIN_RAM format'
 assert_match "$MC_MAX_RAM" '^[0-9]+M$' 'MC_MAX_RAM format'
