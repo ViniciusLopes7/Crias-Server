@@ -21,14 +21,14 @@ if ! command -v envsubst >/dev/null 2>&1; then
 fi
 
 # Garante ambiente LIMPO (sem as variáveis) — como num shell de instalação.
-unset SERVER_USER SERVER_DIR MEMORY_MAX_MB SERVICE_NAME 2>/dev/null || true
+unset SERVER_USER SERVER_DIR MEMORY_MAX_MB MEMORY_HIGH_MB SERVICE_NAME 2>/dev/null || true
 
 # 1. Template do Minecraft — padrão do installer (env do comando, sem export).
 # (AUDIT-B N3) MC_OUTPUT dedicado: OUTPUT e sobrescrito pela unit do Terraria
 # mais abaixo — a validacao EXP-55 precisa do render do Minecraft preservado.
 MC_OUTPUT=$(env SERVER_USER="minecraft" SERVER_DIR="/opt/minecraft-server" \
-    MEMORY_MAX_MB="4096" SERVICE_NAME="minecraft" \
-    envsubst '${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB} ${SERVICE_NAME}' \
+    MEMORY_MAX_MB="4096" MEMORY_HIGH_MB="3891" SERVICE_NAME="minecraft" \
+    envsubst '${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB} ${MEMORY_HIGH_MB} ${SERVICE_NAME}' \
     < "$ROOT_DIR/minecraft/minecraft.service")
 OUTPUT="$MC_OUTPUT"
 
@@ -45,6 +45,11 @@ fi
 
 if ! echo "$OUTPUT" | grep -q '^MemoryMax=4096M$'; then
     echo "FAIL: MemoryMax não substituído no template do Minecraft"
+    exit 1
+fi
+
+if ! echo "$OUTPUT" | grep -q '^MemoryHigh=3891M$'; then
+    echo "FAIL: MemoryHigh não substituído no template do Minecraft"
     exit 1
 fi
 
