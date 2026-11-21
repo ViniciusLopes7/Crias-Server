@@ -192,8 +192,14 @@ compute_minecraft_tuning() {
 write_minecraft_systemd_memory_limit() {
     local max_mb="${1:-}" dir="${2:-/etc/systemd/system/minecraft.service.d}"
     local target="$dir/20-crias-memory.conf" staged="" previous="" verify_out=""
+    local high_mb=""
     if ! [[ "$max_mb" =~ ^[0-9]{3,6}$ ]] || [ "$max_mb" -lt 640 ]; then
         print_error "MemoryMax invalido para Minecraft: ${max_mb:-vazio} MB"
+        return 1
+    fi
+    high_mb=$((max_mb * 95 / 100))
+    if [ "$high_mb" -le 0 ] || [ "$high_mb" -ge "$max_mb" ]; then
+        print_error "MemoryHigh inconsistente para MemoryMax=${max_mb}MB."
         return 1
     fi
     if [ -L "$dir" ] || [ -L "$target" ]; then
@@ -202,7 +208,7 @@ write_minecraft_systemd_memory_limit() {
     fi
     mkdir -p -- "$dir" || return 1
     staged="$(mktemp "$dir/.crias-memory.XXXXXXXX")" || return 1
-    if ! printf "[Service]\nMemoryMax=%sM\n" "$max_mb" > "$staged" || ! chmod 0644 "$staged"; then
+    if ! printf "[Service]\nMemoryHigh=%sM\nMemoryMax=%sM\n" "$high_mb" "$max_mb" > "$staged" || ! chmod 0644 "$staged"; then
         rm -f -- "$staged"
         return 1
     fi
