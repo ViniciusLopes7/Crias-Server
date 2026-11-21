@@ -329,5 +329,5 @@ O CI executa QEMU com Arch Linux e systemd reais, além de contratos e testes de
 
 O instalador apresenta uma etapa dedicada a **Tailscale e OpenSSH** após confirmar as opções, mas **antes** de baixar Minecraft. A autenticação Tailscale é opcional e pode exibir uma URL a autorizar no celular. Em instalações não interativas, não há autenticação automática nem armazenamento de chaves.
 
-Escolha habilitar OpenSSH caso queira conectar na porta 22. Apenas instalar Tailscale não inicia um servidor SSH: `Connection refused` pode indicar que `sshd` não está ativo. Consulte [Conexão via Tailscale](Tailscale.md).
+OpenSSH é a opção recomendada e pré-selecionada no modo interativo: o instalador o configura e verifica **antes do Tailscale**. Apenas instalar Tailscale não inicia um servidor SSH: `Connection refused` pode indicar que `sshd` não está ativo. Consulte [Conexão via Tailscale](Tailscale.md).
 
