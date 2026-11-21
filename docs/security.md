@@ -74,17 +74,17 @@ Se você responder "sim" à pergunta *"Habilitar SSH no servidor instalado?"*
 (ou setar `INSTALL_SSH=true`), o `install.sh` configura:
 
 1. Instala `openssh` (se não presente) via `pacman`.
-2. Cria o usuário **`crias`** (grupo `wheel` = sudo), com senha pedida
-   interativamente (`read -s`, sem echo). Em `NON_INTERACTIVE`, o usuário é
-   criado com senha bloqueada (login por chave pública apenas).
-3. Cria `/etc/sudoers.d/crias-wheel` (`%wheel ALL=(ALL) ALL`) — sudo exige senha.
-4. Cria drop-in `/etc/ssh/sshd_config.d/10-crias.conf`:
+2. Se a conta não existir, cria o usuário **`crias`** (grupo `wheel`), com senha pedida interativamente (`read -s`, sem echo). Em `NON_INTERACTIVE`, a senha da conta fica bloqueada até ser configurada pelo administrador.
+3. **Somente quando cria a conta**, gera uma regra por usuário em `/etc/sudoers.d/90-crias-<usuario>` (`<usuario> ALL=(ALL) ALL`), validada com `visudo`. Para contas existentes, preserva as autorizações sudo do host, inclusive `NOPASSWD`; não cria regras globais para `wheel`.
+4. Cria drop-in `/etc/ssh/sshd_config.d/10-crias.conf`, validado por `sshd -t`:
    ```
    PermitRootLogin no
-   PasswordAuthentication yes
+   PasswordAuthentication <politica-efetiva-existente: yes-ou-no>
    PubkeyAuthentication yes
    ```
-5. Habilita e (re)inicia `sshd.service`.
+5. Habilita e (re)inicia `sshd.service` com a configuração validada.
+
+**Instalações antigas** podem conter `/etc/sudoers.d/crias-wheel` com a regra global `%wheel ALL=(ALL) ALL`. O instalador atual **avisa, mas não remove automaticamente** esse arquivo: a remoção sem antes preservar a política sudo da conta de administração pode impedir a recuperação remota. Confira `sudo -l -U <usuario>`, compare o comportamento de `sudo -n true` em sessões que já eram NOPASSWD, crie uma regra individual validada com `visudo` quando necessário e só depois remova a regra legada, mantendo outra sessão administrativa aberta.
 
 Conexão: `ssh crias@<ip-do-servidor>` (use a senha definida, ou configure
 chaves em `~crias/.ssh/authorized_keys`).
