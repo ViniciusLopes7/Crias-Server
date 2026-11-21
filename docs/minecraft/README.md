@@ -31,7 +31,7 @@ sudo /usr/local/libexec/crias/mc-manager.sh logs recent        # ultimas 150 lin
 sudo /usr/local/libexec/crias/mc-manager.sh logs alerts        # linhas WARN/ERROR/Exception/OOM
 sudo /usr/local/libexec/crias/mc-manager.sh logs boot          # logs do boot atual
 sudo /usr/local/libexec/crias/mc-manager.sh console            # console RCON interativo
-sudo /usr/local/libexec/crias/mc-manager.sh backup             # backup imediato
+sudo /usr/local/libexec/crias/mc-manager.sh backup             # backup imediato (online requer RCON)
 sudo /usr/local/libexec/crias/mc-manager.sh health             # porta + RCON
 sudo /usr/local/libexec/crias/mc-manager.sh hardware-report    # perfil aplicado
 sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware        # recalibrar tier
@@ -244,3 +244,9 @@ Requer `mcrcon` instalado (AUR). Veja a seção "Backup com RCON save-lock" acim
 
 Se `sudo crias-tui` não existir, confira `ls -l /usr/local/bin/crias-tui` e `readlink -f /opt/crias-server`. Em versões atualizadas, o hub é instalado **antes** de configurar os jogos e oferece `sudo crias-tui --doctor` para avaliar memória e serviços sem alterar o host. Não reinstale ou remova um mundo existente antes de verificar a integridade do backup.
 
+
+## Backup e acesso remoto sem obrigatoriedade
+
+Nao ha backup automatico sem o administrador ativar o timer via `mc-manager.sh setup-cron`. Backup remoto permanece desligado sem `BACKUP_REMOTE_PATH`; Minecraft inicia normalmente sem `mcrcon`/RCON. Se um backup com mundo **ativo** for solicitado e RCON estiver indisponivel, `BACKUP_REQUIRE_CONSISTENT=true` faz **somente o backup** falhar, preservando o jogo e evitando um arquivo potencialmente inconsistente. Para backup com Minecraft parado, uma copia de dados pode ser feita conforme o procedimento de restauracao, sem RCON.
+
+O instalador recomenda OpenSSH em modo interativo e verifica a porta 22 **antes** de instalar o Tailscale e baixar o jogo. Para usuarios existentes, nenhuma regra sudo global e sobrescrita. Em instalacao nao interativa, defina `INSTALL_SSH=true` e `SSH_USER` com uma conta administrativa preexistente ou com chave autorizada (novas contas sem senha interativa sao criadas com senha bloqueada).

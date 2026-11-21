@@ -34,8 +34,8 @@ HW_MID_TIER_MAX_CPU_CORES=6
 
 - `max-players`, `view-distance`, `simulation-distance` (Minecraft)
 - `maxplayers`, `npcstream`, `autocreate` (Terraria)
-- Heap JVM (`-Xms`, `-Xmx`) calculado pelo menor orçamento entre capacidade física menos reserva do host e memória atualmente disponível menos uma margem de pressão; inclui reserva de memória nativa da JVM
-- `MemoryMax` do systemd (acima do heap para acomodar JVM overhead)
+- Heap JVM (`-Xms`, `-Xmx`) dimensionado pela RAM total efetiva do host, sem depender da disponibilidade transitória na instalação e sem teto artificial de 12 GiB; parte do orçamento fica para memória nativa da JVM
+- `MemoryHigh` do systemd (pressão progressiva perto do teto) e `MemoryMax` (última defesa), com folga proporcional para memória nativa
 - G1 GC region size baseado no heap
 - Retenção de backup (LOW=5, MID=7, HIGH=10 dias)
 - Nível de compressão zstd (HDD=-3, SSD/NVME=-1)
@@ -114,7 +114,7 @@ sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware HIGH
 sudo /usr/local/libexec/crias/tt-manager.sh reconfigure-hardware LOW
 
 # Iniciar apos conferir heap e MemoryMax sincronizados
-systemctl show minecraft -p MemoryMax -p MemorySwapMax
+systemctl show minecraft -p MemoryHigh -p MemoryMax -p MemorySwapMax
 sudo systemctl start minecraft
 # ou
 sudo systemctl restart terraria
@@ -136,7 +136,7 @@ Mostra `HW_TOTAL_RAM_MB`, `HW_CPU_CORES`, `HW_DISK_TYPE`, `HW_TIER` e todos os p
 
 ## Falha de memória: heap Java versus limite do systemd
 
-O cálculo do Minecraft agora reserva RAM para o sistema operacional e para o consumo **fora do heap Java** (metaspace, stacks de threads, buffers, compilador JIT). O limite `MemoryMax` permanece maior que `MAX_RAM`, mas não deve ocupar praticamente toda a RAM física. Em máquinas pequenas, o heap calculado será menor que nas versões anteriores; isso prioriza estabilidade, não FPS ou TPS máximos. Modpacks pesados podem exigir mais RAM física.
+O cálculo do Minecraft agora reserva RAM para o sistema operacional e para o consumo **fora do heap Java** (metaspace, stacks de threads, buffers, compilador JIT). O limite `MemoryMax` permanece maior que `MAX_RAM`, mas não deve ocupar praticamente toda a RAM física. O cálculo usa o orçamento da máquina, mantendo reserva para Linux/SSH/Tailscale e memória nativa mesmo em modpacks pesados. Modpacks pesados podem exigir mais RAM física.
 
 O erro `Memory cgroup out of memory: Killed process (java)` não comprova, isoladamente, vazamento de memória: pode significar que o serviço atingiu o limite do systemd. Consulte `sudo crias-tui --doctor`, `systemctl show minecraft -p MemoryMax -p MemoryPeak -p NRestarts` e `journalctl -k -b` antes de aumentar os limites. O ajuste do instalador não reescreve automaticamente os limites de serviços já instalados; a mudança exige reconfiguração deliberada, validação do arquivo `.service` e reinicialização controlada.
 
@@ -159,16 +159,22 @@ A unidade usa `OOMScoreAdjust=200` em vez de `-800`: diante de OOM **global do h
 - O cálculo reserva memória para o SO e para o consumo nativo da JVM; se não houver orçamento suficiente, **falha antes de gerar configurações inválidas**. Não aumenta artificialmente o heap mínimo para exceder a cota.
 - `-Xms` automático foi reduzido para cerca de 30% de `-Xmx` (com piso de 256 MB), e a pré-alocação `AlwaysPreTouch` foi removida do launcher padrão para reduzir pressão na inicialização.
 - O launcher verifica a memória do cgroup antes de executar Java e recusa `user_jvm_args.txt` Forge/NeoForge e variáveis `JAVA_TOOL_OPTIONS`, `JDK_JAVA_OPTIONS`, `_JAVA_OPTIONS` com parâmetros conflitantes de heap/MaxRAM ou memória direta que poderiam sobrescrever o tuning.
-- `reconfigure-hardware` **exige Minecraft parado**. Atualiza `MemoryMax` por drop-in persistente em `/etc/systemd/system/minecraft.service.d/20-crias-memory.conf`, valida com `systemd-analyze`, confere tanto `MemoryMax` quanto `EffectiveMemoryMax` (que inclui cotas da slice pai) e restaura o drop-in anterior se a validação falhar. O comando não reinicia o serviço automaticamente.
-- `MemorySwapMax=0` continua impedindo que o **processo Minecraft** use swap; isso não impede que o host utilize ZRAM para outros processos. A opção prioriza limitar pausas graves de JVM, mas não substitui memória física suficiente.
+- `reconfigure-hardware` **exige Minecraft parado**. Atualiza `MemoryHigh`, `MemoryMax`, `MemorySwapMax`, `Restart=no` e `OOMPolicy=stop` por drop-in persistente em `/etc/systemd/system/minecraft.service.d/20-crias-memory.conf`, valida com `systemd-analyze`, confere tanto `MemoryMax` quanto `EffectiveMemoryMax` (que inclui cotas da slice pai) e restaura o drop-in anterior se a validação falhar. O comando não reinicia o serviço automaticamente.
+- `MemorySwapMax=512M` permite até 512 MiB de swap emergencial **se** o host tiver swap/ZRAM disponível; não ativa swap automaticamente nem deve mascarar falta de RAM.
 
-**Memória sob pressão:** se o orçamento seguro for inferior ao heap mínimo, o instalador/recalibrador recusa gerar uma configuração inválida; não aumenta automaticamente o limite e não encerra processos concorrentes. O operador pode liberar RAM, encerrar outro servidor de jogo ou revisar as cotas antes de tentar novamente. A disponibilidade é uma medição de um instante; processos futuros ainda podem consumir memória.
+**Memória sob pressão:** `MemAvailable` e a folga do cgroup permanecem no diagnóstico, mas **não diminuem o heap permanentemente** durante a instalação. A memória total/cota efetiva é o orçamento fixo; o host continua sujeito a OOM global se outros processos crescerem depois. Se a cota total não comportar um heap mínimo com reservas, o instalador falha claramente.
 
 **Gravações de chunks:** `sync-chunk-writes=true` é mantido para HDD, SSD, NVMe ou disco incerto. Detectar um SSD não elimina quedas de energia, OOM ou risco de corrupção de região. O administrador pode optar por `MINECRAFT_SYNC_CHUNK_WRITES=false` em `config.env`, sabendo que a opção pode reduzir durabilidade após crash; a recalibração respeita esse opt-out. Referência oficial: [Minecraft Java Nether Update](https://www.minecraft.net/en-us/article/nether-update-java).
 
-**Modpacks grandes:** o tuning é um orçamento inicial e não garante que todos os mods caibam no heap. Analise `MemoryPeak`, `MemoryMax`, logs do Java e uso do host antes de escolher o heap; não aumente `-Xmx` sozinho sem ajustar o cgroup.
+**Modpacks grandes:** a política de RAM é genérica e não analisa os mods do pacote. O tuning é um orçamento inicial e não garante que todos os mods caibam no heap. Analise `MemoryPeak`, `MemoryMax`, logs do Java e uso do host antes de escolher o heap; não aumente `-Xmx` sozinho sem ajustar o cgroup.
 
 ## Prioridade no OOM global do Linux
 
 O template anterior marcava o Minecraft com `OOMScoreAdjust=-800`, dando proteção alta ao Java perante o OOM **global** e potencialmente tornando outros processos mais expostos. A unidade passa a usar `OOMScoreAdjust=200`, preservando prioridade operacional para o host e seu acesso remoto; o `MemoryMax` continua regulando o OOM **do próprio cgroup**. Isso não impede interrupção do Minecraft: backup/recuperação e RAM física suficiente continuam necessários.
 
+
+### Politica de RAM a partir desta revisao
+
+O orcamento do servico corresponde a **RAM efetiva do host menos a reserva do SO** (LOW: 25%, MID: 20%, HIGH: 15%, com limites de reserva nos extremos). O heap recebe esse orcamento **menos cerca de 25% para a memoria nativa** da JVM, nunca menos que um piso seguro. `MemoryHigh` opera em 95% do orçamento e `MemoryMax` so age como a ultima defesa. A disponibilidade instantanea nao define limites permanentes. Isso nao aloca 100% da memoria fisica ao heap, pois isso deixaria o kernel e a rede sem espaco.
+
+**Atualizacao de uma instalacao existente:** baixar uma nova release nao substitui as unidades `systemd` e os scripts ja instalados. Primeiro atualize o programa; em seguida pare o Minecraft e, com o novo `mc-manager.sh` disponivel, execute `sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware`. Confira `systemctl cat minecraft.service` e `systemctl show minecraft.service -p MemoryHigh -p MemoryMax -p MemorySwapMax -p Restart`. A recalibracao nao inicia o jogo automaticamente.

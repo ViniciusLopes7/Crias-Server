@@ -60,8 +60,8 @@ Para comandos de backup, console, reconfiguração e restauração, consulte o [
 | **Modpacks próprios** | Importação de arquivos `.mrpack` locais, de pendrive ou por URL HTTPS direta |
 | **Terraria** | Servidor vanilla e opção de tModLoader com mods |
 | **Administração** | Serviços `systemd`, terminal de gerenciamento, logs e ajustes iniciais de RAM/CPU |
-| **Backup e recuperação** | Backups comprimidos, retenção e restauração; consistência online do Minecraft depende de RCON configurado |
-| **Integrações opcionais** | Tailscale, acesso SSH, monitoramento e bot Discord com agente Go |
+| **Backup e recuperação** | Backups manuais e agendados por opção; backup com Minecraft ligado exige RCON para consistência; backup remoto desativado por padrão |
+| **Acesso remoto** | OpenSSH recomendado e testado antes do jogo; Tailscale opcional para SSH e amigos; agente Discord opcional |
 
 O instalador usa `config.env` para definir os padrões. A maior parte das escolhas também pode ser feita nos menus interativos. Para instalações automatizadas, consulte a [configuração não interativa](docs/tutorial.md).
 

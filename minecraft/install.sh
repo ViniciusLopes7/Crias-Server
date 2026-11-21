@@ -715,6 +715,7 @@ stack_configure_runtime() {
     # STACK_SERVICE_MEMORY_MAX_MB read by install_stack_service (stack-installer.sh).
     # shellcheck disable=SC2034
     STACK_SERVICE_MEMORY_MAX_MB="$MC_SERVICE_MEMORY_MAX_MB"
+    STACK_SERVICE_MEMORY_HIGH_MB="$MC_SERVICE_MEMORY_HIGH_MB"
 
     write_minecraft_runtime_env "$MINECRAFT_SERVER_DIR/runtime.env"
     write_minecraft_server_properties "$MINECRAFT_SERVER_DIR/server.properties" "$MINECRAFT_PORT" "$MINECRAFT_ONLINE_MODE" "$MINECRAFT_MOTD"

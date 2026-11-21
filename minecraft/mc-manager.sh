@@ -284,9 +284,9 @@ cmd_reconfigure_hardware() {
     # Nunca varra os mundos com chown -R apenas para editar tres configs.
     chown "${SERVER_USER}:${SERVER_USER}" "$RUNTIME_ENV" "$PROPS_FILE" "$TUNING_STATE"
 
-    echo "MemoryMax aplicado no systemd: ${MC_SERVICE_MEMORY_MAX_MB} MB"
+    echo "MemoryHigh/MemoryMax aplicados: ${MC_SERVICE_MEMORY_HIGH_MB}/${MC_SERVICE_MEMORY_MAX_MB} MB"
     echo "Reserva para SO: ${MC_HOST_RESERVE_MB} MB | memoria JVM nativa: ${MC_NATIVE_OVERHEAD_MB} MB"
-    warn "Heap e MemoryMax sincronizados. Servico continua parado; confira os limites e execute: sudo systemctl reset-failed $SERVICE_NAME; sudo systemctl start $SERVICE_NAME"
+    warn "Heap, MemoryHigh e MemoryMax sincronizados. Servico continua parado; confira os limites e execute: sudo systemctl reset-failed $SERVICE_NAME; sudo systemctl start $SERVICE_NAME"
 }
 
 cmd_health() {

@@ -427,11 +427,13 @@ install_stack_service() {
     # envsubst (binario externo) lia ambiente sem as variaveis — gerando
     # User=, ExecStart=/start-server.sh e MemoryMax=M. O prefixo `env` so
     # exporta para o envsubst, sem vazar globais no installer.
-    local _envsubst_vars='${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB} ${SERVICE_NAME}'
+    local _envsubst_vars='${SERVER_USER} ${SERVER_DIR} ${MEMORY_MAX_MB} ${MEMORY_HIGH_MB} ${SERVICE_NAME}'
+    # Terraria e outras stacks podem nao expor MemoryHigh no template.
+    local stack_memory_high_mb="${STACK_SERVICE_MEMORY_HIGH_MB:-$((STACK_SERVICE_MEMORY_MAX_MB * 95 / 100))}"
     if dry_run_enabled; then
         print_step "[DRY_RUN] Gerando unidade systemd do ${STACK_NAME^^} em /etc/systemd/system/${STACK_NAME}.service (nao sera escrita)"
         env SERVER_USER="$STACK_USER" SERVER_DIR="$STACK_SERVER_DIR" \
-            MEMORY_MAX_MB="${STACK_SERVICE_MEMORY_MAX_MB:-2048}" SERVICE_NAME="$STACK_NAME" \
+            MEMORY_MAX_MB="${STACK_SERVICE_MEMORY_MAX_MB:-2048}" MEMORY_HIGH_MB="$stack_memory_high_mb" SERVICE_NAME="$STACK_NAME" \
             envsubst "$_envsubst_vars" \
             < "$STACK_SERVICE_TEMPLATE" > /dev/null
         return 0
@@ -462,7 +464,7 @@ install_stack_service() {
     fi
 
     if ! env SERVER_USER="$STACK_USER" SERVER_DIR="$STACK_SERVER_DIR" \
-            MEMORY_MAX_MB="${STACK_SERVICE_MEMORY_MAX_MB:-2048}" SERVICE_NAME="$STACK_NAME" \
+            MEMORY_MAX_MB="${STACK_SERVICE_MEMORY_MAX_MB:-2048}" MEMORY_HIGH_MB="$stack_memory_high_mb" SERVICE_NAME="$STACK_NAME" \
             envsubst "$_envsubst_vars" \
             < "$STACK_SERVICE_TEMPLATE" > "$unit_tmp"; then
         print_error "envsubst falhou ao gerar unit file para ${STACK_NAME}."
@@ -473,7 +475,7 @@ install_stack_service() {
     # Defesa em profundidade (CR-03): recusa campos criticos vazios mesmo com
     # a validacao de entrada acima.
     if grep -qE '^(User|Group|WorkingDirectory|ExecStart)=$' "$unit_tmp" \
-        || grep -q '^MemoryMax=M$' "$unit_tmp"; then
+        || grep -q '^MemoryMax=M$' "$unit_tmp" || grep -q '^MemoryHigh=M$' "$unit_tmp"; then
         print_error "Unit do ${STACK_NAME} gerada com campos criticos vazios; abortando."
         rm -f "$unit_tmp"
         return 1

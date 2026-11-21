@@ -71,17 +71,24 @@ printf 'inactive_file 2147483648\n' > "$tmp/cg/parent/memory.stat"
     echo "FAIL: cache inativo nao foi considerado com margem conservadora" >&2; exit 1;
 }
 
-# Heap reduzido por pressao: nunca ultrapassar a folga real de RAM.
+# MemAvailable e retrato transitorio: NAO pode reduzir um limite permanente.
 compute_minecraft_tuning 4096 4 SSD MID 2048
-[ "$((MC_SERVICE_MEMORY_MAX_MB + MC_PRESSURE_RESERVE_MB))" -le 2048 ] || {
-    echo "FAIL: tuning consumiu a margem MemAvailable" >&2; exit 1;
+heap_pressured="$MC_MAX_RAM"
+cap_pressured="$MC_SERVICE_MEMORY_MAX_MB"
+compute_minecraft_tuning 4096 4 SSD MID 3500
+[ "$MC_MAX_RAM" = "$heap_pressured" ] && [ "$MC_SERVICE_MEMORY_MAX_MB" = "$cap_pressured" ] || {
+    echo "FAIL: heap variou com MemAvailable durante instalacao" >&2; exit 1;
 }
-if compute_minecraft_tuning 4096 4 SSD MID 800 >/dev/null 2>&1; then
-    echo "FAIL: tuning aceitou host sem folga para JVM nativa" >&2; exit 1
-fi
+compute_minecraft_tuning 4096 4 SSD MID 0
+[ "$MC_MAX_RAM" = "$heap_pressured" ] || {
+    echo "FAIL: heap reduzido permanentemente por pressao transitoria" >&2; exit 1;
+}
 if compute_minecraft_tuning 4096 4 SSD MID 8192 >/dev/null 2>&1; then
     echo "FAIL: MemAvailable maior que MemTotal foi aceito" >&2; exit 1
 fi
+# Heap nao deve ter teto de 12 GiB em hosts de grande capacidade.
+compute_minecraft_tuning 32768 8 NVME HIGH
+[ "${MC_MAX_RAM%M}" -gt 12288 ] || { echo "FAIL: antigo teto de 12 GiB persiste" >&2; exit 1; }
 
 # Captura consistente de /proc/meminfo, independente de execucoes de free.
 cat > "$tmp/meminfo" <<'EOF'
@@ -113,7 +120,7 @@ for mb in 1024 1536 2048 3072 4096 8192 16384 32768; do
     xmx="${MC_MAX_RAM%M}"
     xms="${MC_MIN_RAM%M}"
     cap="$MC_SERVICE_MEMORY_MAX_MB"
-    [ "$xms" -le "$xmx" ] && [ "$xmx" -lt "$cap" ]
+    [ "$xms" -le "$xmx" ] && [ "$xmx" -lt "$MC_SERVICE_MEMORY_HIGH_MB" ] && [ "$MC_SERVICE_MEMORY_HIGH_MB" -lt "$cap" ]
     [ "$((xmx + MC_NATIVE_OVERHEAD_MB))" -eq "$cap" ] || {
         echo "FAIL: RAM $mb, heap+native != cap" >&2; exit 1;
     }
@@ -154,6 +161,7 @@ systemd-analyze() {
 dir="$tmp/minecraft.service.d"
 write_minecraft_systemd_memory_limit 1536 "$dir"
 grep -qx "MemoryMax=1536M" "$dir/20-crias-memory.conf"
+grep -qx "MemoryHigh=1459M" "$dir/20-crias-memory.conf"
 MOCK_VERIFY_FAIL=1
 if write_minecraft_systemd_memory_limit 2048 "$dir" >/dev/null 2>&1; then
     echo "FAIL: systemd verify quebrado foi ignorado" >&2; exit 1

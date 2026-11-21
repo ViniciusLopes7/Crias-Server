@@ -13,7 +13,7 @@
 #   5. sshd drop-in em /etc/ssh/sshd_config.d/10-crias.conf com PermitRootLogin no
 #   6. Hardening: systemctl enable + restart sshd
 #   7. DRY_RUN pula a função
-#   8. NON_INTERACTIVE com INSTALL_SSH vazio -> false (não pergunga)
+#   8. NON_INTERACTIVE com INSTALL_SSH vazio -> false (nao pergunta)
 
 set -euo pipefail
 
@@ -31,6 +31,14 @@ line_ssh="$(grep -n '^    install_ssh_if_enabled$' "$ROOT_DIR/install.sh" | cut 
 line_stack="$(grep -n '^    run_selected_stack_installer$' "$ROOT_DIR/install.sh" | cut -d: -f1)"
 [ -n "$line_ssh" ] && [ "$line_ssh" -lt "$line_stack" ] || { echo 'FAIL: SSH executado depois do jogo' >&2; exit 1; }
 assert_grep 'configure_tailscale_login_if_enabled' "$ROOT_DIR/install.sh"
+# OpenSSH deve estar pronto antes de qualquer configuracao Tailscale.
+line_tailscale="$(grep -n '^    install_tailscale_if_enabled$' "$ROOT_DIR/install.sh" | cut -d: -f1)"
+[ -n "$line_tailscale" ] && [ "$line_ssh" -lt "$line_tailscale" ] || {
+    echo 'FAIL: OpenSSH instalado depois do Tailscale' >&2; exit 1;
+}
+assert_grep "systemctl is-active --quiet sshd.service" "$ROOT_DIR/install.sh"
+assert_grep "sport = :22" "$ROOT_DIR/install.sh"
+assert_grep 'SSH_USER invalido ou reservado' "$ROOT_DIR/install.sh"
 
 # 2. INSTALL_SSH declarada em config.env e tratada em config-parser.sh
 assert_grep '^INSTALL_SSH=' "$ROOT_DIR/config.env"

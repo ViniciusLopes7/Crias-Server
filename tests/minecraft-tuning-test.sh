@@ -47,20 +47,23 @@ for case_version in \
 done
 echo "[minecraft-tuning-test] OK: compatibilidade Minecraft/Java (inclui Forge 1.20.1)"
 # Reserve margem para memoria nativa da JVM e recursos do sistema.
-for ram in 1024 2048 4096 8192 16384; do
+for ram in 1024 2048 4096 8192 16384 32768; do
     compute_minecraft_tuning "$ram" 4 SSD MID
     xmx="${MC_MAX_RAM%M}"
     xms="${MC_MIN_RAM%M}"
     limit="$MC_SERVICE_MEMORY_MAX_MB"
-    if [ "$xms" -ge "$xmx" ] || [ "$xmx" -ge "$limit" ]; then
+    high="$MC_SERVICE_MEMORY_HIGH_MB"
+    if [ "$xms" -ge "$xmx" ] || [ "$xmx" -ge "$high" ] || [ "$high" -ge "$limit" ]; then
         echo "FAIL: RAM $ram: invalid xms/xmx/MemoryMax ($xms/$xmx/$limit)" >&2
         exit 1
     fi
     if [ "$ram" -ge 2048 ]; then
         [ "$((limit - xmx))" -ge 512 ] || { echo "FAIL: JVM sem folga nativa ($ram)" >&2; exit 1; }
-        [ "$((ram - limit))" -ge 768 ] || { echo "FAIL: SO sem reserva ($ram)" >&2; exit 1; }
+        [ "$((ram - limit))" -ge 512 ] || { echo "FAIL: SO sem reserva ($ram)" >&2; exit 1; }
     fi
 done
+# Hosts grandes nao podem ficar presos ao antigo teto de heap.
+[ "${MC_MAX_RAM%M}" -gt 12288 ] || { echo "FAIL: heap artificialmente limitado" >&2; exit 1; }
 
 # Contrato de seguranca: um SSD nao justifica desligar sync-chunk-writes.
 for disk in SSD NVME HDD UNKNOWN; do

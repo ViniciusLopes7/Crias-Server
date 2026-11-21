@@ -12,7 +12,7 @@ Como conectar jogadores por uma rede privada Tailscale e, quando necessário, pu
 
 ## 1. Configurar Tailscale no servidor
 
-O instalador agora apresenta uma etapa **Acesso remoto** antes do Minecraft: instala e ativa `tailscaled`, oferece autenticação opcional pelo link de `tailscale up` e pergunta sobre OpenSSH. Se a máquina já estiver autenticada, preserva a conexão. Em modo não interativo, não abre URL nem guarda chaves de acesso. Se você pulou a etapa:
+O instalador apresenta uma etapa **Acesso remoto** antes do Minecraft: primeiro oferece e verifica OpenSSH (porta 22, opção recomendada e selecionada por padrão em modo interativo), depois instala e ativa `tailscaled` e oferece autenticação opcional pelo link de `tailscale up`. Se a máquina já estiver autenticada, preserva a conexão. Em modo não interativo, não abre URL nem guarda chaves de acesso. Se você pulou a etapa:
 
 ```bash
 sudo pacman -S tailscale
@@ -158,7 +158,7 @@ sudo tailscale funnel status
 
 ## SSH pela rede Tailscale (porta 22)
 
-**Tailscale cria a rede; OpenSSH atende conexões na porta 22.** `Connection refused` geralmente significa ausência de um servidor SSH escutando ou rejeição ativa da conexão. O instalador pergunta sobre SSH antes de instalar o Minecraft, para que uma falha no jogo não impeça a recuperação remota.
+**Tailscale cria a rede; OpenSSH atende conexões na porta 22.** `Connection refused` geralmente significa ausência de um servidor SSH escutando ou rejeição ativa da conexão. O instalador configura OpenSSH **antes até mesmo do Tailscale**. Confirma `sshd.service` ativo e porta 22 em escuta antes de prosseguir; falhas de download não podem deixar a instalação sem esse acesso, desde que SSH tenha sido habilitado e uma conta autorizada possua senha ou chave válida.
 
 No console físico:
 
@@ -180,7 +180,7 @@ Conecte de outro dispositivo da mesma tailnet com `ssh USUARIO_EXISTENTE@IP_TAIL
 
 Se surgirem mensagens repetidas de `Memory cgroup out of memory` mesmo sem o jogo disponível, verifique se `minecraft.service` está em um ciclo de reinício: `sudo systemctl stop minecraft.service`, `systemctl show minecraft -p Restart -p NRestarts -p MemoryMax -p Result` e `sudo journalctl -u minecraft -b -n 100 --no-pager`.
 
-Em versões atualizadas, o template protege contra loops contínuos ao limitar as tentativas. Instalações antigas precisam atualizar a unidade; atualizar apenas o ZIP do instalador não modifica serviços já instalados.
+Em versões atualizadas, o serviço usa `Restart=no` para não reiniciar Java em ciclos de OOM. Instalações antigas precisam atualizar sua configuração com Minecraft parado; atualizar apenas o ZIP não modifica serviços existentes. Após baixar uma versão corrigida e atualizar os scripts administrativos, execute `sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware` e confira `systemctl cat minecraft.service`. O novo drop-in também aplica `MemoryHigh`, uma folga limitada de swap e desativa reinícios automáticos.
 
 ## 7. Alternativas ao Tailscale
 
