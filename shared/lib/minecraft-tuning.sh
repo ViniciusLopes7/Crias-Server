@@ -7,8 +7,8 @@ compute_minecraft_tuning() {
     local cpu_cores="$2"
     local disk_type="$3"
     local tier="$4"
-    # Quinto argumento opcional: memoria realmente disponivel, incluindo
-    # pressao da slice cgroup. Chamadas legadas sem ele usam a RAM total.
+    # Quinto argumento opcional: disponibilidade instantanea so para diagnostico.
+    # Limites herdados de cgroup ja integram o total efetivo do perfil.
     local available_ram_mb="${5:-$total_ram_mb}"
     local pressure_reserve_mb
 
@@ -65,37 +65,41 @@ compute_minecraft_tuning() {
             ;;
     esac
 
-    # A memoria real da JVM inclui heap + memoria nativa, dentro da cota.
-    # Falhe se nao houver orcamento. Nao aumente o heap por clamp.
-    local native_overhead_mb=512
+    # RAM de instalacao nao deve determinar um limite permanente do jogo.
+    # Use somente a RAM fisica/efetiva (ja limitada pelo cgroup ancestral)
+    # para o orcamento. MemAvailable e um retrato transitorio: downloads,
+    # pacman, page cache e o proprio instalador poderiam reduzir Xmx para
+    # toda a vida util do servidor sem nenhuma razao.
+    #
+    # O servico recebe TODO o orcamento apos a reserva do sistema; seu
+    # heap recebe uma parcela, deixando espaco de verdade para stacks de
+    # threads, metaspace, NIO/direct buffers, JIT e bibliotecas nativas.
+    # MemoryMax nao deve ser Xmx + uma folga arbitraria de 512 MB.
     if [ "$total_ram_mb" -le 1536 ]; then
         reserve_mb=384
-        native_overhead_mb=256
+    elif [ "$total_ram_mb" -le 2048 ]; then
+        reserve_mb=512
     else
         reserve_mb=$(clamp_value "$reserve_mb" 768 8192)
-        if [ "$((total_ram_mb / 8))" -gt "$native_overhead_mb" ]; then
-            native_overhead_mb=$((total_ram_mb / 8))
-        fi
-    fi
-    # MemAvailable considera cache reclamavel, mas nao autoriza tomar toda
-    # essa folga: mantenha uma margem livre mesmo com processos em execucao.
-    # Essa conta complementa a reserva proporcional ao host, nao a substitui.
-    pressure_reserve_mb=256
-    if [ "$total_ram_mb" -gt 2048 ]; then
-        pressure_reserve_mb=$((reserve_mb / 2))
-        pressure_reserve_mb=$(clamp_value "$pressure_reserve_mb" 384 1024)
     fi
     local service_budget_mb=$((total_ram_mb - reserve_mb))
-    local available_budget_mb=$((available_ram_mb - pressure_reserve_mb))
-    if [ "$available_budget_mb" -lt "$service_budget_mb" ]; then
-        service_budget_mb="$available_budget_mb"
+    local native_overhead_mb=$((service_budget_mb / 4))
+    if [ "$total_ram_mb" -le 1536 ]; then
+        native_overhead_mb=$(clamp_value "$native_overhead_mb" 256 512)
+    elif [ "$total_ram_mb" -le 2048 ]; then
+        native_overhead_mb=$(clamp_value "$native_overhead_mb" 512 768)
+    else
+        native_overhead_mb=$(clamp_value "$native_overhead_mb" 768 16384)
     fi
     local budget_mb=$((service_budget_mb - native_overhead_mb))
     if [ "$budget_mb" -lt 384 ]; then
-        print_error "RAM disponivel insuficiente: ${total_ram_mb}MB total, ${available_ram_mb}MB disponiveis, ${reserve_mb}MB reserva host, ${native_overhead_mb}MB nativa, ${pressure_reserve_mb}MB margem de pressao."
+        print_error "RAM efetiva insuficiente: total=${total_ram_mb}MB, reserva host=${reserve_mb}MB, folga nativa=${native_overhead_mb}MB."
         return 1
     fi
-    xmx_mb=$(clamp_value "$budget_mb" 384 12288)
+    xmx_mb="$budget_mb"
+    # MemAvailable serve apenas para observar pressao, nunca para limitar
+    # permanentemente um host dedicado baseado num instante da instalacao.
+    pressure_reserve_mb=0
     MC_EFFECTIVE_AVAILABLE_RAM_MB="$available_ram_mb"
     MC_PRESSURE_RESERVE_MB="$pressure_reserve_mb"
     # Xms conservador e sem AlwaysPreTouch: modpacks pesados nao precisam
@@ -151,11 +155,14 @@ compute_minecraft_tuning() {
         MC_BACKUP_RETENTION_DAYS=7
     fi
 
-    service_memory_mb=$((xmx_mb + native_overhead_mb))
-    # Invariantes: Xmx < MemoryMax <= RAM-reserva e folga disponivel.
+    service_memory_mb="$service_budget_mb"
+    # MemoryHigh aplica reclaim gradual perto do teto; MemoryMax e a ultima
+    # defesa contra OOM global, preservando SSH e tailscaled fora da unit.
+    MC_SERVICE_MEMORY_HIGH_MB=$((service_memory_mb * 95 / 100))
     if [ "$service_memory_mb" -gt "$((total_ram_mb - reserve_mb))" ] \
-        || [ "$service_memory_mb" -gt "$available_budget_mb" ] || [ "$service_memory_mb" -le "$xmx_mb" ]; then
-        print_error "Orcamento inconsistente de heap/MemoryMax; recusando iniciar configuracao."
+        || [ "$((xmx_mb + native_overhead_mb))" -ne "$service_memory_mb" ] \
+        || [ "$MC_SERVICE_MEMORY_HIGH_MB" -le "$xmx_mb" ]; then
+        print_error "Orcamento JVM/systemd inconsistente; recusando configurar."
         return 1
     fi
     MC_SERVICE_MEMORY_MAX_MB="$service_memory_mb"
@@ -172,6 +179,7 @@ compute_minecraft_tuning() {
     export MC_BACKUP_ZSTD_LEVEL
     export MC_BACKUP_RETENTION_DAYS
     export MC_SERVICE_MEMORY_MAX_MB
+    export MC_SERVICE_MEMORY_HIGH_MB
     export MC_NATIVE_OVERHEAD_MB
     export MC_HOST_RESERVE_MB
     export MC_EFFECTIVE_AVAILABLE_RAM_MB
