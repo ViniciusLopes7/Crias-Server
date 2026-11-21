@@ -382,7 +382,7 @@ stack_download_and_install() {
                 chmod 600 "$curl_cfg"
                 printf 'url = "%s"\n' "$MINECRAFT_MODPACK_URL" > "$curl_cfg"
                 print_step "Baixando o modpack pelo link HTTPS..."
-                if ! curl --config "$curl_cfg" --proto '=https' --proto-redir '=https' --location --fail --silent --show-error --connect-timeout 20 --max-time 900 --max-filesize 2147483648 --output "$custom_pack"; then
+                if ! curl --config "$curl_cfg" --proto '=https' --proto-redir '=https' --location --fail --silent --show-error --connect-timeout 20 --max-time "$MINECRAFT_INSTALL_TIMEOUT_SECONDS" --retry 3 --retry-connrefused --retry-max-time "$MINECRAFT_INSTALL_TIMEOUT_SECONDS" --max-filesize 2147483648 --output "$custom_pack"; then
                     rm -f "$curl_cfg"
                     print_error "Falha ao baixar o arquivo; confirme que o link e direto e publico."
                     return 1
