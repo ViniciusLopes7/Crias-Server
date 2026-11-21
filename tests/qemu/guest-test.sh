@@ -57,7 +57,11 @@ echo "PASS: TUI instalado antecipadamente, fallback e doctor no host Arch"
 # ja existe no guest, sem senha nova, e o processo SSH em curso permanece.
 INSTALL_SSH=true
 SSH_USER=ci
+# A conta ci ja tem NOPASSWD via cloud-init. O instalador nao pode
+# substituir essa regra por uma politica global de wheel que exige senha.
+runuser -u ci -- sudo -n true || { echo 'FAIL: sudo inicial de ci exige senha' >&2; exit 1; }
 install_ssh_if_enabled
+runuser -u ci -- sudo -n true || { echo 'FAIL: instalacao SSH alterou sudo NOPASSWD da conta ci' >&2; exit 1; }
 systemctl is-active --quiet sshd.service
 ss -H -ltn 'sport = :22' | grep -q .
 echo "PASS: OpenSSH habilitado e porta 22 escutando antes do Minecraft"
