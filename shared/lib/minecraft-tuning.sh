@@ -186,7 +186,7 @@ compute_minecraft_tuning() {
     export MC_PRESSURE_RESERVE_MB
 }
 
-# Atualiza somente o limite MemoryMax da unidade Minecraft. Mantem unit
+# Atualiza limites de memoria e politica de restart da unidade Minecraft. Mantem unit
 # principal e preferencias administradas pelo operador intactas. Chamado
 # SOMENTE com o servico parado pelo manager, para nao reduzir cota em jogo.
 write_minecraft_systemd_memory_limit() {
@@ -454,6 +454,7 @@ MC_SYNC_CHUNK_WRITES="$MC_SYNC_CHUNK_WRITES"
 MC_BACKUP_RETENTION_DAYS="$MC_BACKUP_RETENTION_DAYS"
 MC_BACKUP_ZSTD_LEVEL="$MC_BACKUP_ZSTD_LEVEL"
 MC_SERVICE_MEMORY_MAX_MB="$MC_SERVICE_MEMORY_MAX_MB"
+MC_SERVICE_MEMORY_HIGH_MB="$MC_SERVICE_MEMORY_HIGH_MB"
 MC_NATIVE_OVERHEAD_MB="${MC_NATIVE_OVERHEAD_MB:-0}"
 MC_HOST_RESERVE_MB="${MC_HOST_RESERVE_MB:-0}"
 MC_EFFECTIVE_AVAILABLE_RAM_MB="${MC_EFFECTIVE_AVAILABLE_RAM_MB:-0}"
