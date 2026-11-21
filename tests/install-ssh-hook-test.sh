@@ -9,7 +9,7 @@
 #   2. INSTALL_SSH é tratada em config-parser.sh (overridable vars)
 #   3. O usuário criado é 'crias' (não-hardcoded como login user do host,
 #      mas hardcoded como o user do SSH — intencional, documentado)
-#   4. sudoers drop-in em /etc/sudoers.d/crias-wheel com %wheel ALL=(ALL) ALL
+#   4. sudoers individual apenas para conta criada; politicas existentes preservadas
 #   5. sshd drop-in em /etc/ssh/sshd_config.d/10-crias.conf com PermitRootLogin no
 #   6. Hardening: systemctl enable + restart sshd
 #   7. DRY_RUN pula a função
@@ -40,12 +40,16 @@ assert_grep 'INSTALL_SSH' "$ROOT_DIR/shared/lib/config-parser.sh"
 # acesso SSH, NÃO o login user do host que vem do archinstall)
 assert_grep 'SSH_USER:-crias' "$ROOT_DIR/install.sh"
 
-# 4. sudoers drop-in em /etc/sudoers.d/crias-wheel com %wheel ALL=(ALL) ALL
-assert_grep '/etc/sudoers.d/crias-wheel' "$ROOT_DIR/install.sh"
-# Literal match: printf '%%wheel ALL=(ALL) ALL' (%% é escape printf para %)
-assert_grep_fixed '%%wheel ALL=(ALL) ALL' "$ROOT_DIR/install.sh"
-# visudo -cf valida o sudoers antes de instalar
+# 4. Conta SSH ja existente nao pode perder NOPASSWD por regra global
+assert_grep_fixed '/etc/sudoers.d/90-crias-${ssh_user}' "$ROOT_DIR/install.sh"
+assert_grep_fixed 'ssh_user_created' "$ROOT_DIR/install.sh"
+assert_grep_fixed 'Usuario '\''$ssh_user'\'' existente: nenhuma regra sudo alterada' "$ROOT_DIR/install.sh"
 assert_grep 'visudo -cf' "$ROOT_DIR/install.sh"
+# A politica legada pode ser detectada para alertas, mas NUNCA recriada.
+if grep -Fq "printf '%%wheel ALL=(ALL) ALL" "$ROOT_DIR/install.sh"; then
+    echo "FAIL: regra sudo global wheel reintroduzida" >&2
+    exit 1
+fi
 
 # 5. sshd drop-in em /etc/ssh/sshd_config.d/10-crias.conf
 assert_grep '/etc/ssh/sshd_config.d/10-crias.conf' "$ROOT_DIR/install.sh"
