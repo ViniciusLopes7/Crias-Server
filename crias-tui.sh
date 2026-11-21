@@ -88,8 +88,10 @@ show_diagnostics() {
         done
     fi
     if command -v journalctl >/dev/null 2>&1; then
-        echo "--- Ultimos eventos OOM (se disponiveis) ---"
-        journalctl -k -b --no-pager 2>/dev/null | grep -Ei "memory cgroup out of memory|out of memory: killed process|oom-kill" | tail -n 8 || true
+        echo "--- Eventos OOM historicos deste boot (nao necessariamente atuais) ---"
+        journalctl -k -b -o short-iso --no-pager 2>/dev/null | grep -Ei "memory cgroup out of memory|out of memory: killed process|oom-kill" | tail -n 8 || true
+        echo "--- Resultado e eventos recentes do servico Minecraft ---"
+        journalctl -u minecraft.service -b -n 30 -o short-iso --no-pager 2>/dev/null | grep -Ei "oom|killed|memory|Main process exited|Failed with result" | tail -n 12 || true
     fi
     echo "--- Acesso remoto ---"
     if command -v systemctl >/dev/null 2>&1; then
