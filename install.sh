@@ -82,7 +82,7 @@ TERRARIA_DOWNLOAD_URL="${TERRARIA_DOWNLOAD_URL:-https://terraria.org/api/downloa
 # Optional remote control agent install.
 INSTALL_AGENT="${INSTALL_AGENT:-}"
 
-# SSH: vazio = pergunta interativamente (default N). true/false = força.
+# SSH: vazio = pergunta interativamente (default Y). true/false = forca.
 # Se true, instala openssh no host, habilita sshd, cria usuario 'crias' com sudo.
 INSTALL_SSH="${INSTALL_SSH:-}"
 
@@ -158,7 +158,7 @@ prompt_global_options() {
         fi
 
         # Nova opcao desde v1.2.0: habilitar SSH no host instalado.
-        if tui_confirm "Habilitar acesso SSH no servidor instalado? (cria usuario 'crias' com sudo)" "N"; then
+        if tui_confirm "Habilitar acesso SSH no servidor instalado? (cria usuario 'crias' com sudo)" "Y"; then
             INSTALL_SSH="true"
         else
             INSTALL_SSH="false"
@@ -1283,7 +1283,7 @@ install_ssh_if_enabled() {
         if is_true "$NON_INTERACTIVE"; then
             INSTALL_SSH="false"
         else
-            if tui_confirm "Habilitar OpenSSH na porta 22 para acesso remoto (inclusive Tailscale)? (cria usuario 'crias' com sudo)" "N"; then
+            if tui_confirm "Habilitar OpenSSH na porta 22 para acesso remoto (inclusive Tailscale)? (cria usuario 'crias' com sudo)" "Y"; then
                 INSTALL_SSH="true"
             else
                 INSTALL_SSH="false"
@@ -1310,6 +1310,15 @@ install_ssh_if_enabled() {
             fi
             break
         done
+    fi
+
+    # SSH_USER tambem pode vir de config.env ou do ambiente. Validar nomes
+    # reservados ANTES de qualquer alteracao no host (pacman, sudoers, sshd).
+    local reserved_users="root minecraft terraria crias-agent nobody daemon bin sys mail ftp http uuidd dbus nscd"
+    if ! [[ "$ssh_user" =~ ^[a-z_][a-z0-9_-]*$ ]] ||
+       [[ " $reserved_users " == *" $ssh_user "* ]]; then
+        print_error "SSH_USER invalido ou reservado: '$ssh_user'."
+        return 1
     fi
 
     if is_true "$DRY_RUN"; then
@@ -1474,6 +1483,18 @@ EOF
     if ! systemctl restart sshd >/dev/null 2>&1; then
         print_error "Falha ao (re)iniciar sshd.service."
         print_error "Verifique: journalctl -u sshd"
+        return 1
+    fi
+
+    # O retorno de systemctl restart, sozinho, nao comprova que a porta
+    # ficou em escuta. Validar acesso basico ANTES de prosseguir.
+    if ! systemctl is-active --quiet sshd.service; then
+        print_error "sshd.service nao permaneceu ativo apos a configuracao."
+        return 1
+    fi
+    if ! command -v ss >/dev/null 2>&1 ||
+       ! ss -H -ltn 'sport = :22' | grep -q .; then
+        print_error "OpenSSH nao esta escutando na porta 22. Verifique 'sshd -T' e 'ss -ltn'."
         return 1
     fi
 
@@ -2167,11 +2188,11 @@ main() {
 
     tui_clear
     tui_stage "ETAPA 5/5 · ACESSO REMOTO"
+    # Configurar SSH PRIMEIRO: se Tailscale/download de mods falhar, o
+    # operador ainda pode entrar na maquina pela rede local.
+    install_ssh_if_enabled
     install_tailscale_if_enabled
     configure_tailscale_login_if_enabled
-    # SSH precisa estar disponivel antes da etapa mais demorada e sujeita a
-    # falha (download e inicializacao do Minecraft), nao depois dela.
-    install_ssh_if_enabled
     tui_stage "ETAPA 5/5 · INSTALAÇÃO DO JOGO"
     # Policy gate: ensure EULA acceptance for non-interactive Minecraft installs
     if [ "$SERVER_TYPE" = "minecraft" ] && is_true "${NON_INTERACTIVE:-false}"; then
