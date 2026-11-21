@@ -32,7 +32,6 @@ compute_minecraft_tuning() {
 
     case "$tier" in
         LOW)
-            reserve_mb=$((total_ram_mb * 25 / 100))
             MC_VIEW_DISTANCE=4
             MC_SIMULATION_DISTANCE=3
             MC_MAX_PLAYERS=6
@@ -40,7 +39,6 @@ compute_minecraft_tuning() {
             MC_ENTITY_BROADCAST_RANGE=60
             ;;
         MID)
-            reserve_mb=$((total_ram_mb * 20 / 100))
             MC_VIEW_DISTANCE=8
             MC_SIMULATION_DISTANCE=5
             MC_MAX_PLAYERS=16
@@ -48,7 +46,6 @@ compute_minecraft_tuning() {
             MC_ENTITY_BROADCAST_RANGE=80
             ;;
         HIGH)
-            reserve_mb=$((total_ram_mb * 15 / 100))
             MC_VIEW_DISTANCE=12
             MC_SIMULATION_DISTANCE=8
             MC_MAX_PLAYERS=40
@@ -56,7 +53,6 @@ compute_minecraft_tuning() {
             MC_ENTITY_BROADCAST_RANGE=100
             ;;
         *)
-            reserve_mb=$((total_ram_mb * 20 / 100))
             MC_VIEW_DISTANCE=8
             MC_SIMULATION_DISTANCE=5
             MC_MAX_PLAYERS=16
@@ -75,12 +71,15 @@ compute_minecraft_tuning() {
     # heap recebe uma parcela, deixando espaco de verdade para stacks de
     # threads, metaspace, NIO/direct buffers, JIT e bibliotecas nativas.
     # MemoryMax nao deve ser Xmx + uma folga arbitraria de 512 MB.
+    # Minimal Arch host: reserve only a small absolute allowance for the
+    # kernel, OpenSSH and Tailscale, regardless of the LOW/MID/HIGH game tier.
+    # Never allocate 100% of physical RAM to the service cgroup.
     if [ "$total_ram_mb" -le 1536 ]; then
-        reserve_mb=384
+        reserve_mb=256
     elif [ "$total_ram_mb" -le 2048 ]; then
-        reserve_mb=512
+        reserve_mb=384
     else
-        reserve_mb=$(clamp_value "$reserve_mb" 768 8192)
+        reserve_mb=$(clamp_value "$((total_ram_mb / 12))" 512 768)
     fi
     local service_budget_mb=$((total_ram_mb - reserve_mb))
     local native_overhead_mb=$((service_budget_mb / 4))
