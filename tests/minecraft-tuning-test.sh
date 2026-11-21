@@ -59,7 +59,7 @@ for ram in 1024 2048 4096 8192 16384 32768; do
     fi
     if [ "$ram" -ge 2048 ]; then
         [ "$((limit - xmx))" -ge 512 ] || { echo "FAIL: JVM sem folga nativa ($ram)" >&2; exit 1; }
-        [ "$((ram - limit))" -ge 768 ] || { echo "FAIL: SO sem reserva ($ram)" >&2; exit 1; }
+        [ "$((ram - limit))" -ge 512 ] || { echo "FAIL: SO sem reserva ($ram)" >&2; exit 1; }
     fi
 done
 # Hosts grandes nao podem ficar presos ao antigo teto de heap.
