@@ -115,13 +115,15 @@ journalctl -u minecraft.service --no-pager | grep -q CRIAS_VM_PROBE_STARTED
 # Teste do isolamento e dos limites reais da unit gerada.
 [ "$(systemctl show -p User --value minecraft.service)" = criasvm ]
 [ "$(systemctl show -p MemoryMax --value minecraft.service)" = 536870912 ]
-[ "$(systemctl show -p MemorySwapMax --value minecraft.service)" = 0 ]
+[ "$(systemctl show -p MemorySwapMax --value minecraft.service)" = 536870912 ]
+[ "$(systemctl show -p MemoryHigh --value minecraft.service)" = 509607936 ]
 [ "$(systemctl show -p NoNewPrivileges --value minecraft.service)" = yes ]
 [ "$(systemctl show -p OOMScoreAdjust --value minecraft.service)" = 200 ]
 [ "$(systemctl show -p Restart --value minecraft.service)" = no ]
 [ "$(systemctl show -p StartLimitBurst --value minecraft.service)" = 3 ]
 systemctl cat minecraft.service | grep -q "^StartLimitIntervalSec=300s$"
 systemctl cat minecraft.service | grep -q "^OOMPolicy=stop$"
+systemctl cat minecraft.service | grep -q '^MemoryHigh='
 server_pid="$(systemctl show -p MainPID --value minecraft.service)"
 [ "$server_pid" -gt 1 ]
 [ "$(ps -o user= -p "$server_pid" | xargs)" = criasvm ]
