@@ -1338,7 +1338,17 @@ install_ssh_if_enabled() {
         return 1
     fi
 
-    # 2. Cria usuario 'crias' com sudo (se nao existir).
+    # Usuario vindo de config.env/NON_INTERACTIVE tambem deve ser validado.
+    # Esta string vira nome de arquivo e identificador sudoers quando a conta
+    # precisa ser criada. Nao permitir escapes, diretivas ou nomes reservados.
+    if ! [[ "$ssh_user" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+        print_error "SSH_USER invalido: '$ssh_user'."
+        return 1
+    fi
+
+    # 2. Cria conta administrativa somente se estiver ausente.
+    # Contas existentes mantem sua politica sudo original (incl. NOPASSWD).
+    local ssh_user_created=false
     if ! id "$ssh_user" >/dev/null 2>&1; then
         print_step "Criando usuario '$ssh_user' com sudo..."
 
@@ -1383,25 +1393,39 @@ install_ssh_if_enabled() {
             print_warning "Configure uma chave publica em /home/$ssh_user/.ssh/authorized_keys."
         fi
 
-        # Adiciona ao grupo wheel (sudo no Arch).
+        # Grupo wheel permanece uma convencao do Arch; acesso sudo fica
+        # restrito a esta conta, sem redefinir a politica de todo o grupo.
         usermod -aG wheel "$ssh_user" 2>/dev/null || true
+        ssh_user_created=true
     else
         print_step "Usuario '$ssh_user' ja existe."
     fi
 
-    # 3. Garante que sudoers permite wheel (sem senha NAO — exige senha).
-    local sudoers_file="/etc/sudoers.d/crias-wheel"
-    if [ ! -f "$sudoers_file" ]; then
-        printf '%%wheel ALL=(ALL) ALL\n' > "$sudoers_file"
-        chmod 0440 "$sudoers_file"
-        if command -v visudo >/dev/null 2>&1; then
-            if ! visudo -cf "$sudoers_file" >/dev/null 2>&1; then
-                print_warning "sudoers invalido; removendo $sudoers_file"
-                rm -f "$sudoers_file"
-            else
-                print_step "sudoers para grupo wheel criado em $sudoers_file"
-            fi
+    # 3. Nunca sobrescrever sudo do grupo wheel global. O arquivo legado
+    # crias-wheel mudava o resultado de 'sudo -n' para TODOS os membros
+    # (inclusive contas cloud-init com NOPASSWD), quebrando coleta QEMU e
+    # podendo bloquear recuperacao remota. A regra nova e por USUARIO,
+    # e so e criada quando o instalador criou a conta.
+    if [ "$ssh_user_created" = true ]; then
+        local sudoers_file="/etc/sudoers.d/90-crias-${ssh_user}"
+        if [ -L "$sudoers_file" ] || [ -e "$sudoers_file" ]; then
+            print_error "Arquivo sudoers ja existe ou e symlink: $sudoers_file; preservando a politica do host."
+            return 1
         fi
+        (umask 077; printf '%s ALL=(ALL) ALL\\n' "$ssh_user" > "$sudoers_file") || return 1
+        chmod 0440 "$sudoers_file"
+        if ! command -v visudo >/dev/null 2>&1 || ! visudo -cf "$sudoers_file" >/dev/null 2>&1; then
+            print_error "Regra sudoers invalida; removendo $sudoers_file."
+            rm -f -- "$sudoers_file"
+            return 1
+        fi
+        print_step "Permissao sudo criada somente para $ssh_user (senha obrigatoria)."
+    else
+        print_step "Usuario '$ssh_user' existente: nenhuma regra sudo alterada."
+    fi
+
+    if [ -f /etc/sudoers.d/crias-wheel ]; then
+        print_warning "Regra sudoers legada /etc/sudoers.d/crias-wheel detectada. Nao sera alterada automaticamente; revise sua politica apos assegurar acesso remoto."
     fi
 
     # 4. (EXP-65) Configura sshd: drop-in com PermitRootLogin no. A politica
