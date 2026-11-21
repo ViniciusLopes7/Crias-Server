@@ -125,21 +125,22 @@ compute_minecraft_tuning() {
     MC_MIN_RAM="${xms_mb}M"
     MC_MAX_RAM="${xmx_mb}M"
 
-    # Discos desconhecidos/abstratos nao devem ser presumidos SSD.
-    # Priorize consistencia das gravacoes ate tipo de armazenamento confirmado.
-    case "$disk_type" in
-        HDD)
-            MC_SYNC_CHUNK_WRITES="true"
-            MC_BACKUP_ZSTD_LEVEL="-3"
-            ;;
-        SSD|NVME)
-            MC_SYNC_CHUNK_WRITES="false"
-            MC_BACKUP_ZSTD_LEVEL="-1"
-            ;;
+    # Integridade primeiro: sync-chunk-writes=true e o padrao do Minecraft
+    # para reduzir perdas/corrupcao de chunks apos travamentos ou falta de
+    # energia. Detectar SSD/NVMe nao torna essas falhas impossiveis.
+    # "false" so com consentimento EXPLICITO do administrador (tradeoff).
+    case "${MINECRAFT_SYNC_CHUNK_WRITES:-true}" in
+        true|false) MC_SYNC_CHUNK_WRITES="${MINECRAFT_SYNC_CHUNK_WRITES:-true}" ;;
         *)
-            MC_SYNC_CHUNK_WRITES="true"
-            MC_BACKUP_ZSTD_LEVEL="-1"
+            print_error "MINECRAFT_SYNC_CHUNK_WRITES invalido (use true ou false)."
+            return 1
             ;;
+    esac
+
+    case "$disk_type" in
+        HDD)      MC_BACKUP_ZSTD_LEVEL="-3" ;;
+        SSD|NVME) MC_BACKUP_ZSTD_LEVEL="-1" ;;
+        *)        MC_BACKUP_ZSTD_LEVEL="-1" ;;
     esac
 
     if [ "$tier" = "LOW" ]; then
