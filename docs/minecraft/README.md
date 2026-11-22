@@ -116,7 +116,7 @@ Para garantir backups consistentes com servidor online, o `backup-cron.sh` usa R
 
 ### Console interativo com mcrcon
 
-O Crias-Server usa o [mcrcon moderno](https://github.com/mcrcon/mcrcon) (versão fixa `v1.3.0`): console em **tela cheia**, histórico de comandos pelas setas, sugestões com Tab, rolagem PgUp/PgDn e `F1` para ajuda. O instalador do Minecraft tenta instalar o cliente automaticamente; indisponibilidade de rede não impede o jogo de ser instalado. O pacote é baixado por HTTPS e o SHA-256 é conferido antes da instalação.
+O Crias-Server usa o [mcrcon moderno](https://github.com/mcrcon/mcrcon) (versão fixa `v1.3.0`): console em **tela cheia**, histórico de comandos pelas setas, sugestões com Tab, rolagem PgUp/PgDn e `F1` para ajuda. O instalador do Minecraft **disponibiliza** o utilitário, mas só baixa e instala o cliente quando você executa `setup-console`. Assim, nenhuma dependência de rede extra atrasa a instalação do jogo. O pacote é baixado por HTTPS e o SHA-256 é conferido antes de ser instalado.
 
 **Ativar em uma instalação existente (sem reinstalar o mundo):**
 
