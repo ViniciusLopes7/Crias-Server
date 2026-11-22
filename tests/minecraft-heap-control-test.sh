@@ -34,8 +34,8 @@ fi
 if minecraft_heap_apply_policy custom-fixed '$(touch /tmp/exploit)' >/dev/null 2>&1; then
     fail "shell injection accepted"
 fi
-if minecraft_heap_apply_policy custom-fixed 384 >/dev/null 2>&1; then
-    fail "unexpected failure in minimum allowed heap"
+if ! minecraft_heap_apply_policy custom-fixed 384 >/dev/null 2>&1; then
+    fail "minimum allowed heap should be accepted"
 fi
 compute_minecraft_tuning 8192 8 SSD MID
 minecraft_heap_apply_policy custom-dynamic 3072 || fail "dynamic policy failed"
