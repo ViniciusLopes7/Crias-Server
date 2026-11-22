@@ -53,17 +53,17 @@ if command -v script >/dev/null 2>&1; then
 set -euo pipefail
 source "$1"
 gum() {
-    case "\${1:-}" in
+    case "${1:-}" in
         --version) echo "gum stub v1"; return 0 ;;
         choose)
             [ -t 0 ] && [ -t 2 ] && [ ! -t 1 ] || {
                 echo "FAIL: Gum nao foi chamado em PTY com stdout capturado" >&2
                 return 91
             }
-            [ "\${2:-}" = "--header=Teste PTY  ·  ↑/↓ mover  Enter selecionar  Esc voltar" ] || {
+            [ "${2:-}" = "--header=Teste PTY  ·  ↑/↓ mover  Enter selecionar  Esc voltar" ] || {
                 echo "FAIL: cabecalho do gum inesperado" >&2; return 92
             }
-            printf '%s\n' "\${@: -1}"
+            printf '%s\n' "${@: -1}"
             return 0 ;;
         *) return 93 ;;
     esac
