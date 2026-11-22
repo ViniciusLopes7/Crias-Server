@@ -107,11 +107,13 @@ sudo chown minecraft:minecraft /opt/minecraft-server/server-icon.png
 
 ## Hub central: arquivos e Simple Voice Chat
 
-O `crias-tui` é a interface principal para administrar o servidor via terminal ou SSH sobre Tailscale. O menu usa **setas ↑/↓ e Enter** quando o `gum` está instalado (o bootstrap instala esse componente); se não houver `gum` ou TTY, o menu numérico continua disponível. O redesenho visual completo e a paridade com todas as funções avançadas estão registrados no [roadmap do Hub](https://github.com/ViniciusLopes7/Crias-Server/issues/22).
+O `crias-tui` é a interface principal para administrar o servidor via terminal ou SSH sobre Tailscale. **A instalação real verifica e instala o `gum` no Arch do host**, inclusive se você executar diretamente `install.sh`, sem passar pelo bootstrap. O comando `crias-tui` também tenta reparar uma instalação ausente/quebrada de `gum` em sessões interativas. Assim os menus usam **↑/↓ e Enter** normalmente; sem TTY ou durante indisponibilidade de rede, a opção de menu numerado permanece como fallback. `--doctor` e `--help` nunca instalam pacotes. O redesenho visual completo e a paridade com todas as funções avançadas estão registrados no [roadmap do Hub](https://github.com/ViniciusLopes7/Crias-Server/issues/22).
 
 ### Gerenciar arquivos pelo Hub
 
-Abra `crias-tui > Arquivos > Abrir gerenciador de arquivos`. O **Midnight Commander** oferece duas colunas, navegação por setas, F3 para visualizar, F4 para editar e F10 para sair. Se estiver ausente, use `Arquivos > Instalar gerenciador de arquivos`, que instala `mc` pelo repositório oficial do Arch somente por escolha do administrador.
+Abra **`crias-tui > Arquivos > Pasta principal do servidor`** para entrar diretamente em `/opt/minecraft-server/` (ou no diretório configurado pelo instalador). O mesmo menu também oferece atalhos para **Mods, Configurações, Mundo atual, Backups e Logs locais**, que abrem a pasta correspondente diretamente. O mundo atual é identificado pelo `level-name` em `server.properties`, inclusive nomes com espaços. Se alguma pasta ainda não existir, o Hub informa isso e permite abrir a pasta principal para navegar manualmente.
+
+O **Midnight Commander** oferece duas colunas, navegação por setas, F3 para visualizar, F4 para editar e F10 para sair. Se estiver ausente, use `Arquivos > Instalar gerenciador de arquivos`, que instala `mc` pelo repositório oficial do Arch somente por escolha do administrador.
 
 **Segurança:** o gerenciador é iniciado como o usuário do Minecraft, **não como root**. Assim ele pode editar arquivos do próprio mundo e configurações graváveis pelo jogo, mas não scripts administrativos root:root. Não é necessário instalar ambiente gráfico no Arch. Para Terraria a mesma opção usa o usuário do Terraria.
 
