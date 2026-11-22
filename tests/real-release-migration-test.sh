@@ -123,6 +123,11 @@ export CRIAS_RELEASE_TAG="$NEW_TAG"
 (
     source "$tmp/$NEW_TAG/unpacked/crias-bootstrap.sh"
     mkdir -p "$tmp/first-entry"
+    # Published updater v2026.11.22 resolves the old bootstrap from
+    # /opt/crias-server. CI cannot use real /opt; stage an IDENTICAL copy of
+    # the official old bootstrap beside it (same code, isolated path).
+    cp "$location/opt/crias-server/crias-bootstrap.sh" "$tmp/first-entry/crias-bootstrap.sh"
+    cmp "$tmp/$OLD_TAG/unpacked/crias-bootstrap.sh" "$tmp/first-entry/crias-bootstrap.sh"
     crias_bootstrap_tools_only "$tmp/$NEW_TAG/crias-server-slim.zip" "$tmp/first-entry"
 ) > "$tmp/migrate-$NEW_TAG.log" 2>&1 || {
     cat "$tmp/migrate-$NEW_TAG.log" >&2; exit 1
