@@ -171,21 +171,25 @@ cmd_logs() {
     esac
 }
 
-# RCON is a command/reply console, not a journal log viewer.
+# RCON is command/reply, not a journal log viewer. Fullscreen RCON keeps
+# one TCP connection open; SSH redraw or an idle/loaded server may show
+# "connection lost". Default to one short-lived connection PER COMMAND.
+# Never auto-retry writes (could execute commands twice).
 cmd_console() {
-    if [ "$#" -ne 0 ]; then
-        err "Uso: console (sem argumentos)"
+    local mode="${1:-}"
+    if [ "$#" -gt 1 ] || { [ -n "$mode" ] && [ "$mode" != "--tui" ]; }; then
+        err "Uso: console [--tui]"
         return 2
     fi
     if [ ! -t 0 ] || [ ! -t 1 ]; then
-        err "Console RCON exige um terminal interativo (TTY). Use SSH ou crias-tui."
+        err "Console RCON exige um terminal interativo (TTY). Use SSH -t ou crias-tui."
         return 1
     fi
     if ! command -v mcrcon >/dev/null 2>&1 || ! mcrcon --help 2>&1 | grep -q -- '--no-tui'; then
         err "Cliente mcrcon moderno indisponivel. Execute: sudo /usr/local/libexec/crias/mc-manager.sh setup-console"
         return 1
     fi
-    local pass port enabled
+    local pass port enabled line errors=0
     enabled="$(get_prop "enable-rcon" "false")"
     pass="$(get_prop "rcon.password" "")"
     port="$(get_prop "rcon.port" "25575")"
@@ -201,9 +205,48 @@ cmd_console() {
         err "Minecraft nao esta ativo. Inicie o jogo para usar o RCON."
         return 1
     fi
-    echo "[Minecraft] Console RCON: historico pelas setas, Tab=completar, PgUp/PgDn=rolagem, F1=ajuda, Ctrl+C=sair."
-    # The password is in the environment, NEVER in ps argv or shell history.
-    MCRCON_PASSWORD="$pass" MCRCON_PASS="$pass" exec mcrcon -H 127.0.0.1 -P "$port" -t
+    if [ "$mode" = "--tui" ]; then
+        echo "[Minecraft] Console avancado em tela cheia: F1 ajuda, Ctrl+C sai."
+        # Never exec: preserve Hub control on RCON disconnect.
+        if ! MCRCON_PASSWORD="$pass" MCRCON_PASS="$pass" mcrcon -H 127.0.0.1 -P "$port" -t; then
+            err "Conexao em tela cheia encerrada. Use 'console' no SSH para o modo estavel."
+            return 1
+        fi
+        return 0
+    fi
+
+    printf '[Minecraft] Console SSH: um comando por conexao RCON. Falhas nao encerram o Hub.\n'
+    printf '[Minecraft] Digite sem / inicial (ex.: chunky progress). Sair: sair, exit, Ctrl+D.\n'
+    while true; do
+        line=""
+        if ! IFS= read -r -e -p "minecraft> " line; then
+            printf '\n'
+            break
+        fi
+        case "$line" in
+            sair|exit|quit|q) break ;;
+        esac
+        line="${line#/}"
+        [ -n "${line//[[:space:]]/}" ] || continue
+        # The upstream TCP timeout plus a process guard; never retry commands
+        # automatically, because actions such as stop/backup may not be idempotent.
+        if MCRCON_PASSWORD="$pass" MCRCON_PASS="$pass" \
+            timeout --foreground --kill-after=3s 20s \
+                mcrcon -H 127.0.0.1 -P "$port" --timeout 12 --color never "$line"; then
+            errors=0
+        else
+            errors=$((errors + 1))
+            warn "Comando RCON falhou ou expirou. O Hub continua aberto; confira status e logs."
+            if ! systemctl is-active --quiet "$SERVICE_NAME"; then
+                err "Minecraft parou; console encerrado sem alterar o servico."
+                break
+            fi
+            if [ "$errors" -ge 3 ]; then
+                err "Tres erros seguidos; encerrando apenas o console. Confira os logs."
+                break
+            fi
+        fi
+    done
 }
 
 # Configure only on explicit request. Do not restart a live Minecraft service.
