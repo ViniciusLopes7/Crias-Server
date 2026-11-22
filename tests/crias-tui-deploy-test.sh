@@ -20,8 +20,8 @@ done
 
 # Main-menu priority should remain consistent with the tasks operators use.
 mapfile -t menu_order < <(
-    sed -n '/choice=$(hub_choose "Menu principal — Minecraft"/,+9p' "$root/crias-tui.sh" |
-        grep -E '^[[:space:]]+"[^"]+"' | sed -E 's/^[[:space:]]+"([^"]+)".*/\1/'
+    grep -F -A9 'choice=$(hub_choose "Menu principal — Minecraft"' "$root/crias-tui.sh" |
+        tail -n 9 | sed -E 's/^[[:space:]]+"([^"]+)".*/\1/'
 )
 expected_order=("🎮 Servidor" "💾 Backup" "📁 Arquivos" "🎙️ Voice Chat" \
     "📊 Monitoramento" "🔄 Atualizações" "⚙️  Sistema" "🩺 Diagnóstico" "🚪 Sair")
