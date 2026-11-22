@@ -40,6 +40,7 @@ bash tests/custom-mrpack-test.sh
 bash tests/minecraft-tuning-test.sh
 bash tests/minecraft-memory-contract-test.sh
 bash tests/minecraft-logs-test.sh
+bash tests/minecraft-console-contract-test.sh
 bash tests/crias-tui-deploy-test.sh
 
 # Contraprova funcional do deploy: comando real em /usr/local/bin, permissao
