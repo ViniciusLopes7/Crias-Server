@@ -11,6 +11,14 @@ Abertura de portas e permissões devem ser revistas no host de destino. Para ser
 - **crias-agent**: `127.0.0.1:8473` apenas (não expor direto — usar Tailscale Funnel)
 - **SSH** (v1.2.0): porta `22` (default OpenSSH) — libere apenas se `INSTALL_SSH=true`
 
+### Console administrativo do Minecraft (RCON)
+
+O RCON (`rcon.port`, padrão TCP 25575) executa comandos com privilégios de administrador do jogo e **não criptografa o protocolo**. Não encaminhe essa porta no roteador nem a libere na WAN, na LAN ou para todos os peers do Tailscale. O mcrcon do Crias-Server se conecta ao endereço de loopback `127.0.0.1`, inclusive quando o administrador acessa o terminal via **SSH sobre Tailscale**. Dessa forma, apenas a porta do jogo e a de SSH precisam ser acessíveis na tailnet.
+
+**Atenção:** não confunda *cliente conectado a 127.0.0.1* com *servidor RCON escutando só em 127.0.0.1*. Conforme a versão/configuração do Minecraft, o servidor RCON pode escutar em todas as interfaces. Confira com `sudo ss -ltnp | grep ':25575'` e restrinja o acesso **no firewall**. As regras de exemplo abaixo não abrem essa porta. Não altere `server-ip=127.0.0.1` como atalho: isso também pode impedir os jogadores de entrarem pela rede.
+
+A senha de RCON é gravada em `server.properties` com permissão `0600` por `mc-manager.sh setup-console` e não é passada como argumento de linha de comando. Habilitar RCON requer ação administrativa explícita; o comando não reinicia um servidor funcional.
+
 ### Exemplo: restringir acesso à interface Tailscale (nftables)
 
 > **AVISO (CR-27)**: aplicar `policy drop` sem as regras de estado/ICMP abaixo
