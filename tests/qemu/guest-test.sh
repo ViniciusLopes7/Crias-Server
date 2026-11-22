@@ -44,6 +44,9 @@ bash tests/minecraft-console-contract-test.sh
 bash tests/minecraft-voicechat-test.sh
 bash tests/crias-tui-deploy-test.sh
 bash tests/hub-gum-test.sh
+bash tests/hub-ssh-console-status-test.sh
+bash tests/chunky-progress-watch-test.sh
+bash tests/minecraft-heap-control-test.sh
 bash tests/hub-files-test.sh
 bash tests/crias-update-test.sh
 

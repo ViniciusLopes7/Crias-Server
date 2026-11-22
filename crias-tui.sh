@@ -273,8 +273,10 @@ main() {
                 local srv_choice
                 if [ "$stack" = "minecraft" ]; then
                     srv_choice=$(hub_choose "Servidor — Minecraft" \
-                        "Status do servidor" "Console interativo" "Logs do servidor" \
+                        "Status do servidor" "Console SSH (estavel)" "Progresso Chunky (ao vivo)" \
+                        "Logs do servidor" "Memoria Java (Xms/Xmx)" \
                         "Iniciar servidor" "Reiniciar servidor" "Parar servidor" \
+                        "Console em tela cheia (avancado)" "Ajuda: Chunky" \
                         "Configurar console RCON" "← Voltar") || continue
                 else
                     srv_choice=$(hub_choose "Servidor — Terraria" \
@@ -285,8 +287,107 @@ main() {
                     "Iniciar servidor") sudo "$manager_script" start ;;
                     "Parar servidor") sudo "$manager_script" stop ;;
                     "Reiniciar servidor") sudo "$manager_script" restart ;;
-                    "Status do servidor") sudo "$manager_script" status; read -r -p "Enter para voltar..." _ || true ;;
-                    "Console interativo") sudo "$manager_script" console ;;
+                    "Status do servidor") sudo "$manager_script" status || true; read -r -p "Enter para voltar..." _ || true ;;
+                    "Console SSH (estavel)"|"Console interativo")
+                        if ! sudo "$manager_script" console; then
+                            echo "[Hub] Console encerrado com erro. Verifique Servidor → Logs ou Diagnostico."
+                            read -r -p "Enter para voltar..." _ || true
+                        fi
+                        ;;
+                    "Console em tela cheia (avancado)")
+                        if ! sudo "$manager_script" console --tui; then
+                            echo "[Hub] Sessao RCON encerrada. Use Console SSH para evitar conexoes persistentes."
+                            read -r -p "Enter para voltar..." _ || true
+                        fi
+                        ;;
+                    "Progresso Chunky (ao vivo)")
+                        local chunk_interval
+                        chunk_interval=$(hub_choose "Atualizar progresso do Chunky a cada:" \
+                            "10 segundos (recomendado)" "5 segundos" "30 segundos" "60 segundos" "← Voltar") || continue
+                        case "$chunk_interval" in
+                            "5 segundos") chunk_interval=5 ;;
+                            "10 segundos"*) chunk_interval=10 ;;
+                            "30 segundos") chunk_interval=30 ;;
+                            "60 segundos") chunk_interval=60 ;;
+                            *) continue ;;
+                        esac
+                        sudo "$manager_script" chunky watch "$chunk_interval" || true
+                        ;;
+                    "Memoria Java (Xms/Xmx)")
+                        local ram_choice ram_amount ram_growth ram_mode
+                        ram_choice=$(hub_choose "Heap Java (Minecraft deve estar parado para alterar):" \
+                            "Ver configuracao atual" \
+                            "Xms igual a Xmx (limite seguro automatico)" \
+                            "Definir Xmx manualmente" \
+                            "Voltar para tuning automatico" \
+                            "← Voltar") || continue
+                        case "$ram_choice" in
+                            "Ver configuracao atual")
+                                sudo "$manager_script" memory status || true
+                                read -r -p "Enter para voltar..." _ || true
+                                ;;
+                            "Xms igual a Xmx"*)
+                                echo "Requer Minecraft parado. Xms sera igual ao Xmx seguro calculado pelo host."
+                                ram_mode=$(hub_choose "Confirmar heap fixo? Sem reiniciar o servidor." \
+                                    "Confirmar heap fixo" "Cancelar") || continue
+                                if [ "$ram_mode" = "Confirmar heap fixo" ]; then
+                                    sudo "$manager_script" memory fixed || true
+                                    read -r -p "Enter para voltar..." _ || true
+                                fi
+                                ;;
+                            "Definir Xmx manualmente")
+                                echo "Valor em MiB; teto calculado pelo hardware. Minecraft deve estar parado."
+                                if hub_gum_interactive; then
+                                    ram_amount=$(gum input --header="Heap maximo em MiB (ex.: 4096):" --placeholder="4096") || continue
+                                else
+                                    read -r -p "Heap maximo (MiB): " ram_amount || continue
+                                fi
+                                [[ "$ram_amount" =~ ^[1-9][0-9]{2,5}$ ]] || { echo "[ERRO] Informe um inteiro em MiB."; read -r -p "Enter..." _ || true; continue; }
+                                ram_growth=$(hub_choose "Modo do heap:" \
+                                    "Fixo: Xms = Xmx (consome mais RAM)" \
+                                    "Adaptativo: Xms menor que Xmx" "← Voltar") || continue
+                                case "$ram_growth" in
+                                    "Fixo:"*) ram_mode=fixed ;;
+                                    "Adaptativo:"*) ram_mode=dynamic ;;
+                                    *) continue ;;
+                                esac
+                                sudo "$manager_script" memory set "$ram_amount" "$ram_mode" || true
+                                read -r -p "Enter para voltar..." _ || true
+                                ;;
+                            "Voltar para tuning automatico")
+                                ram_mode=$(hub_choose "Restaurar a politica automatica Xms/Xmx?" \
+                                    "Restaurar automatico" "Cancelar") || continue
+                                if [ "$ram_mode" = "Restaurar automatico" ]; then
+                                    sudo "$manager_script" memory auto || true
+                                    read -r -p "Enter para voltar..." _ || true
+                                fi
+                                ;;
+                        esac
+                        ;;
+                    "Ajuda: Chunky")
+                        cat <<'CHUNKY_HELP'
+=== Chunky: pre-geracao segura ===
+1. Faça um backup do mundo antes de iniciar.
+2. Abra Console SSH (estavel) e digite um comando por vez:
+   chunky world minecraft:overworld
+   chunky shape square
+   chunky center 0 0
+   chunky radius 1500
+   chunky selection
+   chunky start
+3. Atualizacoes automaticas no log: chunky quiet 10
+   Ou abra Servidor -> Progresso Chunky (ao vivo).
+   Consultar manualmente: chunky progress
+   Pausar:      chunky pause
+   Retomar:     chunky continue
+4. Digite sair para deixar o console. O Chunky continua no
+   servidor enquanto o Minecraft estiver rodando.
+Obs.: o identificador da dimensao varia conforme a versao.
+      Se world falhar, consulte chunky world e suas sugestoes.
+      Comece pequeno; acompanhe o uso de RAM e disco.
+CHUNKY_HELP
+                        read -r -p "Enter para voltar..." _ || true
+                        ;;
                     "Configurar console RCON")
                         sudo "$manager_script" setup-console || true
                         read -r -p "Enter para voltar..." _ || true
@@ -493,7 +594,7 @@ main() {
     done
 
     echo ""
-    echo "${GREEN}Crias-Server Hub encerrado.${NC}"
+    printf '%b\n' "${GREEN}Crias-Server Hub encerrado.${NC}"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
