@@ -141,4 +141,15 @@ echo 'legacy' > "$tmp/ordinary/install.sh"
     fi
 )
 test -f "$tmp/ordinary/install.sh"
-echo 'OK: updater offline, tag, checksum, config private, atomic publish, idempotence, rollback, no game changes'
+
+# Package upgrades must refuse non-interactive execution, before pacman runs.
+pacman() { echo "PACMAN-RAN" > "$tmp/unexpected-pacman"; return 1; }
+if update_arch_apply </dev/null > "$tmp/arch-guard.log" 2>&1; then
+    echo "FAIL: Arch update aceitou sessao sem TTY" >&2
+    exit 1
+fi
+test ! -e "$tmp/unexpected-pacman" || {
+    echo "FAIL: atualizacao Arch disparou pacman sem TTY" >&2
+    exit 1
+}
+echo 'OK: updater offline, tag, checksum, config private, atomic publish, idempotence, rollback, no game changes, Arch TTY guard'
