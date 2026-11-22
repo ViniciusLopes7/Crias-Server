@@ -328,6 +328,8 @@ update_arch_apply() {
         return 1
     fi
     echo "Atualizar pacotes do Arch pode exigir reboot. Nao altera mods/mundos."
+    echo "Leia avisos de manutencao antes da atualizacao: https://archlinux.org/news/"
+    echo "O pacman mostrara as alteracoes e pedira confirmacao; revise a lista."
     printf "Digite ATUALIZAR ARCH para autorizar pacman -Syu: "
     local answer
     IFS= read -r answer || return 1
@@ -335,7 +337,7 @@ update_arch_apply() {
         warn "Cancelado; pacman nao foi executado."
         return 1
     fi
-    pacman -Syu --noconfirm
+    pacman -Syu
     ok "Pacotes atualizados. Reboot fica a cargo do administrador."
 }
 
