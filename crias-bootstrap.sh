@@ -273,10 +273,38 @@ _crias_restore_legacy() {
     return 1
 }
 
+# Atualizacao inicial de instalacoes existentes: busca o updater APENAS da
+# release cujo SHA ja foi validado. O script extraido ativa o fluxo isolado
+# de scripts administrativos; NAO chama o instalador Minecraft/Terraria.
+crias_bootstrap_tools_only() {
+    local zip_file="$1" tmpdir="$2"
+    local updater="$tmpdir/crias-update.sh"
+    if ! unzip -p "$zip_file" crias-update.sh > "$updater"; then
+        err "Release sem atualizador. Nada foi instalado."
+        return 1
+    fi
+    if [ ! -s "$updater" ] || ! bash -n "$updater"; then
+        err "Atualizador ausente ou com sintaxe invalida na release verificada."
+        return 1
+    fi
+    chmod 0700 "$updater" || return 1
+    log "Executando atualizacao isolada das ferramentas do Hub..."
+    bash "$updater" apply
+}
+
 # Lógica principal. Sourceable p/ testes (testa funções acima isoladamente).
 crias_bootstrap_main() {
+    local tools_only=false
+    if [ "${1:-}" = "--update-tools" ]; then
+        tools_only=true
+        shift
+    fi
     local target
     target="$(crias_detect_target "${1:-}")"
+    if [ "$tools_only" = true ] && [ "$target" != "/" ]; then
+        err "--update-tools exige host instalado (nao executar em /mnt/live ISO)."
+        return 1
+    fi
     local install_dir="${target%/}/opt/crias-server"
     log "Target: $target"
     log "Install dir: $install_dir"
@@ -373,6 +401,11 @@ crias_bootstrap_main() {
 
     if ! crias_verify_sha256 "$zip_file" "$sha_file" "$CRIAS_ASSET_ZIP"; then
         return 1
+    fi
+
+    if [ "$tools_only" = true ]; then
+        crias_bootstrap_tools_only "$zip_file" "$tmpdir"
+        return $?
     fi
 
     log "Extraindo para $install_dir..."
