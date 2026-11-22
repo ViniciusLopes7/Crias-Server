@@ -202,6 +202,9 @@ update_prepare_journal() {
     done < "$UPDATE_TXN/targets"
     printf 'ready\n' > "$UPDATE_TXN/.prepared.tmp" || return 1
     mv -f -T "$UPDATE_TXN/.prepared.tmp" "$UPDATE_TXN/prepared" || return 1
+    # Flush snapshots + prepared marker before publishing anything, so a
+    # real power failure cannot lose the recovery state while files change.
+    sync -f "$UPDATE_TXN" || return 1
 }
 
 # Idempotente; dispara antes de consultar rede em cada apply/recover.
@@ -249,6 +252,10 @@ update_recover_pending() {
     path="${CRIAS_UPDATE_INSTALL_DIR}.releases/.crias-restore.$$"
     ln -s -- "$previous" "$path" || return 1
     mv -f -T -- "$path" "$CRIAS_UPDATE_INSTALL_DIR" || return 1
+    # Recovery remains resumable until restored files/link are durable.
+    sync -f "$CRIAS_UPDATE_BIN_DIR" || return 1
+    sync -f "$CRIAS_UPDATE_LIBEXEC_DIR" || return 1
+    sync -f "$CRIAS_UPDATE_INSTALL_DIR" || return 1
     rm -rf -- "$txn" || return 1
     ok "Ferramentas e versao anterior recuperadas; dados do jogo intactos."
 }
@@ -288,6 +295,7 @@ update_prepare_release() {
     chmod 0644 "$newref/.crias-release-tag" || return 1
     chmod 0755 "$newref/install.sh" || return 1
     find "$newref" -type f -name '*.sh' -exec chmod 0755 {} + || return 1
+    sync -f "$newref" || return 1
 }
 
 update_publish_release() {
@@ -363,8 +371,13 @@ update_apply_steps() {
     update_prepare_journal "$UPDATE_PREVIOUS_REF" "$UPDATE_NEW_REF" || return 1
     update_publish_release || return 1
     update_deploy_admin || return 1
+    # Durably publish all administrative tools BEFORE recording completion.
+    sync -f "$CRIAS_UPDATE_BIN_DIR" || return 1
+    sync -f "$CRIAS_UPDATE_LIBEXEC_DIR" || return 1
+    sync -f "$CRIAS_UPDATE_INSTALL_DIR" || return 1
     printf 'committed\n' > "$UPDATE_TXN/.commit.tmp" || return 1
     mv -f -T "$UPDATE_TXN/.commit.tmp" "$UPDATE_TXN/committed" || return 1
+    sync -f "$UPDATE_TXN" || return 1
     UPDATE_COMMITTED=1
     rm -rf -- "$UPDATE_TXN" || warn "Transacao concluida; limpeza pendente"
     update_prune_releases
