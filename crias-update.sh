@@ -148,173 +148,262 @@ update_preflight() {
     done < <(find "$dir/shared/lib" -maxdepth 1 -type f -name '*.sh' -print0)
 }
 
-# Rollback de cada arquivo administrativo, inclusive os que nao existiam.
-UPDATE_DESTS=()
-UPDATE_SNAPSHOTS=()
-UPDATE_OLD_REF=""
-UPDATE_PUBLISHED=0
-UPDATE_COMMITTED=0
+# Journal persistente para recuperar o Hub mesmo apos SIGKILL/reboot.
 UPDATE_TEMP=""
+UPDATE_SOURCE_DIR=""
+UPDATE_NEW_REF=""
+UPDATE_PREVIOUS_REF=""
+UPDATE_TXN=""
+UPDATE_COMMITTED=0
+
+update_admin_targets() {
+    local ref="$1" src
+    printf '%s\t%s\t%s\n' "$ref/crias-tui.sh" "$CRIAS_UPDATE_BIN_DIR/crias-tui" 0755
+    printf '%s\t%s\t%s\n' "$ref/crias-update.sh" "$CRIAS_UPDATE_BIN_DIR/crias-update" 0755
+    for src in "$ref/shared/lib/"*.sh; do
+        [ -f "$src" ] || continue
+        printf '%s\t%s\t%s\n' "$src" "$CRIAS_UPDATE_LIBEXEC_DIR/lib/$(basename "$src")" 0644
+    done
+    for src in minecraft/mc-manager.sh minecraft/install-mcrcon.sh minecraft/voicechat-tools.sh terraria/tt-manager.sh; do
+        printf '%s\t%s\t%s\n' "$ref/$src" "$CRIAS_UPDATE_LIBEXEC_DIR/$(basename "$src")" 0755
+    done
+    local cron=minecraft/setup-cron.sh
+    if [ -e /etc/systemd/system/terraria.service ] && [ ! -e /etc/systemd/system/minecraft.service ]; then
+        cron=terraria/setup-cron.sh
+    fi
+    printf '%s\t%s\t%s\n' "$ref/$cron" "$CRIAS_UPDATE_LIBEXEC_DIR/setup-cron.sh" 0755
+}
+
+# Todos os snapshots sao persistidos ANTES da primeira alteracao. Journal
+# incompleto (sem prepared) significa que nenhuma ferramenta foi trocada.
+update_prepare_journal() {
+    local previous="$1" next="$2" src dest mode exists i=0
+    UPDATE_TXN="${CRIAS_UPDATE_INSTALL_DIR}.releases/.update-transaction"
+    if [ -e "$UPDATE_TXN" ] || [ -L "$UPDATE_TXN" ]; then
+        update_fail "Transacao anterior nao recuperada: $UPDATE_TXN"; return 1
+    fi
+    mkdir -m 0700 -- "$UPDATE_TXN" || return 1
+    printf '%s\n' "$previous" > "$UPDATE_TXN/previous" || return 1
+    printf '%s\n' "$next" > "$UPDATE_TXN/next" || return 1
+    update_admin_targets "$next" > "$UPDATE_TXN/targets" || return 1
+    : > "$UPDATE_TXN/manifest" || return 1
+    while IFS=$'\t' read -r src dest mode; do
+        [ -s "$src" ] || { update_fail "Ferramenta ausente: $src"; return 1; }
+        if [ -L "$dest" ] || { [ -e "$dest" ] && [ ! -f "$dest" ]; }; then
+            update_fail "Destino administrativo inesperado: $dest"; return 1
+        fi
+        exists=0
+        if [ -f "$dest" ]; then
+            cp -a -- "$dest" "$UPDATE_TXN/backup.$i" || return 1
+            exists=1
+        fi
+        printf '%s\t%s\t%s\n' "$i" "$exists" "$dest" >> "$UPDATE_TXN/manifest" || return 1
+        i=$((i+1))
+    done < "$UPDATE_TXN/targets"
+    printf 'ready\n' > "$UPDATE_TXN/.prepared.tmp" || return 1
+    mv -f -T "$UPDATE_TXN/.prepared.tmp" "$UPDATE_TXN/prepared" || return 1
+}
+
+# Idempotente; dispara antes de consultar rede em cada apply/recover.
+update_recover_pending() {
+    local txn="${CRIAS_UPDATE_INSTALL_DIR}.releases/.update-transaction"
+    local previous next index exists dest stage path
+    if [ ! -e "$txn" ] && [ ! -L "$txn" ]; then return 0; fi
+    if [ -L "$txn" ] || [ ! -d "$txn" ]; then
+        update_fail "Journal invalido (symlink ou nao-diretorio)"; return 1
+    fi
+    if [ -f "$txn/committed" ] || [ ! -f "$txn/prepared" ]; then
+        rm -rf -- "$txn" || return 1
+        return 0
+    fi
+    previous="$(cat "$txn/previous" 2>/dev/null)" || return 1
+    next="$(cat "$txn/next" 2>/dev/null)" || return 1
+    case "$previous" in
+        "${CRIAS_UPDATE_INSTALL_DIR}.releases"/release.*|"${CRIAS_UPDATE_INSTALL_DIR}.releases"/legacy.*) ;;
+        *) update_fail "Referencia de rollback fora de releases: $previous"; return 1 ;;
+    esac
+    case "$next" in
+        "${CRIAS_UPDATE_INSTALL_DIR}.releases"/release.*) ;;
+        *) update_fail "Proxima release fora do diretorio gerenciado"; return 1 ;;
+    esac
+    [ -d "$previous" ] || { update_fail "Release anterior ausente; recuperacao manual necessaria"; return 1; }
+    [ -f "$txn/manifest" ] || { update_fail "Manifesto de recuperacao ausente"; return 1; }
+    warn "Atualizacao incompleta detectada; restaurando Hub e link anterior."
+    while IFS=$'\t' read -r index exists dest; do
+        [ -n "$index" ] || continue
+        case "$dest" in
+            "$CRIAS_UPDATE_LIBEXEC_DIR"/*|"$CRIAS_UPDATE_BIN_DIR"/crias-tui|"$CRIAS_UPDATE_BIN_DIR"/crias-update) ;;
+            *) update_fail "Destino inesperado no manifesto"; return 1 ;;
+        esac
+        if [ "$exists" = 1 ]; then
+            [ -f "$txn/backup.$index" ] || { update_fail "Snapshot ausente: $index"; return 1; }
+            stage="$dest.crias-restore.$$"
+            cp -a -- "$txn/backup.$index" "$stage" || return 1
+            mv -f -T -- "$stage" "$dest" || return 1
+        elif [ "$exists" = 0 ]; then
+            rm -f -- "$dest" || return 1
+        else
+            update_fail "Snapshot desconhecido: $exists"; return 1
+        fi
+    done < "$txn/manifest"
+    path="${CRIAS_UPDATE_INSTALL_DIR}.releases/.crias-restore.$$"
+    ln -s -- "$previous" "$path" || return 1
+    mv -f -T -- "$path" "$CRIAS_UPDATE_INSTALL_DIR" || return 1
+    rm -rf -- "$txn" || return 1
+    ok "Ferramentas e versao anterior recuperadas; dados do jogo intactos."
+}
 
 update_track_install() {
     local src="$1" dest="$2" mode="$3"
-    local n backup
-    n="${#UPDATE_DESTS[@]}"
-    backup="$UPDATE_TEMP/backup-$n"
+    local tmp="$dest.crias-update.$$"
     mkdir -p "$(dirname "$dest")" || return 1
-    if [ -e "$dest" ] || [ -L "$dest" ]; then
-        cp -a -- "$dest" "$backup" || return 1
-        UPDATE_SNAPSHOTS+=("$backup")
-    else
-        UPDATE_SNAPSHOTS+=("")
+    rm -f -- "$tmp" || return 1
+    if ! install -o root -g root -m "$mode" -- "$src" "$tmp"; then
+        rm -f -- "$tmp"; return 1
     fi
-    UPDATE_DESTS+=("$dest")
-    # Same-directory staging + atomic rename. A failed copy leaves old intact.
-    local stage_dest="$dest.crias-update.$$"
-    rm -f -- "$stage_dest"
-    if ! install -o root -g root -m "$mode" -- "$src" "$stage_dest"; then
-        rm -f -- "$stage_dest"
-        return 1
-    fi
-    if ! mv -f -T -- "$stage_dest" "$dest"; then
-        rm -f -- "$stage_dest"
-        return 1
-    fi
-}
-
-update_recover() {
-    local i dest backup link
-    if [ "$UPDATE_COMMITTED" -eq 0 ] && [ "${#UPDATE_DESTS[@]}" -gt 0 ]; then
-        for ((i=${#UPDATE_DESTS[@]}-1; i>=0; i--)); do
-            dest="${UPDATE_DESTS[$i]}"
-            backup="${UPDATE_SNAPSHOTS[$i]}"
-            if [ -n "$backup" ] && [ -e "$backup" ]; then
-                cp -a -- "$backup" "$dest" || true
-            else
-                rm -f -- "$dest" || true
-            fi
-        done
-    fi
-    if [ "$UPDATE_COMMITTED" -eq 0 ] && [ "$UPDATE_PUBLISHED" -eq 1 ] && [ -n "$UPDATE_OLD_REF" ]; then
-        link="$CRIAS_UPDATE_INSTALL_DIR.releases/.crias-restore.$$"
-        if ln -s -- "$UPDATE_OLD_REF" "$link"; then
-            mv -f -T -- "$link" "$CRIAS_UPDATE_INSTALL_DIR" || true
-        fi
-    fi
-    if [ -n "$UPDATE_TEMP" ] && [ -d "$UPDATE_TEMP" ]; then
-        rm -rf -- "$UPDATE_TEMP"
+    if ! mv -f -T -- "$tmp" "$dest"; then
+        rm -f -- "$tmp"; return 1
     fi
 }
 
 update_deploy_admin() {
-    local dest file src cron
-    update_track_install "$CRIAS_UPDATE_INSTALL_DIR/crias-tui.sh" "$CRIAS_UPDATE_BIN_DIR/crias-tui" 0755 || return 1
-    update_track_install "$CRIAS_UPDATE_INSTALL_DIR/crias-update.sh" "$CRIAS_UPDATE_BIN_DIR/crias-update" 0755 || return 1
-    for src in "$CRIAS_UPDATE_INSTALL_DIR/shared/lib/"*.sh; do
-        [ -f "$src" ] || continue
-        update_track_install "$src" "$CRIAS_UPDATE_LIBEXEC_DIR/lib/$(basename "$src")" 0644 || return 1
-    done
-    # Both managers are harmless when not installed; only the selected
-    # stack's setup-cron wrapper must share the common name.
-    for file in minecraft/mc-manager.sh minecraft/install-mcrcon.sh minecraft/voicechat-tools.sh terraria/tt-manager.sh; do
-        update_track_install "$CRIAS_UPDATE_INSTALL_DIR/$file" "$CRIAS_UPDATE_LIBEXEC_DIR/$(basename "$file")" 0755 || return 1
-    done
-    cron="minecraft/setup-cron.sh"
-    if [ -e /etc/systemd/system/terraria.service ] && [ ! -e /etc/systemd/system/minecraft.service ]; then
-        cron="terraria/setup-cron.sh"
-    fi
-    update_track_install "$CRIAS_UPDATE_INSTALL_DIR/$cron" "$CRIAS_UPDATE_LIBEXEC_DIR/setup-cron.sh" 0755 || return 1
+    local src dest mode
+    while IFS=$'\t' read -r src dest mode; do
+        update_track_install "$src" "$dest" "$mode" || return 1
+    done < "$UPDATE_TXN/targets"
 }
 
-update_apply() {
-    update_root_required || return 1
-    [ -L "$CRIAS_UPDATE_INSTALL_DIR" ] || {
-        update_fail "Atualizacao segura requer /opt/crias-server como link versionado do bootstrap. Nenhum arquivo foi alterado."
-        return 1
-    }
-    local releases_root="$CRIAS_UPDATE_INSTALL_DIR.releases"
-    local current
-    current="$(readlink -f "$CRIAS_UPDATE_INSTALL_DIR")" || return 1
-    case "$current" in
-        "$releases_root"/release.*|"$releases_root"/legacy.*) ;;
-        *) update_fail "Instalacao nao gerenciada em $releases_root; abortando."; return 1 ;;
-    esac
-    if [ ! -f "$current/install.sh" ]; then
-        update_fail "Instalacao atual invalida"
-        return 1
+update_prepare_release() {
+    local root="$1" src="$UPDATE_SOURCE_DIR" newref
+    newref="$(mktemp -d "$root/release.XXXXXXXX")" || return 1
+    UPDATE_NEW_REF="$newref"
+    cp -a -- "$src/." "$newref/" || return 1
+    if [ -L "$UPDATE_PREVIOUS_REF/config.env" ]; then
+        update_fail "config.env e symlink; alteracao manual obrigatoria"; return 1
     fi
-    if [ ! -d "$releases_root" ]; then update_fail "Repositorio de releases ausente"; return 1; fi
-    if ! command -v flock >/dev/null 2>&1; then update_fail "flock indisponivel"; return 1; fi
-    mkdir -p "$(dirname "$CRIAS_UPDATE_LOCK")"
+    if [ -f "$UPDATE_PREVIOUS_REF/config.env" ]; then
+        install -o root -g root -m 0600 "$UPDATE_PREVIOUS_REF/config.env" "$newref/config.env" || return 1
+    fi
+    printf '%s\n' "$CRIAS_RELEASE_TAG_NAME" > "$newref/.crias-release-tag" || return 1
+    chmod 0644 "$newref/.crias-release-tag" || return 1
+    chmod 0755 "$newref/install.sh" || return 1
+    find "$newref" -type f -name '*.sh' -exec chmod 0755 {} + || return 1
+}
+
+update_publish_release() {
+    local link="${CRIAS_UPDATE_INSTALL_DIR}.releases/.crias-publish.$$"
+    ln -s -- "$UPDATE_NEW_REF" "$link" || return 1
+    if ! mv -f -T -- "$link" "$CRIAS_UPDATE_INSTALL_DIR"; then
+        rm -f -- "$link"; return 1
+    fi
+}
+
+# Cleanup only AFTER all tools have been committed. Always preserve both
+# the currently installed version and its prior rollback target.
+update_prune_releases() {
+    local root="${CRIAS_UPDATE_INSTALL_DIR}.releases" old keep=0
+    while IFS= read -r old; do
+        [ -d "$old" ] || continue
+        if [ "$old" = "$UPDATE_NEW_REF" ] || [ "$old" = "$UPDATE_PREVIOUS_REF" ]; then continue; fi
+        keep=$((keep+1))
+        if [ "$keep" -gt 1 ]; then
+            rm -rf -- "$old" || warn "Nao foi possivel limpar versao historica: $old"
+        fi
+    done < <(ls -1dt "$root"/release.* "$root"/legacy.* 2>/dev/null || true)
+}
+
+update_abort() {
+    if ! update_recover_pending; then
+        err "Recuperacao incompleta. Execute: sudo crias-update recover"
+    fi
+    if [ -n "$UPDATE_TEMP" ] && [ -d "$UPDATE_TEMP" ]; then rm -rf -- "$UPDATE_TEMP" || true; fi
+    trap - EXIT INT TERM
+    return 1
+}
+
+update_exit_cleanup() {
+    local rc=$?
+    # SIGKILL/power loss leave a journal for next apply or recover call.
+    if [ "$UPDATE_COMMITTED" -eq 0 ]; then update_recover_pending || true; fi
+    if [ -n "$UPDATE_TEMP" ] && [ -d "$UPDATE_TEMP" ]; then rm -rf -- "$UPDATE_TEMP" || true; fi
+    return "$rc"
+}
+
+update_lock() {
+    command -v flock >/dev/null 2>&1 || { update_fail "flock indisponivel"; return 1; }
+    mkdir -p "$(dirname "$CRIAS_UPDATE_LOCK")" || return 1
     exec 9>"$CRIAS_UPDATE_LOCK"
-    if ! flock -n 9; then update_fail "Outra atualizacao esta em andamento"; return 1; fi
+    flock -n 9 || { update_fail "Outra atualizacao esta em andamento"; return 1; }
+}
 
-    update_fetch_release || return 1
-    if [ "$(update_local_tag)" = "$CRIAS_RELEASE_TAG_NAME" ]; then
-        ok "Versao $CRIAS_RELEASE_TAG_NAME ja instalada. Sem alteracoes."
-        return 0
-    fi
+update_validate_install() {
+    local root="${CRIAS_UPDATE_INSTALL_DIR}.releases"
+    [ -L "$CRIAS_UPDATE_INSTALL_DIR" ] || {
+        update_fail "Atualizacao segura exige link versionado em $CRIAS_UPDATE_INSTALL_DIR"; return 1
+    }
+    UPDATE_PREVIOUS_REF="$(readlink -f "$CRIAS_UPDATE_INSTALL_DIR")" || return 1
+    case "$UPDATE_PREVIOUS_REF" in
+        "$root"/release.*|"$root"/legacy.*) ;;
+        *) update_fail "Instalacao nao gerenciada em $root"; return 1 ;;
+    esac
+    [ -f "$UPDATE_PREVIOUS_REF/install.sh" ] || { update_fail "Release atual invalida"; return 1; }
+}
 
-    # Keep each attempt independent, including test runs in one shell.
-    UPDATE_DESTS=()
-    UPDATE_SNAPSHOTS=()
-    UPDATE_PUBLISHED=0
-    UPDATE_COMMITTED=0
-    UPDATE_OLD_REF=""
-    UPDATE_TEMP="$(mktemp -d /tmp/crias-update.XXXXXXXX)" || return 1
-    chmod 0700 "$UPDATE_TEMP" || { rm -rf -- "$UPDATE_TEMP"; return 1; }
-    UPDATE_OLD_REF="$current"
-    trap update_recover EXIT
-    trap 'exit 130' INT
-    trap 'exit 143' TERM
-
+update_apply_steps() {
+    local root="${CRIAS_UPDATE_INSTALL_DIR}.releases"
     log "Baixando a release $CRIAS_RELEASE_TAG_NAME, sem tocar no jogo..."
     update_download "$CRIAS_ZIP_URL" "$UPDATE_TEMP/release.zip" || return 1
     update_download "$CRIAS_SHA_URL" "$UPDATE_TEMP/sha256sums.txt" || return 1
     crias_verify_sha256 "$UPDATE_TEMP/release.zip" "$UPDATE_TEMP/sha256sums.txt" "$CRIAS_ASSET_ZIP" || return 1
     mkdir -p "$UPDATE_TEMP/check" || return 1
     update_preflight "$UPDATE_TEMP/release.zip" "$UPDATE_TEMP/check" || return 1
-
-    # Preserve user-specific installer defaults, never execute/shell-source it.
-    if [ -L "$current/config.env" ]; then
-        update_fail "config.env e symlink; alteracao manual obrigatoria"
-        return 1
-    fi
-    if [ -f "$current/config.env" ]; then
-        cp -- "$current/config.env" "$UPDATE_TEMP/old-config.env" || return 1
-        chmod 0600 "$UPDATE_TEMP/old-config.env" || return 1
-    fi
-
-    # Existing bootstrap provides transactional version directories. The
-    # game dir (/opt/minecraft-server) is never passed to this function.
-    crias_extract_to "$UPDATE_TEMP/release.zip" "$CRIAS_UPDATE_INSTALL_DIR" || return 1
-    UPDATE_PUBLISHED=1
-    local newref
-    newref="$(readlink -f "$CRIAS_UPDATE_INSTALL_DIR")"
-    case "$newref" in
-        "$releases_root"/release.*) ;;
-        *) update_fail "Novo destino de release invalido"; return 1 ;;
-    esac
-    if [ -f "$UPDATE_TEMP/old-config.env" ]; then
-        install -o root -g root -m 0600 "$UPDATE_TEMP/old-config.env" "$newref/config.env" || return 1
-    fi
-    printf '%s\n' "$CRIAS_RELEASE_TAG_NAME" > "$newref/.crias-release-tag" || return 1
-    chmod 0644 "$newref/.crias-release-tag" || return 1
-
-    # Admin scripts are root-owned, outside game dirs. Any failure restores
-    # old binaries/libs and the old release symlink; no game service restart.
-    if ! update_deploy_admin; then
-        update_fail "Nao foi possivel instalar todos os scripts do Hub; restaurando versao anterior."
-        return 1
-    fi
+    # Crucial: do NOT invoke crias_extract_to from the previously installed
+    # bootstrap. It may prune the previous active rollback version.
+    update_prepare_release "$root" || return 1
+    update_prepare_journal "$UPDATE_PREVIOUS_REF" "$UPDATE_NEW_REF" || return 1
+    update_publish_release || return 1
+    update_deploy_admin || return 1
+    printf 'committed\n' > "$UPDATE_TXN/.commit.tmp" || return 1
+    mv -f -T "$UPDATE_TXN/.commit.tmp" "$UPDATE_TXN/committed" || return 1
     UPDATE_COMMITTED=1
-    # Success: cleanup private downloads/snapshots now, not on next shell exit.
-    update_recover
+    rm -rf -- "$UPDATE_TXN" || warn "Transacao concluida; limpeza pendente"
+    update_prune_releases
+}
+
+update_apply() {
+    update_root_required || return 1
+    update_lock || return 1
+    update_recover_pending || return 1
+    update_validate_install || return 1
+    update_fetch_release || return 1
+    if [ "$(update_local_tag)" = "$CRIAS_RELEASE_TAG_NAME" ]; then
+        ok "Versao $CRIAS_RELEASE_TAG_NAME ja instalada. Sem alteracoes."
+        return 0
+    fi
+    UPDATE_COMMITTED=0
+    UPDATE_NEW_REF=""
+    UPDATE_TXN=""
+    UPDATE_TEMP="$(mktemp -d /tmp/crias-update.XXXXXXXX)" || return 1
+    chmod 0700 "$UPDATE_TEMP" || return 1
+    trap update_exit_cleanup EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    if ! update_apply_steps; then
+        update_abort
+        return 1
+    fi
+    rm -rf -- "$UPDATE_TEMP" || true
     UPDATE_TEMP=""
     trap - EXIT INT TERM
     ok "Crias-Server atualizado para $CRIAS_RELEASE_TAG_NAME."
-    echo "O servidor Minecraft/Terraria e seus mundos, mods, units e JVM permanecem intactos."
-    echo "Nao houve reinicio do jogo. Feche/reabra o Hub para carregar o menu atualizado."
+    echo "Mundos, modpacks e servicos de jogo nao foram modificados nem reiniciados."
+    echo "Reabra o Hub para carregar o menu atualizado."
+}
+
+update_recover() {
+    update_root_required || return 1
+    update_lock || return 1
+    update_recover_pending
 }
 
 update_arch_check() {
@@ -358,10 +447,11 @@ update_main() {
     case "${1:-}" in
         check) [ "$#" -eq 1 ] || return 2; update_check ;;
         apply) [ "$#" -eq 1 ] || return 2; update_apply ;;
+        recover) [ "$#" -eq 1 ] || return 2; update_recover ;;
         arch-check) [ "$#" -eq 1 ] || return 2; update_arch_check ;;
         arch-apply) [ "$#" -eq 1 ] || return 2; update_arch_apply ;;
         *)
-            echo "Uso: crias-update {check|apply|arch-check|arch-apply}" >&2
+            echo "Uso: crias-update {check|apply|recover|arch-check|arch-apply}" >&2
             return 2 ;;
     esac
 }
