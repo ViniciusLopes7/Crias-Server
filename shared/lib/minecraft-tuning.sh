@@ -262,7 +262,7 @@ minecraft_heap_apply_policy() {
             MC_MIN_RAM="$MC_MAX_RAM"
             ;;
         custom-fixed|custom-dynamic)
-            if ! [[ "$requested" =~ ^[0-9]{3,6}$ ]] ||
+            if ! [[ "$requested" =~ ^[1-9][0-9]{2,5}$ ]] ||
                 [ "$requested" -lt 384 ] || [ "$requested" -gt "$ceiling" ]; then
                 print_error "Heap solicitado fora do intervalo seguro: 384-${ceiling} MiB"; return 1
             fi

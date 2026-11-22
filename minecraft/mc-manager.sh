@@ -519,7 +519,7 @@ cmd_memory() {
             mode=auto; override=0 ;;
         set)
             [ "$#" -eq 3 ] || { err "Uso: memory set <MiB> <fixed|dynamic>"; return 2; }
-            if ! [[ "$amount" =~ ^[0-9]{3,6}$ ]]; then
+            if ! [[ "$amount" =~ ^[1-9][0-9]{2,5}$ ]]; then
                 err "Use um numero inteiro em MiB (ex.: 4096)."; return 2
             fi
             case "$growth" in
@@ -564,7 +564,7 @@ cmd_memory() {
     # hardware. Refuse a heap that cannot fit below its EFFECTIVE limit.
     effective_max="$(systemctl show "$SERVICE_NAME.service" -p EffectiveMemoryMax --value 2>/dev/null || true)"
     desired_bytes=$(( (${MC_MAX_RAM%M} + MC_NATIVE_OVERHEAD_MB) * 1048576 ))
-    if [[ "$effective_max" =~ ^[0-9]+$ ]] &&
+    if [[ "$effective_max" =~ ^[0-9]{1,18}$ ]] &&
         [ "$effective_max" -lt "$desired_bytes" ]; then
         err "Heap + folga nativa excedem MemoryMax efetivo. Execute reconfigure-hardware com Minecraft parado."
         return 1

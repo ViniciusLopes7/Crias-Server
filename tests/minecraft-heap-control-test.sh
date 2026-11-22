@@ -88,4 +88,40 @@ grep -Fq 'if [ "$unit_state" != inactive ] && [ "$unit_state" != failed ]' \
 grep -Fq 'minecraft_heap_apply_policy "${heap_mode:-auto}" "${heap_override:-0}"' \
     "$root/minecraft/mc-manager.sh" || fail "reconfigure policy hook missing"
 
+# Real manager entrypoint with mocked systemctl: fail closed while live,
+# preserve runtime on refusal, allow safe updates after explicit stop.
+mkdir -p "$tmp/server"
+cp "$tmp/runtime.env" "$tmp/server/runtime.env"
+export SERVER_DIR="$tmp/server"
+export CRIS_MANAGER_ALLOW_UNSAFE=1
+MC_TEST_STATE=active
+systemctl() {
+    case "$*" in
+        "show minecraft.service -p ActiveState --value") echo "$MC_TEST_STATE" ;;
+        "show minecraft.service -p EffectiveMemoryMax --value") echo 17179869184 ;;
+        "show minecraft.service -p LoadState --value") echo loaded ;;
+        "show minecraft.service -p MemoryCurrent --value") echo 0 ;;
+        "show minecraft.service -p NRestarts --value") echo 0 ;;
+        "cat minecraft.service") return 0 ;;
+        "is-active minecraft") echo "$MC_TEST_STATE" ;;
+        *) return 1 ;;
+    esac
+}
+source "$root/minecraft/mc-manager.sh" status >/dev/null 2>&1 || fail "manager CLI failed to load"
+manager_need_root() { :; } # Unit fixture: no sudo and no system mutations.
+before="$(sha256sum "$tmp/server/runtime.env")"
+if cmd_memory set 384 fixed >/dev/null 2>&1; then fail "changed heap while live"; fi
+[ "$(sha256sum "$tmp/server/runtime.env")" = "$before" ] || fail "runtime altered while live"
+MC_TEST_STATE=inactive
+if cmd_memory set 04096 fixed >/dev/null 2>&1; then fail "leading-zero heap accepted"; fi
+if cmd_memory set 999999 fixed >/dev/null 2>&1; then fail "oversized heap accepted"; fi
+cmd_memory set 384 fixed >/dev/null || fail "safe heap rejected for stopped server"
+grep -qx 'MIN_RAM="384M"' "$tmp/server/runtime.env" || fail "CLI Xms not persisted"
+grep -qx 'MAX_RAM="384M"' "$tmp/server/runtime.env" || fail "CLI Xmx not persisted"
+cmd_memory auto >/dev/null || fail "auto mode restoration failed"
+grep -qx 'HEAP_MODE="auto"' "$tmp/server/runtime.env" || fail "auto not restored"
+cmd_memory fixed >/dev/null || fail "fixed-auto heap rejected"
+[ "$(env_file_read_value "$tmp/server/runtime.env" MIN_RAM)" = \
+    "$(env_file_read_value "$tmp/server/runtime.env" MAX_RAM)" ] || fail "fixed heap mismatch"
+
 echo "OK: heap auto/fixed/custom safe budgets, persisted modes, Forge/backups/world intact"

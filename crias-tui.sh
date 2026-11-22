@@ -342,7 +342,7 @@ main() {
                                 else
                                     read -r -p "Heap maximo (MiB): " ram_amount || continue
                                 fi
-                                [[ "$ram_amount" =~ ^[0-9]{3,6}$ ]] || { echo "[ERRO] Informe um inteiro em MiB."; read -r -p "Enter..." _ || true; continue; }
+                                [[ "$ram_amount" =~ ^[1-9][0-9]{2,5}$ ]] || { echo "[ERRO] Informe um inteiro em MiB."; read -r -p "Enter..." _ || true; continue; }
                                 ram_growth=$(hub_choose "Modo do heap:" \
                                     "Fixo: Xms = Xmx (consome mais RAM)" \
                                     "Adaptativo: Xms menor que Xmx" "← Voltar") || continue
