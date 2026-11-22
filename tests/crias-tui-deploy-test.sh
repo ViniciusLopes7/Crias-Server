@@ -14,7 +14,7 @@ for option in "logs recent" "logs alerts" "logs boot" "logs follow"; do
 done
 
 # Hub must expose the core administrative flows, not just raw CLI actions.
-for item in "📁 Arquivos" "🎙️ Voice Chat" "files" "setup-files" "voicechat status" "voicechat set-port" "voicechat edit" "voicechat network"; do
+for item in "📁 Arquivos" "🎙️ Voice Chat" "files" "setup-files" "voicechat status" "voicechat set-port" "voicechat edit" "voicechat network" "Pasta principal do servidor" "Mods do servidor" "Configuracoes (config)" "Mundo atual" "Backups locais" "Logs locais"; do
     grep -Fq "$item" "$root/crias-tui.sh" || { echo "FAIL: falta no Hub: $item" >&2; exit 1; }
 done
 
