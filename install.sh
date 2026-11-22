@@ -2131,8 +2131,19 @@ deploy_crias_tui() {
         print_error "Nao foi possivel instalar o hub em $tui_dest."
         return 1
     fi
-    print_success "crias-tui deployado em $tui_dest"
-    print_step "Rode: sudo crias-tui  (menu interativo do hub)"
+    # Disponibiliza atualizacoes isoladas de ferramentas do Hub, sem
+    # reinstalar Minecraft/Terraria. O updater nunca executa install.sh.
+    local updater_source="$SCRIPT_DIR/crias-update.sh"
+    if [ ! -s "$updater_source" ] || ! bash -n "$updater_source"; then
+        print_error "Atualizador crias-update.sh ausente/invalido."
+        return 1
+    fi
+    if ! install -o root -g root -m 0755 "$updater_source" /usr/local/bin/crias-update; then
+        print_error "Falha ao instalar crias-update no host."
+        return 1
+    fi
+    print_success "crias-tui e crias-update instalados no host."
+    print_step "Rode: sudo crias-tui  (menu central de administracao)"
 }
 
 main() {
