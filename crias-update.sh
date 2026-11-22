@@ -240,6 +240,12 @@ update_apply() {
         return 0
     fi
 
+    # Keep each attempt independent, including test runs in one shell.
+    UPDATE_DESTS=()
+    UPDATE_SNAPSHOTS=()
+    UPDATE_PUBLISHED=0
+    UPDATE_COMMITTED=0
+    UPDATE_OLD_REF=""
     UPDATE_TEMP="$(mktemp -d /tmp/crias-update.XXXXXXXX)" || return 1
     chmod 0700 "$UPDATE_TEMP" || { rm -rf -- "$UPDATE_TEMP"; return 1; }
     UPDATE_OLD_REF="$current"
@@ -287,6 +293,10 @@ update_apply() {
         return 1
     fi
     UPDATE_COMMITTED=1
+    # Success: cleanup private downloads/snapshots now, not on next shell exit.
+    update_recover
+    UPDATE_TEMP=""
+    trap - EXIT INT TERM
     ok "Crias-Server atualizado para $CRIAS_RELEASE_TAG_NAME."
     echo "O servidor Minecraft/Terraria e seus mundos, mods, units e JVM permanecem intactos."
     echo "Nao houve reinicio do jogo. Feche/reabra o Hub para carregar o menu atualizado."
