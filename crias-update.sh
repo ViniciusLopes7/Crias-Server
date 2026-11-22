@@ -146,9 +146,9 @@ UPDATE_TEMP=""
 update_track_install() {
     local src="$1" dest="$2" mode="$3"
     local n="${#UPDATE_DESTS[@]}" backup="$UPDATE_TEMP/backup-$n"
-    mkdir -p "$(dirname "$dest")"
+    mkdir -p "$(dirname "$dest")" || return 1
     if [ -e "$dest" ] || [ -L "$dest" ]; then
-        cp -a -- "$dest" "$backup"
+        cp -a -- "$dest" "$backup" || return 1
         UPDATE_SNAPSHOTS+=("$backup")
     else
         UPDATE_SNAPSHOTS+=("")
@@ -193,22 +193,22 @@ update_recover() {
 
 update_deploy_admin() {
     local dest file src cron
-    update_track_install "$CRIAS_UPDATE_INSTALL_DIR/crias-tui.sh" "$CRIAS_UPDATE_BIN_DIR/crias-tui" 0755
-    update_track_install "$CRIAS_UPDATE_INSTALL_DIR/crias-update.sh" "$CRIAS_UPDATE_BIN_DIR/crias-update" 0755
+    update_track_install "$CRIAS_UPDATE_INSTALL_DIR/crias-tui.sh" "$CRIAS_UPDATE_BIN_DIR/crias-tui" 0755 || return 1
+    update_track_install "$CRIAS_UPDATE_INSTALL_DIR/crias-update.sh" "$CRIAS_UPDATE_BIN_DIR/crias-update" 0755 || return 1
     for src in "$CRIAS_UPDATE_INSTALL_DIR/shared/lib/"*.sh; do
         [ -f "$src" ] || continue
-        update_track_install "$src" "$CRIAS_UPDATE_LIBEXEC_DIR/lib/$(basename "$src")" 0644
+        update_track_install "$src" "$CRIAS_UPDATE_LIBEXEC_DIR/lib/$(basename "$src")" 0644 || return 1
     done
     # Both managers are harmless when not installed; only the selected
     # stack's setup-cron wrapper must share the common name.
     for file in minecraft/mc-manager.sh minecraft/install-mcrcon.sh minecraft/voicechat-tools.sh terraria/tt-manager.sh; do
-        update_track_install "$CRIAS_UPDATE_INSTALL_DIR/$file" "$CRIAS_UPDATE_LIBEXEC_DIR/$(basename "$file")" 0755
+        update_track_install "$CRIAS_UPDATE_INSTALL_DIR/$file" "$CRIAS_UPDATE_LIBEXEC_DIR/$(basename "$file")" 0755 || return 1
     done
     cron="minecraft/setup-cron.sh"
     if [ -e /etc/systemd/system/terraria.service ] && [ ! -e /etc/systemd/system/minecraft.service ]; then
         cron="terraria/setup-cron.sh"
     fi
-    update_track_install "$CRIAS_UPDATE_INSTALL_DIR/$cron" "$CRIAS_UPDATE_LIBEXEC_DIR/setup-cron.sh" 0755
+    update_track_install "$CRIAS_UPDATE_INSTALL_DIR/$cron" "$CRIAS_UPDATE_LIBEXEC_DIR/setup-cron.sh" 0755 || return 1
 }
 
 update_apply() {
@@ -241,17 +241,17 @@ update_apply() {
     fi
 
     UPDATE_TEMP="$(mktemp -d /tmp/crias-update.XXXXXXXX)" || return 1
-    chmod 0700 "$UPDATE_TEMP"
+    chmod 0700 "$UPDATE_TEMP" || { rm -rf -- "$UPDATE_TEMP"; return 1; }
     UPDATE_OLD_REF="$current"
     trap update_recover EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
 
     log "Baixando a release $CRIAS_RELEASE_TAG_NAME, sem tocar no jogo..."
-    update_download "$CRIAS_ZIP_URL" "$UPDATE_TEMP/release.zip"
-    update_download "$CRIAS_SHA_URL" "$UPDATE_TEMP/sha256sums.txt"
-    crias_verify_sha256 "$UPDATE_TEMP/release.zip" "$UPDATE_TEMP/sha256sums.txt" "$CRIAS_ASSET_ZIP"
-    mkdir -p "$UPDATE_TEMP/check"
+    update_download "$CRIAS_ZIP_URL" "$UPDATE_TEMP/release.zip" || return 1
+    update_download "$CRIAS_SHA_URL" "$UPDATE_TEMP/sha256sums.txt" || return 1
+    crias_verify_sha256 "$UPDATE_TEMP/release.zip" "$UPDATE_TEMP/sha256sums.txt" "$CRIAS_ASSET_ZIP" || return 1
+    mkdir -p "$UPDATE_TEMP/check" || return 1
     update_preflight "$UPDATE_TEMP/release.zip" "$UPDATE_TEMP/check" || return 1
 
     # Preserve user-specific installer defaults, never execute/shell-source it.
@@ -260,13 +260,13 @@ update_apply() {
         return 1
     fi
     if [ -f "$current/config.env" ]; then
-        cp -- "$current/config.env" "$UPDATE_TEMP/old-config.env"
-        chmod 0600 "$UPDATE_TEMP/old-config.env"
+        cp -- "$current/config.env" "$UPDATE_TEMP/old-config.env" || return 1
+        chmod 0600 "$UPDATE_TEMP/old-config.env" || return 1
     fi
 
     # Existing bootstrap provides transactional version directories. The
     # game dir (/opt/minecraft-server) is never passed to this function.
-    crias_extract_to "$UPDATE_TEMP/release.zip" "$CRIAS_UPDATE_INSTALL_DIR"
+    crias_extract_to "$UPDATE_TEMP/release.zip" "$CRIAS_UPDATE_INSTALL_DIR" || return 1
     UPDATE_PUBLISHED=1
     local newref
     newref="$(readlink -f "$CRIAS_UPDATE_INSTALL_DIR")"
@@ -275,14 +275,17 @@ update_apply() {
         *) update_fail "Novo destino de release invalido"; return 1 ;;
     esac
     if [ -f "$UPDATE_TEMP/old-config.env" ]; then
-        install -o root -g root -m 0600 "$UPDATE_TEMP/old-config.env" "$newref/config.env"
+        install -o root -g root -m 0600 "$UPDATE_TEMP/old-config.env" "$newref/config.env" || return 1
     fi
-    printf '%s\n' "$CRIAS_RELEASE_TAG_NAME" > "$newref/.crias-release-tag"
-    chmod 0644 "$newref/.crias-release-tag"
+    printf '%s\n' "$CRIAS_RELEASE_TAG_NAME" > "$newref/.crias-release-tag" || return 1
+    chmod 0644 "$newref/.crias-release-tag" || return 1
 
     # Admin scripts are root-owned, outside game dirs. Any failure restores
     # old binaries/libs and the old release symlink; no game service restart.
-    update_deploy_admin
+    if ! update_deploy_admin; then
+        update_fail "Nao foi possivel instalar todos os scripts do Hub; restaurando versao anterior."
+        return 1
+    fi
     UPDATE_COMMITTED=1
     ok "Crias-Server atualizado para $CRIAS_RELEASE_TAG_NAME."
     echo "O servidor Minecraft/Terraria e seus mundos, mods, units e JVM permanecem intactos."
