@@ -99,6 +99,7 @@ STACK_ADMIN_SCRIPTS=(
     "$MODULE_DIR/mc-manager.sh"
     "$MODULE_DIR/setup-cron.sh"
     "$MODULE_DIR/install-mcrcon.sh"
+    "$MODULE_DIR/voicechat-tools.sh"
 )
 STACK_SHARED_LIBS=(
     "$ROOT_DIR/shared/lib/common.sh"
