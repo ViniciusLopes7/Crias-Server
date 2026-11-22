@@ -55,7 +55,7 @@ sudo crias-update arch-apply
 
 A consulta usa `checkupdates` do `pacman-contrib` quando disponível, sem alterar o banco de pacotes do sistema. Sem ele, mostra a lista local de `pacman -Qu` e avisa que ela pode estar desatualizada.
 
-A aplicação usa `pacman -Syu`, **não uma atualização parcial**. Requer TTY, servidor Minecraft/Terraria **parado** e digitar literalmente `ATUALIZAR ARCH` para confirmar. **Não** para o jogo, não reinicia o host e não reinicia serviços por conta própria. Planeje a manutenção e verifique se kernel/Java/systemd exigem reboot antes de iniciar o jogo.
+A aplicação usa `pacman -Syu`, **não uma atualização parcial**. Requer TTY, servidor Minecraft/Terraria **parado** e digitar literalmente `ATUALIZAR ARCH` para confirmar. O pacman **também exibe os pacotes e solicita confirmação**; não usa `--noconfirm`. Leia os [avisos oficiais do Arch](https://archlinux.org/news/) antes de atualizar, especialmente alterações que exijam intervenção manual. **Não** para o jogo, não reinicia o host e não reinicia serviços por conta própria. Planeje a manutenção e verifique se kernel/Java/systemd exigem reboot antes de iniciar o jogo. Depois, verifique arquivos `.pacnew` e serviços que precisem ser reiniciados conforme a [documentação do Arch](https://wiki.archlinux.org/title/System_maintenance).
 
 Para instalar `checkupdates`, se desejar:
 
