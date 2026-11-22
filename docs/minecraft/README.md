@@ -107,6 +107,9 @@ sudo chown minecraft:minecraft /opt/minecraft-server/server-icon.png
 
 ## Hub central: arquivos e Simple Voice Chat
 
+O menu **Atualizações** do Hub verifica/releases o Crias-Server e troca apenas scripts administrativos, mantendo modpack e mundo intactos. Para atualizar o Arch ou entender as limitações das atualizações de modpacks, consulte o [guia de atualizações](../updates.md).
+
+
 O `crias-tui` é a interface principal para administrar o servidor via terminal ou SSH sobre Tailscale. **A instalação real verifica e instala o `gum` no Arch do host**, inclusive se você executar diretamente `install.sh`, sem passar pelo bootstrap. O comando `crias-tui` também tenta reparar uma instalação ausente/quebrada de `gum` em sessões interativas. Assim os menus usam **↑/↓ e Enter** normalmente; sem TTY ou durante indisponibilidade de rede, a opção de menu numerado permanece como fallback. `--doctor` e `--help` nunca instalam pacotes. O redesenho visual completo e a paridade com todas as funções avançadas estão registrados no [roadmap do Hub](https://github.com/ViniciusLopes7/Crias-Server/issues/22).
 
 ### Gerenciar arquivos pelo Hub
