@@ -245,6 +245,76 @@ write_minecraft_systemd_memory_limit() {
     [ -z "$previous" ] || rm -f -- "$previous"
     return 0
 }
+# Safe manual heap policy: baseline hardware/cgroup calculation is the
+# maximum. Overrides can only reduce Xmx, preserving OS/native JVM margins.
+minecraft_heap_apply_policy() {
+    local mode="$1" requested="$2"
+    local ceiling="${MC_MAX_RAM%M}" new_xmx new_xms
+    if ! [[ "$ceiling" =~ ^[0-9]{3,7}$ ]]; then
+        print_error "Orcamento automatico de heap invalido"; return 1
+    fi
+    case "$mode" in
+        auto)
+            [ "$requested" = 0 ] || { print_error "Override invalido para modo auto"; return 1; }
+            ;;
+        fixed)
+            [ "$requested" = 0 ] || { print_error "Override invalido para modo fixed"; return 1; }
+            MC_MIN_RAM="$MC_MAX_RAM"
+            ;;
+        custom-fixed|custom-dynamic)
+            if ! [[ "$requested" =~ ^[0-9]{3,6}$ ]] ||
+                [ "$requested" -lt 384 ] || [ "$requested" -gt "$ceiling" ]; then
+                print_error "Heap solicitado fora do intervalo seguro: 384-${ceiling} MiB"; return 1
+            fi
+            new_xmx="$requested"
+            if [ "$mode" = custom-fixed ]; then
+                new_xms="$new_xmx"
+            else
+                new_xms=$((new_xmx * 30 / 100))
+                new_xms=$(clamp_value "$new_xms" 256 "$new_xmx")
+            fi
+            MC_MIN_RAM="${new_xms}M"
+            MC_MAX_RAM="${new_xmx}M"
+            if [ "$new_xmx" -lt 2048 ]; then
+                MC_G1_REGION_SIZE=4M
+            elif [ "$new_xmx" -lt 8192 ]; then
+                MC_G1_REGION_SIZE=8M
+            else
+                MC_G1_REGION_SIZE=16M
+            fi
+            ;;
+        *) print_error "Modo de heap desconhecido: $mode"; return 1 ;;
+    esac
+    MC_HEAP_POLICY_MODE="$mode"
+    MC_HEAP_CUSTOM_MB="$requested"
+    export MC_MIN_RAM MC_MAX_RAM MC_G1_REGION_SIZE MC_HEAP_POLICY_MODE MC_HEAP_CUSTOM_MB
+}
+
+# Atomic update of ONLY heap-related runtime keys. All other environment
+# settings (loader, backups, webhooks etc.) remain unchanged. Do not source
+# runtime.env as root; it is in the game's writable directory.
+minecraft_heap_update_runtime() {
+    local file="$1" mode="$2" amount="$3"
+    local tmp
+    [ -f "$file" ] && [ ! -L "$file" ] || {
+        print_error "runtime.env ausente ou symlink; recusando"; return 1
+    }
+    tmp="$(mktemp "${file}.heap.XXXXXXXX")" || return 1
+    if ! awk '
+        /^(MIN_RAM|MAX_RAM|G1_REGION_SIZE|HEAP_MODE|HEAP_OVERRIDE_MB)=/ { next }
+        { print }
+    ' "$file" > "$tmp" ||
+        ! printf 'MIN_RAM="%s"\nMAX_RAM="%s"\nG1_REGION_SIZE="%s"\nHEAP_MODE="%s"\nHEAP_OVERRIDE_MB="%s"\n' \
+            "$MC_MIN_RAM" "$MC_MAX_RAM" "$MC_G1_REGION_SIZE" "$mode" "$amount" >> "$tmp" ||
+        ! bash -n "$tmp" ||
+        ! chown --reference="$file" "$tmp" ||
+        ! chmod 0600 "$tmp" ||
+        ! mv -f -T -- "$tmp" "$file"; then
+        rm -f -- "$tmp"
+        print_error "Falha ao gravar runtime.env; arquivo original preservado"; return 1
+    fi
+}
+
 write_minecraft_runtime_env() {
     local file_path="$1"
 
@@ -303,12 +373,17 @@ write_minecraft_runtime_env() {
     esac
     local server_jar="${MINECRAFT_SERVER_FILE:-$(env_file_read_value "$file_path" SERVER_JAR)}"
     server_jar="${server_jar:-server.jar}"
+    # Policy validated by manager before running this writer.
+    local heap_mode="${MC_HEAP_POLICY_MODE:-auto}"
+    local heap_override="${MC_HEAP_CUSTOM_MB:-0}"
 
     # (CR-08) runtime.env carrega segredos (webhook): modo 0600 — criado com
     # umask 022 virava 0644 legivel por qualquer usuario local.
     write_file_or_dry_run "Gerando runtime.env do Minecraft em $file_path" "$file_path" 0600 << EOF
 MIN_RAM="$MC_MIN_RAM"
 MAX_RAM="$MC_MAX_RAM"
+HEAP_MODE="$heap_mode"
+HEAP_OVERRIDE_MB="$heap_override"
 NATIVE_OVERHEAD_MB="${MC_NATIVE_OVERHEAD_MB:-0}"
 GC_MAX_PAUSE="$MC_GC_MAX_PAUSE"
 G1_REGION_SIZE="$MC_G1_REGION_SIZE"
