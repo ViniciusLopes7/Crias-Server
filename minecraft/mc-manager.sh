@@ -182,8 +182,8 @@ cmd_console() {
         err "Console RCON requer terminal interativo (TTY). Abra pelo SSH ou crias-tui."
         return 1
     fi
-    if ! command -v mcrcon >/dev/null 2>&1; then
-        err "mcrcon nao instalado. Execute: sudo /usr/local/libexec/crias/mc-manager.sh setup-console"
+    if ! command -v mcrcon >/dev/null 2>&1 || ! mcrcon --help 2>&1 | grep -q -- '--no-tui'; then
+        err "mcrcon interativo nao instalado (ou versao classica). Execute: sudo /usr/local/libexec/crias/mc-manager.sh setup-console"
         return 1
     fi
     local rcon_pass rcon_port rcon_enabled
@@ -225,6 +225,10 @@ cmd_setup_console() {
         return 1
     fi
     manager_assert_root_safe "$installer" || return 1
+    if ! validate_server_dir "$SERVER_DIR"; then
+        err "Diretorio de servidor inseguro ou invalido: $SERVER_DIR"
+        return 1
+    fi
     if [ ! -f "$PROPS_FILE" ] || [ -L "$PROPS_FILE" ]; then
         err "server.properties ausente ou link simbolico: $PROPS_FILE"
         return 1
