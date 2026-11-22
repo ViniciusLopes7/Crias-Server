@@ -206,14 +206,23 @@ main() {
         case "$choice" in
             "🎮 Servidor")
                 local srv_choice
-                srv_choice=$(hub_choose "Servidor ($stack):" \
-                    "Start" "Stop" "Restart" "Status" "Console" "Logs" "← Voltar") || continue
+                if [ "$stack" = "minecraft" ]; then
+                    srv_choice=$(hub_choose "Servidor ($stack):" \
+                        "Start" "Stop" "Restart" "Status" "Console" "Configurar console RCON" "Logs" "← Voltar") || continue
+                else
+                    srv_choice=$(hub_choose "Servidor ($stack):" \
+                        "Start" "Stop" "Restart" "Status" "Console" "Logs" "← Voltar") || continue
+                fi
                 case "$srv_choice" in
                     "Start") sudo "$manager_script" start ;;
                     "Stop") sudo "$manager_script" stop ;;
                     "Restart") sudo "$manager_script" restart ;;
                     "Status") sudo "$manager_script" status; read -r -p "Enter..." ;;
                     "Console") sudo "$manager_script" console ;;
+                    "Configurar console RCON")
+                        sudo "$manager_script" setup-console || true
+                        read -r -p "Enter para voltar..." _ || true
+                        ;;
                     "Logs")
                         if [ "$stack" = "minecraft" ]; then
                             local log_choice
