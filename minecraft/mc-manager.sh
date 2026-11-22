@@ -129,7 +129,7 @@ get_prop() {
 
 # Descrições específicas para o show_help compartilhado (console/health diferem
 # entre Minecraft e Terraria).
-MANAGER_DESC_CONSOLE="Console interativo via RCON (fallback para logs)"
+MANAGER_DESC_CONSOLE="Console interativo via mcrcon (setas, historico e comandos)"
 MANAGER_DESC_HEALTH="Verifica porta e RCON do servidor"
 MANAGER_DESC_LOGS="Logs: follow (padrao), recent, boot, alerts"
 
@@ -171,30 +171,134 @@ cmd_logs() {
     esac
 }
 
+# RCON is a command/reply console, not a journal log viewer.
 cmd_console() {
-    local rcon_pass
-    local rcon_port
+    if [ "$#" -ne 0 ]; then
+        err "Uso: console (sem argumentos)"
+        return 2
+    fi
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        err "Console RCON exige um terminal interativo (TTY). Use SSH ou crias-tui."
+        return 1
+    fi
+    if ! command -v mcrcon >/dev/null 2>&1 || ! mcrcon --help 2>&1 | grep -q -- '--no-tui'; then
+        err "Cliente mcrcon moderno indisponivel. Execute: sudo /usr/local/libexec/crias/mc-manager.sh setup-console"
+        return 1
+    fi
+    local pass port enabled
+    enabled="$(get_prop "enable-rcon" "false")"
+    pass="$(get_prop "rcon.password" "")"
+    port="$(get_prop "rcon.port" "25575")"
+    if [ "$enabled" != "true" ] || [ -z "$pass" ]; then
+        err "RCON nao ativado. Execute setup-console e reinicie o Minecraft quando puder."
+        return 1
+    fi
+    if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+        err "rcon.port invalida em server.properties."
+        return 1
+    fi
+    if ! systemctl is-active --quiet "$SERVICE_NAME"; then
+        err "Minecraft nao esta ativo. Inicie o jogo para usar o RCON."
+        return 1
+    fi
+    echo "[Minecraft] Console RCON: historico pelas setas, Tab=completar, PgUp/PgDn=rolagem, F1=ajuda, Ctrl+C=sair."
+    # The password is in the environment, NEVER in ps argv or shell history.
+    MCRCON_PASSWORD="$pass" MCRCON_PASS="$pass" exec mcrcon -H 127.0.0.1 -P "$port" -t
+}
 
-    if ! command -v mcrcon >/dev/null 2>&1; then
-        warn "Console interativo requer mcrcon. Instale via AUR (ex: yay -S mcrcon) ou construa a partir do PKGBUILD do AUR."
-        cmd_logs
-        return 0
+# Configure only on explicit request. Do not restart a live Minecraft service.
+cmd_setup_console() {
+    if [ "$#" -ne 0 ]; then
+        err "Uso: setup-console (sem argumentos)"
+        return 2
+    fi
+    manager_need_root "$SELF" "setup-console"
+    local installer="$CRIS_LIBEXEC_DIR/install-mcrcon.sh"
+    if [ ! -f "$installer" ]; then
+        installer="$SCRIPT_DIR/install-mcrcon.sh"
+    fi
+    if [ ! -f "$installer" ]; then
+        err "Instalador mcrcon ausente. Atualize as ferramentas administrativas."
+        return 1
+    fi
+    manager_assert_root_safe "$installer" || return 1
+    if ! validate_server_dir "$SERVER_DIR"; then
+        err "Diretorio invalido para servidor: $SERVER_DIR"
+        return 1
+    fi
+    if [ ! -f "$PROPS_FILE" ] || [ -L "$PROPS_FILE" ]; then
+        err "server.properties ausente ou link simbolico: $PROPS_FILE"
+        return 1
+    fi
+    if ! bash "$installer"; then
+        err "mcrcon nao instalado. Nenhuma configuracao foi modificada."
+        return 1
     fi
 
-    rcon_pass="$(get_prop "rcon.password" "")"
-    rcon_port="$(get_prop "rcon.port" "25575")"
-
-    if [ -z "$rcon_pass" ]; then
-        warn "RCON nao configurado em $PROPS_FILE (rcon.password)."
-        cmd_logs
-        return 0
+    local pass port mc_port tmp line
+    pass="$(get_prop "rcon.password" "")"
+    port="$(get_prop "rcon.port" "25575")"
+    mc_port="$(get_prop "server-port" "25565")"
+    if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ] || [ "$port" = "$mc_port" ]; then
+        err "rcon.port invalida ou igual a server-port."
+        return 1
+    fi
+    if [ -z "$pass" ]; then
+        # 32 cryptographically random bytes, represented as 64 hex digits.
+        pass="$(od -An -N32 -tx1 /dev/urandom | tr -d '[:space:]')"
+        if ! [[ "$pass" =~ ^[0-9a-f]{64}$ ]]; then
+            err "Falha ao gerar senha aleatoria."
+            return 1
+        fi
+    fi
+    if [[ "$pass" =~ [[:cntrl:]] ]]; then
+        err "Senha RCON existente contem caracteres de controle; edite-a manualmente."
+        return 1
     fi
 
-    if ! [[ "$rcon_port" =~ ^[0-9]+$ ]]; then
-        rcon_port=25575
+    tmp="$(mktemp "$SERVER_DIR/.crias-rcon-XXXXXXXX")" || return 1
+    chmod 0600 "$tmp" || { rm -f -- "$tmp"; return 1; }
+    if ! {
+        while IFS= read -r line || [ -n "$line" ]; do
+            case "$line" in
+                enable-rcon=*|rcon.password=*|rcon.port=*) ;;
+                *) printf '%s\n' "$line" ;;
+            esac
+        done < "$PROPS_FILE"
+        printf 'enable-rcon=true\nrcon.port=%s\nrcon.password=%s\n' "$port" "$pass"
+    } > "$tmp"; then
+        rm -f -- "$tmp"
+        err "Falha ao preparar server.properties."
+        return 1
     fi
+    if ! chown "$SERVER_USER:$SERVER_USER" "$tmp" || ! mv -f -T -- "$tmp" "$PROPS_FILE"; then
+        rm -f -- "$tmp"
+        err "Falha ao aplicar server.properties."
+        return 1
+    fi
+    log "mcrcon e RCON configurados (TCP $port). Senha nao exibida."
+    warn "RCON nao e criptografado. Bloqueie a porta TCP $port no firewall, inclusive para a tailnet."
+    warn "Minecraft NAO foi reiniciado. Quando for conveniente: sudo systemctl restart minecraft"
+    echo "Depois abra: sudo /usr/local/libexec/crias/mc-manager.sh console"
+}
 
-    MCRCON_PASS="$rcon_pass" exec mcrcon -H localhost -P "$rcon_port"
+cmd_voicechat() {
+    # Todos os comandos Voice Chat rodam com o usuario do Minecraft.
+    manager_need_root "$SELF" voicechat "$@"
+    if ! validate_server_dir "$SERVER_DIR" || ! id "$SERVER_USER" >/dev/null 2>&1; then
+        err "Diretorio/usuario do Minecraft invalido."
+        return 1
+    fi
+    local script="$CRIS_LIBEXEC_DIR/voicechat-tools.sh"
+    if [ ! -f "$script" ]; then
+        script="$SCRIPT_DIR/voicechat-tools.sh"
+    fi
+    if [ ! -f "$script" ]; then
+        err "Ferramenta Voice Chat nao instalada. Atualize os scripts administrativos."
+        return 1
+    fi
+    manager_assert_root_safe "$script" || return 1
+    sudo -u "$SERVER_USER" -- env SERVER_DIR="$SERVER_DIR" bash "$script" "$@"
 }
 
 cmd_setup_cron() {

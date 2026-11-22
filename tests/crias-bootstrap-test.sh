@@ -214,6 +214,53 @@ release_count=$(find "$legacy_install.releases" -maxdepth 1 -mindepth 1 -type d 
 [ "$release_count" -le 3 ] || { echo "FAIL: retencao deixou $release_count versoes" >&2; exit 1; }
 [ -f "$legacy_install/install.sh" ] || { echo 'FAIL: release ativa removida' >&2; exit 1; }
 
+# Explicitly pin an old release, then update. Cleanup must not delete the
+# previous active version even when multiple newer inactive releases exist.
+pinned_dir="$legacy_install.releases/release.pinned"
+mkdir -p "$pinned_dir"
+printf '#!/bin/bash\n# release antiga selecionada manualmente\n' > "$pinned_dir/install.sh"
+touch -t 202001010000 "$pinned_dir"
+ln -s "$pinned_dir" "$WORK_DIR/pinned-link"
+mv -f -T "$WORK_DIR/pinned-link" "$legacy_install"
+crias_extract_to "$real_zip" "$legacy_install" >/dev/null
+[ -d "$pinned_dir" ] || {
+    echo "FAIL: cleanup apagou release anterior usada para rollback" >&2; exit 1
+}
+release_count=$(find "$legacy_install.releases" -maxdepth 1 -mindepth 1 -type d | wc -l)
+[ "$release_count" -le 3 ] || {
+    echo "FAIL: retencao excedeu 3 versoes: $release_count" >&2; exit 1
+}
+echo "  OK: versao anterior pinada preservada mesmo sendo antiga"
+
+echo "[crias-bootstrap-test] 6c. Atualizacao tools-only da release verificada..."
+mkdir -p "$WORK_DIR/update-src"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$WORK_DIR/update-src/crias-update.sh"
+(
+    cd "$WORK_DIR/update-src"
+    zip -q "$WORK_DIR/tools-release.zip" crias-update.sh
+)
+(
+    # A função deve apenas invocar o updater verificado, sem baixar packs.
+    bash() {
+        if [ "$1" = "-n" ]; then
+            command bash "$@"
+        else
+            [ "$2" = apply ] || return 99
+            printf '%s\n' "$2" > "$WORK_DIR/tools-invoked"
+        fi
+    }
+    crias_bootstrap_tools_only "$WORK_DIR/tools-release.zip" "$WORK_DIR"
+)
+test "$(cat "$WORK_DIR/tools-invoked")" = apply || {
+    echo "FAIL: tools-only nao invocou updater" >&2
+    exit 1
+}
+if crias_bootstrap_tools_only "$real_zip" "$WORK_DIR" > /dev/null 2>&1; then
+    echo "FAIL: tools-only aceitou release sem updater" >&2
+    exit 1
+fi
+echo "  OK: tools-only carrega script da release e rejeita versoes sem atualizador"
+
 echo "[crias-bootstrap-test] 7. Static checks no crias-bootstrap.sh..."
 # Não deve ter usuário hardcoded (não assume 'crias', 'Server', etc. como login user)
 if grep -Eq '(login|user|usuario).*crias[^_-]' "$BOOTSTRAP" 2>/dev/null; then

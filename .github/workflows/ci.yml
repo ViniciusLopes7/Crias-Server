@@ -205,11 +205,16 @@ jobs:
           bash tests/manager-safety-test.sh
           bash tests/readiness-regression-test.sh
           bash tests/crias-tui-deploy-test.sh
+          bash tests/hub-gum-test.sh
+          bash tests/hub-files-test.sh
+          bash tests/crias-update-test.sh
           bash tests/remote-access-setup-test.sh
           bash tests/modpack-state-test.sh
           bash tests/temp-cleanup-test.sh
           bash tests/custom-mrpack-test.sh
           bash tests/minecraft-logs-test.sh
+          bash tests/minecraft-console-contract-test.sh
+          bash tests/minecraft-voicechat-test.sh
           bash tests/minecraft-memory-contract-test.sh
           bash tests/server-extras-test.sh
           bash tests/terraria-tuning-test.sh
@@ -563,7 +568,7 @@ jobs:
           rm -rf release-assets/_pkg/slim/.github/workflows
           # Falha se um zip distribuido estiver sem componentes basicos.
           for pkg in full slim; do
-            for mandatory in install.sh crias-bootstrap.sh crias-tui.sh config.env shared/lib/common.sh; do
+            for mandatory in install.sh crias-bootstrap.sh crias-tui.sh crias-update.sh config.env shared/lib/common.sh; do
               test -s "release-assets/_pkg/$pkg/$mandatory" || {
                 echo "ERROR: $pkg sem arquivo obrigatorio: $mandatory" >&2
                 exit 1

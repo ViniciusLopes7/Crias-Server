@@ -206,6 +206,113 @@ cmd_hardware_report() {
     fi
 }
 
+
+# File browsing is administrative in its entrypoint, but the manager itself
+# must NEVER grant the full-screen file browser root privileges. Only files
+# accessible to the game service account can be modified.
+cmd_files() {
+    if [ "$#" -gt 1 ]; then
+        err "Uso: files [root|mods|config|world|backups|logs]"
+        return 2
+    fi
+    manager_need_root "$SELF" files "$@"
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        err "O gerenciador de arquivos precisa de um terminal interativo (TTY)."
+        return 1
+    fi
+    if ! command -v mc >/dev/null 2>&1; then
+        err "Midnight Commander nao instalado. No Hub, escolha 'Instalar gerenciador de arquivos'."
+        return 1
+    fi
+    if ! id "$SERVER_USER" >/dev/null 2>&1 || ! validate_server_dir "$SERVER_DIR" || [ ! -d "$SERVER_DIR" ]; then
+        err "Usuario ou diretorio do servidor invalido; recusando explorador."
+        return 1
+    fi
+
+    local area="root" candidate root_dir resolved level_name
+    if [ "$#" -eq 1 ]; then area="$1"; fi
+    case "$area" in
+        root)
+            candidate="$SERVER_DIR"
+            ;;
+        mods)
+            if [ "$SERVICE_NAME" = "terraria" ]; then
+                candidate="$SERVER_DIR/Mods"
+            else
+                candidate="$SERVER_DIR/mods"
+            fi
+            ;;
+        config)
+            candidate="$SERVER_DIR/config"
+            ;;
+        world)
+            if [ "$SERVICE_NAME" = "minecraft" ]; then
+                level_name="world"
+                if [ -r "$SERVER_DIR/server.properties" ]; then
+                    level_name="$(awk -F= '$1=="level-name" {print substr($0,index($0,"=")+1); exit}' "$SERVER_DIR/server.properties")"
+                    [ -n "$level_name" ] || level_name="world"
+                fi
+                # level-name is a single directory name, never a path to another
+                # location. Custom world names with spaces are supported.
+                case "$level_name" in
+                    .|..|*/*|*\\*) err "level-name nao e um nome de diretorio seguro."; return 1 ;;
+                esac
+                candidate="$SERVER_DIR/$level_name"
+            else
+                candidate="$SERVER_DIR/Worlds"
+            fi
+            ;;
+        backups)
+            candidate="$SERVER_DIR/backups"
+            ;;
+        logs)
+            candidate="$SERVER_DIR/logs"
+            ;;
+        *)
+            err "Area desconhecida: $area. Use root|mods|config|world|backups|logs."
+            return 2
+            ;;
+    esac
+
+    if [ ! -d "$candidate" ]; then
+        err "Pasta nao encontrada: $candidate. Abra 'Arquivos > Pasta principal' para navegar manualmente."
+        return 1
+    fi
+    root_dir="$(realpath -e -- "$SERVER_DIR")" || return 1
+    resolved="$(realpath -e -- "$candidate")" || return 1
+    # Do not follow a shortcut symlink pointing outside the game directory.
+    case "$resolved" in
+        "$root_dir"|"$root_dir"/*) ;;
+        *) err "Atalho fora da pasta do servidor: $candidate"; return 1 ;;
+    esac
+
+    echo "[Arquivos] Abrindo $resolved como $SERVER_USER, sem privilegios de root."
+    # mc is an interactive file manager that can launch a shell/editor;
+    # invoking it as root would give unbounded write access to the host.
+    sudo -u "$SERVER_USER" -- env HOME="$SERVER_DIR" mc "$resolved"
+}
+
+cmd_setup_files() {
+    if [ "$#" -ne 0 ]; then
+        err "Uso: setup-files (sem argumentos)"
+        return 2
+    fi
+    manager_need_root "$SELF" setup-files
+    if command -v mc >/dev/null 2>&1; then
+        log "Midnight Commander ja disponivel."
+        return 0
+    fi
+    if ! command -v pacman >/dev/null 2>&1; then
+        err "pacman nao encontrado; instale 'mc' manualmente."
+        return 1
+    fi
+    # Package from the official Arch repository; only at user's request.
+    pacman -S --needed --noconfirm mc || {
+        err "Falha na instalacao do Midnight Commander."
+        return 1
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Dynamic help. Lista cmd_* functions via declare -F e mapeia para descrição.
 # Per-stack managers setam MANAGER_DESC_CONSOLE e MANAGER_DESC_HEALTH antes de
@@ -228,7 +335,11 @@ EOF
             status)                     desc="Mostra status (systemd)" ;;
             logs)                       desc="${MANAGER_DESC_LOGS:-Tail dos logs (journalctl)}" ;;
             console)                    desc="${MANAGER_DESC_CONSOLE:-Console do servico}" ;;
+            setup-console)              desc="Instala mcrcon e configura RCON (sem reiniciar Minecraft)" ;;
             monitor)                    desc="Ferramentas de monitoramento: btop/htop/ncdu (cpu|disk|net)" ;;
+            files)                      desc="Explora arquivos do servidor com Midnight Commander (usuario do jogo)" ;;
+            setup-files)                desc="Instala Midnight Commander do repositorio Arch sob demanda" ;;
+            voicechat)                  desc="Simple Voice Chat: status|set-port|edit|network" ;;
             health)                     desc="${MANAGER_DESC_HEALTH:-Health check do servidor}" ;;
             backup)                     desc="Executa backup imediato" ;;
             setup-cron)                 desc="Configura timer systemd de backup" ;;
@@ -253,6 +364,10 @@ manager_dispatch() {
         status) shift; cmd_status "$@" ;;
         logs) shift; cmd_logs "$@" ;;
         console) shift; cmd_console "$@" ;;
+        files) shift; cmd_files "$@" ;;
+        setup-files) shift; cmd_setup_files "$@" ;;
+        voicechat) shift; if declare -F cmd_voicechat >/dev/null; then cmd_voicechat "$@"; else err "Voice Chat nao suportado neste stack."; return 2; fi ;;
+        setup-console) shift; cmd_setup_console "$@" ;;
         monitor) shift; cmd_monitor "$@" ;;
         health) shift; cmd_health "$@" ;;
         backup) shift; cmd_backup "$@" ;;

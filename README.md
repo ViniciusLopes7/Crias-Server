@@ -43,6 +43,8 @@ sudo crias-tui --doctor    # diagnóstico de somente leitura
 
 O diagnóstico `--doctor` e a instalação antecipada do hub já estão integrados à versão atual. Ele pode ser utilizado mesmo após uma instalação parcial para conferir serviços, RAM e acesso remoto.
 
+No Hub, **Atualizações** permite verificar releases e atualizar somente as ferramentas do Crias-Server, sem reinstalar os jogos. O Arch Linux tem uma área de manutenção separada e exige o servidor parado. Consulte o [guia de atualizações](docs/updates.md).
+
 Os serviços também podem ser operados diretamente pelo `systemd`:
 
 ```bash
@@ -59,8 +61,9 @@ Para comandos de backup, console, reconfiguração e restauração, consulte o [
 | **Minecraft** | Vanilla, Fabric, Quilt, Forge e NeoForge; seleção de versões e modpacks pelo Modrinth |
 | **Modpacks próprios** | Importação de arquivos `.mrpack` locais, de pendrive ou por URL HTTPS direta |
 | **Terraria** | Servidor vanilla e opção de tModLoader com mods |
-| **Administração** | Serviços `systemd`, terminal de gerenciamento, logs e ajustes iniciais de RAM/CPU |
+| **Administração** | Hub com menus por setas (gum), gerenciador de arquivos, RCON interativo, Voice Chat, logs e ajustes de RAM/CPU |
 | **Backup e recuperação** | Backups manuais e agendados por opção; backup com Minecraft ligado exige RCON para consistência; backup remoto desativado por padrão |
+| **Atualizações** | Releases do Hub/scripts sem reinstalar jogos; manutenção Arch separada e confirmada; modpacks não são atualizados automaticamente |
 | **Acesso remoto** | OpenSSH recomendado e testado antes do jogo; Tailscale opcional para SSH e amigos; agente Discord opcional |
 
 O instalador usa `config.env` para definir os padrões. A maior parte das escolhas também pode ser feita nos menus interativos. Para instalações automatizadas, consulte a [configuração não interativa](docs/tutorial.md).
@@ -71,7 +74,8 @@ Escolha um guia conforme a tarefa:
 
 | Preciso de... | Consulte |
 |---|---|
-| Instalar, atualizar ou recuperar uma instalação | [Tutorial de operação](docs/tutorial.md) |
+| Instalar ou recuperar uma instalação | [Tutorial de operação](docs/tutorial.md) |
+| Atualizar as ferramentas do Hub ou pacotes Arch | [Atualizações seguras](docs/updates.md) |
 | Usar um `.mrpack` de pendrive ou link | [Modpacks Minecraft](docs/minecraft/modpacks.md) |
 | Gerenciar Minecraft ou Terraria | [Minecraft](docs/minecraft/README.md) · [Terraria](docs/terraria/README.md) |
 | Entender o hub e seus erros | [Interface TUI](docs/tui.md) |

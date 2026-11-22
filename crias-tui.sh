@@ -21,6 +21,41 @@ else
     CYAN=''; GREEN=''; YELLOW=''; NC=''
 fi
 
+# gum ja deve vir do bootstrap/install.sh. Se removido depois, o Hub
+# tenta reparar o pacote em sessao interativa, sem reinstalar o jogo.
+# --doctor/--help e usos sem TTY nunca fazem alteracoes no host.
+hub_ensure_gum() {
+    [ -t 0 ] && [ -t 1 ] || return 0
+    if command -v gum >/dev/null 2>&1 && gum --version >/dev/null 2>&1; then
+        return 0
+    fi
+    printf '%s\n' "[Hub] gum ausente ou danificado; tentando reparar o menu interativo..."
+    if ! command -v pacman >/dev/null 2>&1; then
+        printf '%s\n' "[AVISO] pacman indisponivel. Menu numerado continua disponivel." >&2
+        return 1
+    fi
+    if [ "$(id -u)" -eq 0 ]; then
+        if ! pacman -S --noconfirm gum; then
+            printf '%s\n' "[AVISO] Falha ao instalar gum. Menu numerado continua disponivel." >&2
+            return 1
+        fi
+    else
+        if ! command -v sudo >/dev/null 2>&1; then
+            printf '%s\n' "[AVISO] Sem sudo para instalar gum. Use: sudo pacman -S gum" >&2
+            return 1
+        fi
+        if ! sudo pacman -S --noconfirm gum; then
+            printf '%s\n' "[AVISO] Falha ao instalar gum. Menu numerado continua disponivel." >&2
+            return 1
+        fi
+    fi
+    if ! command -v gum >/dev/null 2>&1 || ! gum --version >/dev/null 2>&1; then
+        printf '%s\n' "[AVISO] gum ainda nao responde. Verifique o pacote no Arch." >&2
+        return 1
+    fi
+    printf '%s\n' "[Hub] gum pronto. Use setas e Enter para navegar."
+}
+
 # Menu numerado se gum nao estiver presente; mantem TUI acessivel.
 hub_choose() {
     local header="$1" picked opt i=1
@@ -185,6 +220,9 @@ main() {
         return 0
     fi
 
+    # Em TTY, recuperar o menu por setas se o gum tiver sido removido.
+    hub_ensure_gum || true
+
     local manager_script
     manager_script="$(get_manager_script "$stack")"
     local service
@@ -195,25 +233,49 @@ main() {
         show_header "$stack" "$service"
 
         local choice
-        choice=$(hub_choose "Crias-Server Hub — selecione:" \
-            "🎮 Servidor" \
-            "📊 Monitoramento" \
-            "💾 Backup" \
-            "⚙️  Sistema" \
-            "🩺 Diagnóstico" \
-            "🚪 Sair") || break
+        if [ "$stack" = "minecraft" ]; then
+            choice=$(hub_choose "Crias-Server Hub (↑/↓ + Enter para navegar):" \
+                "🎮 Servidor" \
+                "📁 Arquivos" \
+                "🎙️ Voice Chat" \
+                "📊 Monitoramento" \
+                "🔄 Atualizações" \
+                "💾 Backup" \
+                "⚙️  Sistema" \
+                "🩺 Diagnóstico" \
+                "🚪 Sair") || break
+        else
+            choice=$(hub_choose "Crias-Server Hub (↑/↓ + Enter para navegar):" \
+                "🎮 Servidor" \
+                "📁 Arquivos" \
+                "📊 Monitoramento" \
+                "🔄 Atualizações" \
+                "💾 Backup" \
+                "⚙️  Sistema" \
+                "🩺 Diagnóstico" \
+                "🚪 Sair") || break
+        fi
 
         case "$choice" in
             "🎮 Servidor")
                 local srv_choice
-                srv_choice=$(hub_choose "Servidor ($stack):" \
-                    "Start" "Stop" "Restart" "Status" "Console" "Logs" "← Voltar") || continue
+                if [ "$stack" = "minecraft" ]; then
+                    srv_choice=$(hub_choose "Servidor ($stack):" \
+                        "Start" "Stop" "Restart" "Status" "Console" "Configurar console RCON" "Logs" "← Voltar") || continue
+                else
+                    srv_choice=$(hub_choose "Servidor ($stack):" \
+                        "Start" "Stop" "Restart" "Status" "Console" "Logs" "← Voltar") || continue
+                fi
                 case "$srv_choice" in
                     "Start") sudo "$manager_script" start ;;
                     "Stop") sudo "$manager_script" stop ;;
                     "Restart") sudo "$manager_script" restart ;;
                     "Status") sudo "$manager_script" status; read -r -p "Enter..." ;;
                     "Console") sudo "$manager_script" console ;;
+                    "Configurar console RCON")
+                        sudo "$manager_script" setup-console || true
+                        read -r -p "Enter para voltar..." _ || true
+                        ;;
                     "Logs")
                         if [ "$stack" = "minecraft" ]; then
                             local log_choice
@@ -238,6 +300,80 @@ main() {
                     "← Voltar") continue ;;
                 esac
                 ;;
+            "📁 Arquivos")
+                local files_choice files_area
+                files_choice=$(hub_choose "Arquivos do servidor ($stack):" \
+                    "Pasta principal do servidor" \
+                    "Mods do servidor" \
+                    "Configuracoes (config)" \
+                    "Mundo atual" \
+                    "Backups locais" \
+                    "Logs locais" \
+                    "Instalar gerenciador de arquivos" \
+                    "← Voltar") || continue
+                files_area=""
+                case "$files_choice" in
+                    "Pasta principal"*) files_area="root" ;;
+                    "Mods do servidor") files_area="mods" ;;
+                    "Configuracoes"*) files_area="config" ;;
+                    "Mundo atual") files_area="world" ;;
+                    "Backups locais") files_area="backups" ;;
+                    "Logs locais") files_area="logs" ;;
+                    "Instalar gerenciador"*)
+                        local confirm_install
+                        confirm_install=$(hub_choose "Instalar pacote 'mc' do repositorio oficial Arch?" \
+                            "Sim, instalar" "Cancelar") || continue
+                        if [ "$confirm_install" = "Sim, instalar" ]; then
+                            sudo "$manager_script" setup-files || true
+                            read -r -p "Enter para voltar..." _ || true
+                        fi
+                        ;;
+                    "← Voltar") continue ;;
+                esac
+                if [ -n "$files_area" ]; then
+                    # Abre direto na pasta escolhida; o manager executa o mc
+                    # como usuario do jogo, jamais como root.
+                    if ! sudo "$manager_script" files "$files_area"; then
+                        read -r -p "Enter para voltar..." _ || true
+                    fi
+                fi
+                ;;
+            "🎙️ Voice Chat")
+                if [ "$stack" != "minecraft" ]; then continue; fi
+                local vc_choice
+                vc_choice=$(hub_choose "Simple Voice Chat (Minecraft):" \
+                    "Status e diagnostico" \
+                    "Alterar porta UDP" \
+                    "Editar configuracao" \
+                    "Ajuda Tailscale / firewall" \
+                    "← Voltar") || continue
+                case "$vc_choice" in
+                    "Status e diagnostico")
+                        sudo "$manager_script" voicechat status || true
+                        read -r -p "Enter para voltar..." _ || true
+                        ;;
+                    "Alterar porta UDP")
+                        local vc_port
+                        if command -v gum >/dev/null 2>&1 && [ -t 0 ] && [ -t 1 ]; then
+                            vc_port=$(gum input --header="Porta UDP do Voice Chat (1024-65535):" --placeholder="24454") || continue
+                        else
+                            printf "Porta UDP do Voice Chat (1024-65535; Enter cancela): "
+                            IFS= read -r vc_port || continue
+                        fi
+                        [ -n "$vc_port" ] || continue
+                        sudo "$manager_script" voicechat set-port "$vc_port" || true
+                        read -r -p "Enter para voltar..." _ || true
+                        ;;
+                    "Editar configuracao")
+                        sudo "$manager_script" voicechat edit || true
+                        ;;
+                    "Ajuda Tailscale / firewall")
+                        sudo "$manager_script" voicechat network || true
+                        read -r -p "Enter para voltar..." _ || true
+                        ;;
+                    "← Voltar") continue ;;
+                esac
+                ;;
             "📊 Monitoramento")
                 local mon_choice
                 mon_choice=$(hub_choose "Monitoramento:" \
@@ -247,6 +383,50 @@ main() {
                 case "$mon_choice" in
                     "btop"*) sudo "$manager_script" monitor cpu ;;
                     "ncdu"*) sudo "$manager_script" monitor disk ;;
+                    "← Voltar") continue ;;
+                esac
+                ;;
+            "🔄 Atualizações")
+                local update_choice updater
+                updater="/usr/local/bin/crias-update"
+                if [ ! -x "$updater" ]; then
+                    echo "[ERRO] Atualizador indisponivel. Atualize as ferramentas do Hub pela release mais recente."
+                    read -r -p "Enter para voltar..." _ || true
+                    continue
+                fi
+                update_choice=$(hub_choose "Atualizacoes (separadas do modpack e do mundo):" \
+                    "Verificar release Crias-Server" \
+                    "Atualizar Hub e ferramentas Crias-Server" \
+                    "Verificar pacotes Arch" \
+                    "Atualizar pacotes Arch (manutencao)" \
+                    "← Voltar") || continue
+                case "$update_choice" in
+                    "Verificar release"*)
+                        "$updater" check || true
+                        read -r -p "Enter para voltar..." _ || true
+                        ;;
+                    "Atualizar Hub"*)
+                        local update_confirm
+                        update_confirm=$(hub_choose "Confirmar update SOMENTE do Hub/scripts? Minecraft/Terraria nao reiniciam." \
+                            "Aplicar atualizacao Crias-Server" "Cancelar") || continue
+                        if [ "$update_confirm" = "Aplicar atualizacao Crias-Server" ]; then
+                            sudo "$updater" apply || true
+                            read -r -p "Enter para voltar..." _ || true
+                        fi
+                        ;;
+                    "Verificar pacotes Arch")
+                        "$updater" arch-check || true
+                        read -r -p "Enter para voltar..." _ || true
+                        ;;
+                    "Atualizar pacotes Arch"*)
+                        local arch_confirm
+                        arch_confirm=$(hub_choose "Atualizar Arch requer jogos PARADOS e confirmacao digitada. Continuar?" \
+                            "Iniciar verificacao de manutencao" "Cancelar") || continue
+                        if [ "$arch_confirm" = "Iniciar verificacao de manutencao" ]; then
+                            sudo "$updater" arch-apply || true
+                            read -r -p "Enter para voltar..." _ || true
+                        fi
+                        ;;
                     "← Voltar") continue ;;
                 esac
                 ;;
