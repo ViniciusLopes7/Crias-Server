@@ -315,10 +315,17 @@ crias_bootstrap_main() {
         shift
     fi
     local target
-    target="$(crias_detect_target "${1:-}")"
-    if [ "$tools_only" = true ] && [ "$target" != "/" ]; then
-        err "--update-tools exige host instalado (nao executar em /mnt/live ISO)."
-        return 1
+    if [ "$tools_only" = true ]; then
+        # An update of installed tools ALWAYS targets the active host.
+        # An unrelated Arch mount at /mnt must never intercept this command.
+        if [ -n "${CRIAS_TARGET:-}" ] && [ "$CRIAS_TARGET" != "/" ]; then
+            err "--update-tools so permite CRIAS_TARGET=/ (host instalado)."
+            return 1
+        fi
+        [ "$#" -eq 0 ] || { err "--update-tools nao aceita outro destino."; return 1; }
+        target="/"
+    else
+        target="$(crias_detect_target "${1:-}")"
     fi
     local install_dir="${target%/}/opt/crias-server"
     log "Target: $target"

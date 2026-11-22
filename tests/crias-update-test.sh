@@ -130,6 +130,41 @@ test "$(sha256sum "$tmp/minecraft/world/level.dat" | awk '{print $1}')" = "$worl
 test -x "$tmp/bin/crias-update"
 test "$(cat "$newref/.crias-release-tag")" = "v2026.11.22-test"
 
+# Crash test: a separate process prepares the durable journal, switches
+# the release, replaces an admin tool, and is SIGKILLed before commit.
+# Recovery must work in a NEW process, with no in-memory trap state.
+crashref="$tmp/app.releases/release.crashed"
+cp -a "$newref" "$crashref"
+printf '#!/bin/bash\n# partial admin file from crash\n' > "$crashref/crias-tui.sh"
+if (
+    update_prepare_journal "$newref" "$crashref" || exit 1
+    update_publish_release() {
+        ln -s "$crashref" "$tmp/crash-link" || return 1
+        mv -f -T "$tmp/crash-link" "$tmp/app" || return 1
+    }
+    UPDATE_NEW_REF="$crashref"
+    update_publish_release || exit 1
+    update_track_install "$crashref/crias-tui.sh" "$tmp/bin/crias-tui" 0755 || exit 1
+    kill -KILL "$BASHPID"
+); then
+    echo "FAIL: subprocesso SIGKILL deveria retornar falha" >&2
+    exit 1
+fi
+test "$(readlink -f "$tmp/app")" = "$crashref"
+grep -q 'partial admin file' "$tmp/bin/crias-tui"
+# Recovery in a FRESH Bash process, without in-memory state or a network.
+# The parent test shell sourced the updater earlier and still owns fd 9.
+flock -u 9 || true
+(
+    source "$root/crias-update.sh"
+    update_recover
+)
+test "$(readlink -f "$tmp/app")" = "$newref"
+test ! -d "$tmp/app.releases/.update-transaction"
+! grep -q 'partial admin file' "$tmp/bin/crias-tui"
+test "$(sha256sum "$tmp/minecraft/world/level.dat" | awk '{print $1}')" = "$worldhash"
+echo "OK: SIGKILL deixou journal persistente; proxima execucao restaurou link e scripts"
+
 # An update must refuse direct/nonversioned installations, without removing.
 mkdir -p "$tmp/ordinary"
 echo 'legacy' > "$tmp/ordinary/install.sh"
