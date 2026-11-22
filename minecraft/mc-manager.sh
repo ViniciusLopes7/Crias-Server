@@ -406,6 +406,12 @@ cmd_reconfigure_hardware() {
 
     detect_hardware_profile "$SERVER_DIR" "$forced_tier"
     compute_minecraft_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER" "$HW_AVAILABLE_RAM_MB" || return 1
+    # Preserve explicit RAM policy on hardware reconfiguration. Refuse stale
+    # manual Xmx if it exceeds today's cgroup/hardware safe ceiling.
+    local heap_mode heap_override
+    heap_mode="$(env_file_read_value "$RUNTIME_ENV" HEAP_MODE)"
+    heap_override="$(env_file_read_value "$RUNTIME_ENV" HEAP_OVERRIDE_MB)"
+    minecraft_heap_apply_policy "${heap_mode:-auto}" "${heap_override:-0}" || return 1
 
     # O systemd recebe a mesma cota de memoria calculada para runtime.env.
     # O helper valida e reverte o drop-in se daemon-reload/verify falhar.
@@ -434,6 +440,140 @@ cmd_reconfigure_hardware() {
     echo "MemoryHigh/MemoryMax aplicados: ${MC_SERVICE_MEMORY_HIGH_MB}/${MC_SERVICE_MEMORY_MAX_MB} MB"
     echo "Reserva para SO: ${MC_HOST_RESERVE_MB} MB | memoria JVM nativa: ${MC_NATIVE_OVERHEAD_MB} MB"
     warn "Heap, MemoryHigh e MemoryMax sincronizados. Servico continua parado; confira os limites e execute: sudo systemctl reset-failed $SERVICE_NAME; sudo systemctl start $SERVICE_NAME"
+}
+
+# Bounded, read-only Chunky progress polling over local RCON. Output is a
+# snapshot, never an unbounded stream: each poll creates and closes its TCP
+# connection; SSH disconnections and CTRL+C do not stop the Chunky task.
+cmd_chunky() {
+    local verb="${1:-}" interval="${2:-10}" pass port enabled failed=0
+    if [ "$verb" != watch ] || [ "$#" -gt 2 ] ||
+        ! [[ "$interval" =~ ^(5|10|15|20|30|60)$ ]]; then
+        err "Uso: chunky watch [5|10|15|20|30|60] (segundos)"
+        return 2
+    fi
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        err "Monitor Chunky exige TTY/SSH interativo."; return 1
+    fi
+    if ! command -v mcrcon >/dev/null 2>&1 || ! command -v timeout >/dev/null 2>&1; then
+        err "mcrcon ou timeout indisponivel; use os logs do servidor."; return 1
+    fi
+    enabled="$(get_prop "enable-rcon" false)"
+    pass="$(get_prop "rcon.password" "")"
+    port="$(get_prop "rcon.port" 25575)"
+    if [ "$enabled" != true ] || [ -z "$pass" ] ||
+        ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] ||
+        [ "$port" -gt 65535 ]; then
+        err "RCON nao configurado. Use Servidor > Configurar console RCON."; return 1
+    fi
+    printf 'Monitor Chunky: atualizacao a cada %ss. Ctrl+C volta ao Hub.\n' "$interval"
+    while systemctl is-active --quiet "$SERVICE_NAME"; do
+        printf '\033[H\033[2JChunky (a cada %s s; Ctrl+C para sair)\n' "$interval"
+        if MCRCON_PASSWORD="$pass" MCRCON_PASS="$pass" \
+            timeout --foreground --kill-after=3s 20s mcrcon -H 127.0.0.1 \
+                -P "$port" --timeout 12 --color never "chunky progress"; then
+            failed=0
+        else
+            failed=$((failed + 1))
+            warn "Falha de RCON ao consultar progresso ($failed/3)."
+            if [ "$failed" -ge 3 ]; then
+                err "Monitor interrompido. Confira os logs do Minecraft."; return 1
+            fi
+        fi
+        sleep "$interval" || return 0
+    done
+    warn "Minecraft parado; monitor Chunky encerrado."
+}
+
+# Set initial/maximum Java HEAP only. Never alter host RAM, service quota,
+# JVM native headroom, world files or running Minecraft. Changes take effect
+# the next time the Minecraft service is started.
+cmd_memory() {
+    local action="${1:-status}" amount="${2:-}" growth="${3:-}"
+    local mode override current_mode current_override
+    local unit_state effective_max desired_bytes current_xms current_xmx
+    case "$action" in
+        status)
+            [ "$#" -le 1 ] || { err "Uso: memory status"; return 2; }
+            if [ ! -f "$RUNTIME_ENV" ] || [ -L "$RUNTIME_ENV" ]; then
+                err "runtime.env ausente ou symlink."; return 1
+            fi
+            current_xms="$(env_file_read_value "$RUNTIME_ENV" MIN_RAM)"
+            current_xmx="$(env_file_read_value "$RUNTIME_ENV" MAX_RAM)"
+            current_mode="$(env_file_read_value "$RUNTIME_ENV" HEAP_MODE)"
+            current_override="$(env_file_read_value "$RUNTIME_ENV" HEAP_OVERRIDE_MB)"
+            printf 'Heap Java (-Xms): %s\nHeap Java (-Xmx): %s\n' "$current_xms" "$current_xmx"
+            printf 'Politica: %s\n' "${current_mode:-auto (legado)}"
+            if [ -n "$current_override" ] && [ "$current_override" != 0 ]; then
+                printf 'Limite manual: %s MiB\n' "$current_override"
+            fi
+            printf 'Minecraft: %s\n' "$(systemctl is-active "$SERVICE_NAME" 2>/dev/null || true)"
+            printf 'OBS: heap Java e diferente de memoria total do processo (systemd).\n'
+            return 0
+            ;;
+        fixed)
+            [ "$#" -eq 1 ] || { err "Uso: memory fixed"; return 2; }
+            mode=fixed; override=0 ;;
+        auto)
+            [ "$#" -eq 1 ] || { err "Uso: memory auto"; return 2; }
+            mode=auto; override=0 ;;
+        set)
+            [ "$#" -eq 3 ] || { err "Uso: memory set <MiB> <fixed|dynamic>"; return 2; }
+            if ! [[ "$amount" =~ ^[0-9]{3,6}$ ]]; then
+                err "Use um numero inteiro em MiB (ex.: 4096)."; return 2
+            fi
+            case "$growth" in
+                fixed) mode=custom-fixed ;;
+                dynamic) mode=custom-dynamic ;;
+                *) err "Use modo fixed ou dynamic."; return 2 ;;
+            esac
+            override="$amount"
+            ;;
+        *) err "Uso: memory [status|fixed|auto|set <MiB> <fixed|dynamic>]"; return 2 ;;
+    esac
+
+    manager_need_root "$SELF" memory "$@"
+    if [ ! -f "$HARDWARE_LIB" ] || [ ! -f "$MC_TUNING_LIB" ]; then
+        err "Bibliotecas de hardware/tuning ausentes"; return 1
+    fi
+    if ! validate_server_dir "$SERVER_DIR"; then
+        err "Diretorio Minecraft invalido"; return 1
+    fi
+    if [ ! -f "$RUNTIME_ENV" ] || [ -L "$RUNTIME_ENV" ]; then
+        err "runtime.env inexistente ou symlink; recusando"; return 1
+    fi
+    unit_state="$(systemctl show "$SERVICE_NAME.service" -p ActiveState --value 2>/dev/null || true)"
+    if [ "$unit_state" != inactive ] && [ "$unit_state" != failed ]; then
+        err "Pare o Minecraft antes de alterar Xms/Xmx (estado=${unit_state:-desconhecido})."
+        return 1
+    fi
+    systemctl cat "$SERVICE_NAME.service" >/dev/null 2>&1 || {
+        err "Unidade systemd do Minecraft ausente."; return 1
+    }
+    # shellcheck source=/dev/null
+    source "$HARDWARE_LIB"
+    # shellcheck source=/dev/null
+    source "$MC_TUNING_LIB"
+    detect_hardware_profile "$SERVER_DIR" ""
+    compute_minecraft_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" \
+        "$HW_DISK_TYPE" "$HW_TIER" "$HW_AVAILABLE_RAM_MB" || return 1
+    local auto_ceiling="${MC_MAX_RAM%M}"
+    minecraft_heap_apply_policy "$mode" "$override" || return 1
+
+    # Do not assume the existing systemd MemoryMax always matches today's
+    # hardware. Refuse a heap that cannot fit below its EFFECTIVE limit.
+    effective_max="$(systemctl show "$SERVICE_NAME.service" -p EffectiveMemoryMax --value 2>/dev/null || true)"
+    desired_bytes=$(( (${MC_MAX_RAM%M} + MC_NATIVE_OVERHEAD_MB) * 1048576 ))
+    if [[ "$effective_max" =~ ^[0-9]+$ ]] &&
+        [ "$effective_max" -lt "$desired_bytes" ]; then
+        err "Heap + folga nativa excedem MemoryMax efetivo. Execute reconfigure-hardware com Minecraft parado."
+        return 1
+    fi
+
+    minecraft_heap_update_runtime "$RUNTIME_ENV" "$mode" "$override" || return 1
+    printf 'Heap agendado: Xms=%s  Xmx=%s (maximo seguro automatico=%s MiB)\n' \
+        "$MC_MIN_RAM" "$MC_MAX_RAM" "$auto_ceiling"
+    printf 'Politica: %s. Minecraft continua parado; inicie-o manualmente para aplicar.\n' "$mode"
 }
 
 cmd_health() {
