@@ -117,13 +117,40 @@ manager_cmd_restart() {
     systemctl restart "$service_name"
 }
 
+# Resumo operacional pequeno para o Hub (logs e hardware ficam em menus
+# especificos). systemctl status despejava cgroup, processos e journal,
+# e sensors adicionava ruido sem ajudar na operacao diaria.
 manager_cmd_status() {
-    local service_name="$1"
-    systemctl status "$service_name" --no-pager || true
-
-    if command -v sensors >/dev/null 2>&1; then
-        printf '\n[Hardware]\n'
-        sensors 2>/dev/null || true
+    local service_name="$1" unit="${1}.service"
+    local loaded active state mem restarts
+    if ! command -v systemctl >/dev/null 2>&1; then
+        printf 'Servidor: %s\nEstado: systemd indisponivel\n' "$service_name"
+        return 1
+    fi
+    loaded="$(systemctl show "$unit" -p LoadState --value 2>/dev/null || true)"
+    if [ "$loaded" != "loaded" ]; then
+        printf 'Servidor: %s\nEstado: servico nao instalado/encontrado\n' "$service_name"
+        return 1
+    fi
+    active="$(systemctl show "$unit" -p ActiveState --value 2>/dev/null || true)"
+    case "$active" in
+        active) state="rodando" ;;
+        inactive) state="parado" ;;
+        failed) state="falhou (consulte Diagnostico ou Logs)" ;;
+        activating) state="iniciando" ;;
+        deactivating) state="parando" ;;
+        *) state="desconhecido" ;;
+    esac
+    printf 'Servidor: %s\nEstado: %s\n' "$service_name" "$state"
+    if [ "$active" = active ]; then
+        mem="$(systemctl show "$unit" -p MemoryCurrent --value 2>/dev/null || true)"
+        if [[ "$mem" =~ ^[0-9]+$ ]]; then
+            printf 'RAM do servico: %s MiB\n' "$(( mem / 1024 / 1024 ))"
+        fi
+        restarts="$(systemctl show "$unit" -p NRestarts --value 2>/dev/null || true)"
+        if [[ "$restarts" =~ ^[0-9]+$ ]] && [ "$restarts" -gt 0 ]; then
+            printf 'Reinicios automaticos: %s\n' "$restarts"
+        fi
     fi
 }
 
