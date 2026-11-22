@@ -98,6 +98,7 @@ STACK_RUNTIME_SCRIPTS=(
 STACK_ADMIN_SCRIPTS=(
     "$MODULE_DIR/mc-manager.sh"
     "$MODULE_DIR/setup-cron.sh"
+    "$MODULE_DIR/install-mcrcon.sh"
 )
 STACK_SHARED_LIBS=(
     "$ROOT_DIR/shared/lib/common.sh"
@@ -237,6 +238,12 @@ stack_install_dependencies() {
         cpupower \
         lm_sensors \
         jq
+
+    # A falha no download do cliente de console nao pode impedir Minecraft de
+    # ser instalado. O comando setup-console tambem instala on demand.
+    if ! bash "$MODULE_DIR/install-mcrcon.sh"; then
+        print_warning "mcrcon interativo indisponivel agora; execute mc-manager.sh setup-console quando houver rede."
+    fi
 }
 
 install_mrpack_install() {
