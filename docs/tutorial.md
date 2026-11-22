@@ -95,13 +95,17 @@ O instalador disponibiliza o hub antes de instalar os serviços e mods; em uma f
 ```bash
 sudo crias-tui
 sudo crias-tui --doctor
-# Menu: Servidor / Monitoramento / Backup / Sistema / Sair
+# Menu: Servidor / Arquivos / Voice Chat (Minecraft) / Monitoramento / Atualizações / Backup / Sistema / Sair
 ```
+
+### Atualizações sem reinstalar os mundos
+
+Pelo Hub, entre em **Atualizações** para consultar a release Crias-Server e atualizar Hub/scripts administrativos. Uma atualização do Crias-Server não deve executar o instalador completo do jogo. O Arch Linux usa um fluxo separado de manutenção e confirmação; atualização de modpacks não é automática. Veja [guia de atualizações](updates.md).
 
 ### Console do jogo
 
 ```bash
-# Minecraft (requer mcrcon via AUR)
+# Minecraft (cliente interativo mcrcon instalado pelo Hub, sob demanda)
 mcconsole
 
 # Terraria (logs em tempo real — sem RCON nativo)
