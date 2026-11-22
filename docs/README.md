@@ -13,7 +13,8 @@ Este índice organiza os guias por tarefa. Comece pelo tutorial para instalar; c
 
 ## Como usar esta documentação
 
-- **Primeira instalação ou atualização:** [tutorial](tutorial.md).
+- **Primeira instalação:** [tutorial](tutorial.md).
+- **Atualizar Hub/scripts ou pacotes Arch:** [atualizações](updates.md) sem reinstalar o jogo.
 - **Servidor não inicia ou TUI ausente:** [TUI e recuperação](tui.md) e [ajustes de memória](hardware-tuning.md).
 - **Importar modpack próprio:** [Minecraft e `.mrpack`](minecraft/modpacks.md).
 - **Restaurar mundo:** [procedimento de backup e restauração](restore.md), começando pela verificação do arquivo.
@@ -27,6 +28,7 @@ Este índice organiza os guias por tarefa. Comece pelo tutorial para instalar; c
 | [restore.md](restore.md) | Restore de backups (passo-a-passo Minecraft + Terraria) |
 | [Tailscale.md](Tailscale.md) | Conexão via Tailscale (VPN + Funnel para crias-agent) |
 | [tui.md](tui.md) | TUI (gum) — como funciona, fallback, atalhos, mini-wiki |
+| [updates.md](updates.md) | Releases Crias-Server sem reinstalar Minecraft/Terraria; atualizações Arch com confirmação |
 | [gui-feasibility.md](gui-feasibility.md) | Estudo de viabilidade de GUI web (CasaOS-style, tier-gated) |
 
 ## Stack Minecraft
