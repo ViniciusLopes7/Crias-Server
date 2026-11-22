@@ -299,16 +299,24 @@ main() {
                 esac
                 ;;
             "📁 Arquivos")
-                local files_choice
+                local files_choice files_area
                 files_choice=$(hub_choose "Arquivos do servidor ($stack):" \
-                    "Abrir gerenciador de arquivos (Midnight Commander)" \
+                    "Pasta principal do servidor" \
+                    "Mods do servidor" \
+                    "Configuracoes (config)" \
+                    "Mundo atual" \
+                    "Backups locais" \
+                    "Logs locais" \
                     "Instalar gerenciador de arquivos" \
                     "← Voltar") || continue
+                files_area=""
                 case "$files_choice" in
-                    "Abrir gerenciador"*)
-                        # O manager abre mc como usuario do jogo, nunca como root.
-                        sudo "$manager_script" files || true
-                        ;;
+                    "Pasta principal"*) files_area="root" ;;
+                    "Mods do servidor") files_area="mods" ;;
+                    "Configuracoes"*) files_area="config" ;;
+                    "Mundo atual") files_area="world" ;;
+                    "Backups locais") files_area="backups" ;;
+                    "Logs locais") files_area="logs" ;;
                     "Instalar gerenciador"*)
                         local confirm_install
                         confirm_install=$(hub_choose "Instalar pacote 'mc' do repositorio oficial Arch?" \
@@ -320,6 +328,13 @@ main() {
                         ;;
                     "← Voltar") continue ;;
                 esac
+                if [ -n "$files_area" ]; then
+                    # Abre direto na pasta escolhida; o manager executa o mc
+                    # como usuario do jogo, jamais como root.
+                    if ! sudo "$manager_script" files "$files_area"; then
+                        read -r -p "Enter para voltar..." _ || true
+                    fi
+                fi
                 ;;
             "🎙️ Voice Chat")
                 if [ "$stack" != "minecraft" ]; then continue; fi
