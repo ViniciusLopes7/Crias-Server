@@ -286,7 +286,7 @@ main() {
                     "Iniciar servidor") sudo "$manager_script" start ;;
                     "Parar servidor") sudo "$manager_script" stop ;;
                     "Reiniciar servidor") sudo "$manager_script" restart ;;
-                    "Status do servidor") sudo "$manager_script" status; read -r -p "Enter para voltar..." _ || true ;;
+                    "Status do servidor") sudo "$manager_script" status || true; read -r -p "Enter para voltar..." _ || true ;;
                     "Console SSH (estavel)"|"Console interativo")
                         if ! sudo "$manager_script" console; then
                             echo "[Hub] Console encerrado com erro. Verifique Servidor → Logs ou Diagnostico."
