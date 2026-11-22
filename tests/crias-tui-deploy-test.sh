@@ -25,11 +25,11 @@ mapfile -t menu_order < <(
 )
 expected_order=("🎮 Servidor" "💾 Backup" "📁 Arquivos" "🎙️ Voice Chat" \
     "📊 Monitoramento" "🔄 Atualizações" "⚙️  Sistema" "🩺 Diagnóstico" "🚪 Sair")
-[ "\${#menu_order[@]}" = "\${#expected_order[@]}" ] || {
+[ "${#menu_order[@]}" = "${#expected_order[@]}" ] || {
     echo "FAIL: quantidade de itens do menu principal mudou" >&2; exit 1
 }
-for idx in "\${!expected_order[@]}"; do
-    [ "\${menu_order[$idx]}" = "\${expected_order[$idx]}" ] || {
+for idx in "${!expected_order[@]}"; do
+    [ "${menu_order[$idx]}" = "${expected_order[$idx]}" ] || {
         echo "FAIL: ordem inesperada no menu, posicao $idx" >&2; exit 1
     }
 done
