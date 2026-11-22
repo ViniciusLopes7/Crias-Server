@@ -221,6 +221,19 @@ jobs:
           bash tests/download-modrinth-test.sh
           python3 tests/docs-links-test.py
 
+  test-release-migration:
+    name: Real release migration (pinned GitHub ZIPs)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install migration test tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends curl unzip zip jq
+      - name: Migrate actual old release to published new and candidate updater
+        run: sudo bash tests/real-release-migration-test.sh
+
   test-shell-arch:
     name: Test Shell (Arch container)
     runs-on: ubuntu-22.04
@@ -480,7 +493,7 @@ jobs:
     # Antes: needs=[build-agent, build-bot] e os builds nao dependiam de
     # lint-shell/test-shell/test-shell-arch — uma release podia ser publicada
     # com a pipeline geral vermelha (testes Shell falhos).
-    needs: [build-agent, build-bot, lint-shell, test-shell, test-shell-arch, test-minecraft-jvm, test-arch-vm]
+    needs: [build-agent, build-bot, lint-shell, test-shell, test-shell-arch, test-release-migration, test-minecraft-jvm, test-arch-vm]
     if: |
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.create_release) ||
