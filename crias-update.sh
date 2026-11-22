@@ -8,7 +8,7 @@ UPDATE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # bootstrap permanecem em /opt/crias-server (link versionado). No repo local,
 # sourcear o caminho ao lado permite os testes sem rede.
 if [ ! -f "$UPDATE_SCRIPT_DIR/crias-bootstrap.sh" ]; then
-    UPDATE_SCRIPT_DIR="/opt/crias-server"
+    UPDATE_SCRIPT_DIR="${CRIAS_UPDATE_INSTALL_DIR:-/opt/crias-server}"
 fi
 if [ ! -f "$UPDATE_SCRIPT_DIR/crias-bootstrap.sh" ]; then
     echo "[ERRO] Bootstrap nao encontrado; verifique /opt/crias-server." >&2
@@ -91,12 +91,25 @@ update_download() {
 update_preflight() {
     local archive="$1" stage="$2"
     local entry dir file
-    # Reject absolute paths and traversal BEFORE extraction as root.
+    local listing="$stage/zip-entries.txt" metadata="$stage/zip-metadata.txt"
+    # Validate listing commands themselves (process-substitution masked errors).
+    if ! unzip -Z -1 "$archive" > "$listing" || ! unzip -Z -l "$archive" > "$metadata"; then
+        update_fail "ZIP invalido ou nao pode ser listado; abortando"
+        return 1
+    fi
+    # Check UNIX symlink metadata BEFORE extraction (a malicious archive could
+    # otherwise write through symlinks while being expanded as root).
+    if grep -qE '^l[-rwxstST]{9}[[:space:]]' "$metadata"; then
+        update_fail "ZIP contem symlinks; abortando antes de extrair"
+        return 1
+    fi
     while IFS= read -r entry || [ -n "$entry" ]; do
         case "$entry" in
-            /*|../*|*/../*|*/..|..|*\\*) update_fail "Caminho perigoso no ZIP"; return 1 ;;
+            ""|/*|../*|*/../*|*/..|..|*\\*)
+                update_fail "Caminho perigoso no ZIP: $entry"; return 1 ;;
         esac
-    done < <(unzip -Z -1 "$archive")
+    done < "$listing"
+    # Validated paths + metadata before unpacking as root.
     if ! unzip -q "$archive" -d "$stage"; then
         update_fail "Falha ao extrair arquivo de release"
         return 1
@@ -106,11 +119,11 @@ update_preflight() {
         dir="$(find "$stage" -mindepth 1 -maxdepth 1 -type d -exec test -f '{}/install.sh' \; -print -quit)"
     fi
     [ -n "$dir" ] && [ -f "$dir/install.sh" ] || { update_fail "Release sem install.sh"; return 1; }
-    # Disallow symlinks in distributed scripts and nested files.
     if [ -n "$(find "$dir" -type l -print -quit)" ]; then
-        update_fail "Release contem symlinks; abortando atualizacao de root"
+        update_fail "Release contem symlinks; abortando"
         return 1
     fi
+    UPDATE_SOURCE_DIR="$dir"
     for file in \
         install.sh crias-bootstrap.sh crias-tui.sh crias-update.sh \
         minecraft/mc-manager.sh minecraft/setup-cron.sh \
