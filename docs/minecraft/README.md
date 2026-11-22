@@ -26,11 +26,12 @@ sudo systemctl start minecraft                              # iniciar
 sudo systemctl stop minecraft                               # parar (graceful)
 sudo systemctl restart minecraft                            # reiniciar
 sudo systemctl status minecraft                             # status systemd
-sudo /usr/local/libexec/crias/mc-manager.sh status             # status + hardware
+sudo /usr/local/libexec/crias/mc-manager.sh status             # status compacto (estado e RAM do servico)
 sudo /usr/local/libexec/crias/mc-manager.sh logs recent        # ultimas 150 linhas, sem seguir
 sudo /usr/local/libexec/crias/mc-manager.sh logs alerts        # linhas WARN/ERROR/Exception/OOM
 sudo /usr/local/libexec/crias/mc-manager.sh logs boot          # logs do boot atual
-sudo /usr/local/libexec/crias/mc-manager.sh console            # console RCON interativo
+sudo /usr/local/libexec/crias/mc-manager.sh console            # console SSH estavel; 1 conexao RCON por comando
+sudo /usr/local/libexec/crias/mc-manager.sh console --tui      # console RCON em tela cheia (opcional)
 sudo /usr/local/libexec/crias/mc-manager.sh backup             # backup imediato (online requer RCON)
 sudo /usr/local/libexec/crias/mc-manager.sh health             # porta + RCON
 sudo /usr/local/libexec/crias/mc-manager.sh hardware-report    # perfil aplicado
@@ -38,6 +39,31 @@ sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware        # recali
 sudo /usr/local/libexec/crias/mc-manager.sh reconfigure-hardware HIGH   # forçar tier
 sudo /usr/local/libexec/crias/mc-manager.sh setup-cron      # configurar timer de backup
 ```
+
+### Console RCON pelo SSH
+
+O menu **Servidor → Console SSH (estável)** usa uma nova conexão local RCON para cada comando, em vez de manter uma conexão TCP aberta e uma TUI em tela cheia. Se um comando perder a conexão ou atingir o timeout, o gerenciador informa a falha **sem executar novamente o comando** (evita comandos duplicados), e permite a próxima tentativa. Após três falhas seguidas ele retorna ao Hub. Digite `sair` ou use Ctrl+D para fechar.
+
+Para a interface alternativa, use **Servidor → Console em tela cheia (avançado)**. A saída inesperada da interface não deve encerrar o Hub. A opção padrão não mostra os logs em tempo real: use **Servidor → Logs → Acompanhar ao vivo** para isso.
+
+Se a **sessão SSH inteira** cair (e não apenas a conexão RCON), isso é um problema diferente: examine `journalctl -u sshd -b --no-pager -n 80`, `journalctl -u tailscaled -b --no-pager -n 80` e `journalctl -k -b --no-pager | grep -Ei 'oom|killed|memory'` antes de atribuir a falha ao console. Se ocorrer por inatividade de rede, configure keepalive no **cliente SSH**, por exemplo `ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -t usuario@IP_TAILSCALE`. Isso não garante estabilidade quando o servidor estiver travando por RAM/CPU.
+
+### Pré-geração com Chunky
+
+O Chunky (mod ou plugin compatível com o loader instalado) gera terreno dentro do próprio processo Minecraft. Confirme no console que o comando `chunky` existe e faça backup antes de iniciar. Para começar em uma região controlada no Overworld, digite separadamente:
+
+```text
+chunky world minecraft:overworld
+chunky shape square
+chunky center 0 0
+chunky radius 1500
+chunky selection
+chunky start
+```
+
+O nome da dimensão pode variar; confira os mundos aceitos pelo Chunky se `minecraft:overworld` não funcionar. O **raio é em blocos** (não chunks), então 1500 cobre 3000 × 3000 blocos em formato quadrado. Comece com raios menores em modpacks pesados e monitore CPU, RAM e espaço em disco. Para acompanhar use `chunky progress`, para pausar use `chunky pause`, e para retomar use `chunky continue`. É possível fechar o console e o SSH sem interromper a tarefa **desde que o serviço Minecraft continue rodando**; em reinicializações, consulte o progresso e retome explicitamente se necessário. Não inicie Nether/End simultaneamente em uma máquina limitada. Não use `chunky trim` sem backup: ele apaga chunks.
+
+Referência: [Wiki oficial do Chunky](https://github.com/pop4959/Chunky/wiki/Commands).
 
 ### Como ler os logs do Minecraft
 
