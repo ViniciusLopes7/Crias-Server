@@ -206,6 +206,55 @@ cmd_hardware_report() {
     fi
 }
 
+
+# File browsing is administrative in its entrypoint, but the manager itself
+# must NEVER grant the full-screen file browser root privileges. Only files
+# accessible to the game service account can be modified.
+cmd_files() {
+    if [ "$#" -ne 0 ]; then
+        err "Uso: files (sem argumentos)"
+        return 2
+    fi
+    manager_need_root "$SELF" files
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        err "O gerenciador de arquivos precisa de um terminal interativo (TTY)."
+        return 1
+    fi
+    if ! command -v mc >/dev/null 2>&1; then
+        err "Midnight Commander nao instalado. No Hub, escolha 'Instalar gerenciador de arquivos'."
+        return 1
+    fi
+    if ! id "$SERVER_USER" >/dev/null 2>&1 || ! validate_server_dir "$SERVER_DIR" || [ ! -d "$SERVER_DIR" ]; then
+        err "Usuario ou diretorio do servidor invalido; recusando explorador."
+        return 1
+    fi
+    echo "[Arquivos] Abrindo $SERVER_DIR como usuario $SERVER_USER, sem privilegios de root."
+    # Midnight Commander may run a shell/editor; as the game user it can
+    # edit game configuration but cannot write to root-owned admin scripts.
+    sudo -u "$SERVER_USER" -- env HOME="$SERVER_DIR" mc "$SERVER_DIR"
+}
+
+cmd_setup_files() {
+    if [ "$#" -ne 0 ]; then
+        err "Uso: setup-files (sem argumentos)"
+        return 2
+    fi
+    manager_need_root "$SELF" setup-files
+    if command -v mc >/dev/null 2>&1; then
+        log "Midnight Commander ja disponivel."
+        return 0
+    fi
+    if ! command -v pacman >/dev/null 2>&1; then
+        err "pacman nao encontrado; instale 'mc' manualmente."
+        return 1
+    fi
+    # Package from the official Arch repository; only at user's request.
+    pacman -S --needed --noconfirm mc || {
+        err "Falha na instalacao do Midnight Commander."
+        return 1
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Dynamic help. Lista cmd_* functions via declare -F e mapeia para descrição.
 # Per-stack managers setam MANAGER_DESC_CONSOLE e MANAGER_DESC_HEALTH antes de
@@ -230,6 +279,8 @@ EOF
             console)                    desc="${MANAGER_DESC_CONSOLE:-Console do servico}" ;;
             setup-console)              desc="Instala mcrcon e configura RCON (sem reiniciar Minecraft)" ;;
             monitor)                    desc="Ferramentas de monitoramento: btop/htop/ncdu (cpu|disk|net)" ;;
+            files)                      desc="Explora arquivos do servidor com Midnight Commander (usuario do jogo)" ;;
+            setup-files)                desc="Instala Midnight Commander do repositorio Arch sob demanda" ;;
             health)                     desc="${MANAGER_DESC_HEALTH:-Health check do servidor}" ;;
             backup)                     desc="Executa backup imediato" ;;
             setup-cron)                 desc="Configura timer systemd de backup" ;;
@@ -254,6 +305,8 @@ manager_dispatch() {
         status) shift; cmd_status "$@" ;;
         logs) shift; cmd_logs "$@" ;;
         console) shift; cmd_console "$@" ;;
+        files) shift; cmd_files "$@" ;;
+        setup-files) shift; cmd_setup_files "$@" ;;
         setup-console) shift; cmd_setup_console "$@" ;;
         monitor) shift; cmd_monitor "$@" ;;
         health) shift; cmd_health "$@" ;;
