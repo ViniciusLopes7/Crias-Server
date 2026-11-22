@@ -4,6 +4,16 @@
 set -euo pipefail
 
 UPDATE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# O comando de producao fica em /usr/local/bin, mas as bibliotecas e o
+# bootstrap permanecem em /opt/crias-server (link versionado). No repo local,
+# sourcear o caminho ao lado permite os testes sem rede.
+if [ ! -f "$UPDATE_SCRIPT_DIR/crias-bootstrap.sh" ]; then
+    UPDATE_SCRIPT_DIR="/opt/crias-server"
+fi
+if [ ! -f "$UPDATE_SCRIPT_DIR/crias-bootstrap.sh" ]; then
+    echo "[ERRO] Bootstrap nao encontrado; verifique /opt/crias-server." >&2
+    exit 1
+fi
 # shellcheck source=/dev/null
 source "$UPDATE_SCRIPT_DIR/crias-bootstrap.sh"
 
@@ -30,10 +40,10 @@ update_fetch_release() {
     command -v curl >/dev/null 2>&1 || { update_fail "curl indisponivel"; return 1; }
     command -v jq >/dev/null 2>&1 || { update_fail "jq indisponivel"; return 1; }
     if ! crias_fetch_release_urls; then return 1; fi
-    case "${CRIAS_RELEASE_TAG_NAME:-}" in
-        v[0-9A-Za-z._-]*) ;;
-        *) update_fail "Tag de release inesperada; abortando."; return 1 ;;
-    esac
+    if ! [[ "${CRIAS_RELEASE_TAG_NAME:-}" =~ ^v[0-9A-Za-z._-]+$ ]]; then
+        update_fail "Tag de release inesperada; abortando."
+        return 1
+    fi
     # Nao aceitar assets arbitrarios, mesmo que um JSON inesperado seja lido.
     case "$CRIAS_ZIP_URL" in
         "https://github.com/$CRIAS_REPO/releases/download/$CRIAS_RELEASE_TAG_NAME/$CRIAS_ASSET_ZIP") ;;
