@@ -21,6 +21,41 @@ else
     CYAN=''; GREEN=''; YELLOW=''; NC=''
 fi
 
+# gum ja deve vir do bootstrap/install.sh. Se removido depois, o Hub
+# tenta reparar o pacote em sessao interativa, sem reinstalar o jogo.
+# --doctor/--help e usos sem TTY nunca fazem alteracoes no host.
+hub_ensure_gum() {
+    [ -t 0 ] && [ -t 1 ] || return 0
+    if command -v gum >/dev/null 2>&1 && gum --version >/dev/null 2>&1; then
+        return 0
+    fi
+    printf '%s\n' "[Hub] gum ausente ou danificado; tentando reparar o menu interativo..."
+    if ! command -v pacman >/dev/null 2>&1; then
+        printf '%s\n' "[AVISO] pacman indisponivel. Menu numerado continua disponivel." >&2
+        return 1
+    fi
+    if [ "$(id -u)" -eq 0 ]; then
+        if ! pacman -S --noconfirm gum; then
+            printf '%s\n' "[AVISO] Falha ao instalar gum. Menu numerado continua disponivel." >&2
+            return 1
+        fi
+    else
+        if ! command -v sudo >/dev/null 2>&1; then
+            printf '%s\n' "[AVISO] Sem sudo para instalar gum. Use: sudo pacman -S gum" >&2
+            return 1
+        fi
+        if ! sudo pacman -S --noconfirm gum; then
+            printf '%s\n' "[AVISO] Falha ao instalar gum. Menu numerado continua disponivel." >&2
+            return 1
+        fi
+    fi
+    if ! command -v gum >/dev/null 2>&1 || ! gum --version >/dev/null 2>&1; then
+        printf '%s\n' "[AVISO] gum ainda nao responde. Verifique o pacote no Arch." >&2
+        return 1
+    fi
+    printf '%s\n' "[Hub] gum pronto. Use setas e Enter para navegar."
+}
+
 # Menu numerado se gum nao estiver presente; mantem TUI acessivel.
 hub_choose() {
     local header="$1" picked opt i=1
@@ -184,6 +219,9 @@ main() {
         show_diagnostics
         return 0
     fi
+
+    # Em TTY, recuperar o menu por setas se o gum tiver sido removido.
+    hub_ensure_gum || true
 
     local manager_script
     manager_script="$(get_manager_script "$stack")"
