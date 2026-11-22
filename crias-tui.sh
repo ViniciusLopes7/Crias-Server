@@ -273,8 +273,9 @@ main() {
                 local srv_choice
                 if [ "$stack" = "minecraft" ]; then
                     srv_choice=$(hub_choose "Servidor — Minecraft" \
-                        "Status do servidor" "Console interativo" "Logs do servidor" \
+                        "Status do servidor" "Console SSH (estavel)" "Logs do servidor" \
                         "Iniciar servidor" "Reiniciar servidor" "Parar servidor" \
+                        "Console em tela cheia (avancado)" "Ajuda: Chunky" \
                         "Configurar console RCON" "← Voltar") || continue
                 else
                     srv_choice=$(hub_choose "Servidor — Terraria" \
@@ -286,7 +287,40 @@ main() {
                     "Parar servidor") sudo "$manager_script" stop ;;
                     "Reiniciar servidor") sudo "$manager_script" restart ;;
                     "Status do servidor") sudo "$manager_script" status; read -r -p "Enter para voltar..." _ || true ;;
-                    "Console interativo") sudo "$manager_script" console ;;
+                    "Console SSH (estavel)"|"Console interativo")
+                        if ! sudo "$manager_script" console; then
+                            echo "[Hub] Console encerrado com erro. Verifique Servidor → Logs ou Diagnostico."
+                            read -r -p "Enter para voltar..." _ || true
+                        fi
+                        ;;
+                    "Console em tela cheia (avancado)")
+                        if ! sudo "$manager_script" console --tui; then
+                            echo "[Hub] Sessao RCON encerrada. Use Console SSH para evitar conexoes persistentes."
+                            read -r -p "Enter para voltar..." _ || true
+                        fi
+                        ;;
+                    "Ajuda: Chunky")
+                        cat <<'CHUNKY_HELP'
+=== Chunky: pre-geracao segura ===
+1. Faça um backup do mundo antes de iniciar.
+2. Abra Console SSH (estavel) e digite um comando por vez:
+   chunky world minecraft:overworld
+   chunky shape square
+   chunky center 0 0
+   chunky radius 1500
+   chunky selection
+   chunky start
+3. Acompanhar: chunky progress
+   Pausar:      chunky pause
+   Retomar:     chunky continue
+4. Digite sair para deixar o console. O Chunky continua no
+   servidor enquanto o Minecraft estiver rodando.
+Obs.: o identificador da dimensao varia conforme a versao.
+      Se world falhar, consulte chunky world e suas sugestoes.
+      Comece pequeno; acompanhe o uso de RAM e disco.
+CHUNKY_HELP
+                        read -r -p "Enter para voltar..." _ || true
+                        ;;
                     "Configurar console RCON")
                         sudo "$manager_script" setup-console || true
                         read -r -p "Enter para voltar..." _ || true
@@ -493,7 +527,7 @@ main() {
     done
 
     echo ""
-    echo "${GREEN}Crias-Server Hub encerrado.${NC}"
+    printf '%b\n' "${GREEN}Crias-Server Hub encerrado.${NC}"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
