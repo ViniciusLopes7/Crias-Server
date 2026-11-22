@@ -105,6 +105,44 @@ sudo cp seu_icon.png /opt/minecraft-server/server-icon.png
 sudo chown minecraft:minecraft /opt/minecraft-server/server-icon.png
 ```
 
+## Hub central: arquivos e Simple Voice Chat
+
+O `crias-tui` é a interface principal para administrar o servidor via terminal ou SSH sobre Tailscale. O menu usa **setas ↑/↓ e Enter** quando o `gum` está instalado (o bootstrap instala esse componente); se não houver `gum` ou TTY, o menu numérico continua disponível. O redesenho visual completo e a paridade com todas as funções avançadas estão registrados no [roadmap do Hub](https://github.com/ViniciusLopes7/Crias-Server/issues/22).
+
+### Gerenciar arquivos pelo Hub
+
+Abra `crias-tui > Arquivos > Abrir gerenciador de arquivos`. O **Midnight Commander** oferece duas colunas, navegação por setas, F3 para visualizar, F4 para editar e F10 para sair. Se estiver ausente, use `Arquivos > Instalar gerenciador de arquivos`, que instala `mc` pelo repositório oficial do Arch somente por escolha do administrador.
+
+**Segurança:** o gerenciador é iniciado como o usuário do Minecraft, **não como root**. Assim ele pode editar arquivos do próprio mundo e configurações graváveis pelo jogo, mas não scripts administrativos root:root. Não é necessário instalar ambiente gráfico no Arch. Para Terraria a mesma opção usa o usuário do Terraria.
+
+### Simple Voice Chat (Forge 1.20.1 e outros loaders)
+
+No Hub, escolha `Voice Chat`. As opções permitem **ver o estado do mod**, **alterar a porta UDP**, **editar a configuração** no Nano e consultar as orientações de rede. O arquivo do mod fica em:
+
+```text
+/opt/minecraft-server/config/voicechat/voicechat-server.properties
+```
+
+O arquivo costuma ser criado quando o servidor inicia com o mod instalado. A configuração recomendada para jogadores que entram diretamente pelo **mesmo IP Tailscale** é:
+
+```properties
+port=24454
+bind_address=
+voice_host=
+max_voice_distance=48
+whisper_distance=24
+```
+
+A configuração padrão acima usa uma porta **UDP separada** do jogo (`server-port=25565` normalmente é TCP). Se estiver usando nftables com política de entrada DROP, libere a porta de voz **somente pela interface Tailscale**:
+
+```nft
+iifname "tailscale0" udp dport 24454 accept
+```
+
+Não abra a porta de voz na WAN/roteador se todos os jogadores estiverem na tailnet. O Hub **não altera o firewall automaticamente** — isso evita cortar seu SSH por uma regra incorreta. Alterar a porta/configuração não reinicia Minecraft; as alterações precisam ser aplicadas em um reinício planejado. Para diagnóstico real, execute `/voicechat test <jogador>` dentro do jogo: ver uma porta UDP em escuta no host não comprova o acesso de outro jogador.
+
+O Simple Voice Chat precisa estar instalado em versões compatíveis tanto no **servidor** quanto no **cliente**. Referências oficiais: [Configuração](https://modrepo.de/minecraft/voicechat/wiki/server_config) e [Instalação no servidor](https://modrepo.de/minecraft/voicechat/wiki/server_setup).
+
 ## Backup com RCON save-lock
 
 Para garantir backups consistentes com servidor online, o `backup-cron.sh` usa RCON para pausar saves durante o `tar`:
