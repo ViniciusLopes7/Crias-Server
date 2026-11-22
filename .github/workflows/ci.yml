@@ -206,6 +206,7 @@ jobs:
           bash tests/readiness-regression-test.sh
           bash tests/crias-tui-deploy-test.sh
           bash tests/hub-gum-test.sh
+          bash tests/hub-ssh-console-status-test.sh
           bash tests/hub-files-test.sh
           bash tests/crias-update-test.sh
           bash tests/remote-access-setup-test.sh
