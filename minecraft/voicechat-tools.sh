@@ -47,7 +47,7 @@ status() {
     echo "voice_host: $(prop "$CONF" voice_host '<automatico>')"
     echo "bind_address: $(prop "$CONF" bind_address '<server-ip>')"
     if command -v ss >/dev/null 2>&1 && [[ "$port" =~ ^[0-9]+$ ]]; then
-        if ss -H -lun | grep -Eq "[:.]$port[[:space:]]"; then
+        if ss -H -lun | grep -Eq "[:.]${port}[[:space:]]"; then
             echo "Socket: UDP $port em escuta no host"
         else
             echo "Socket: UDP $port nao identificado localmente"
