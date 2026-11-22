@@ -18,6 +18,26 @@ for item in "🔄 Atualizações" "crias-update" "arch-check" "arch-apply" "📁
     grep -Fq "$item" "$root/crias-tui.sh" || { echo "FAIL: falta no Hub: $item" >&2; exit 1; }
 done
 
+# Main-menu priority should remain consistent with the tasks operators use.
+mapfile -t menu_order < <(
+    grep -F -A9 'choice=$(hub_choose "Menu principal — Minecraft"' "$root/crias-tui.sh" |
+        tail -n 9 | sed -E 's/^[[:space:]]+"([^"]+)".*/\1/'
+)
+expected_order=("🎮 Servidor" "💾 Backup" "📁 Arquivos" "🎙️ Voice Chat" \
+    "📊 Monitoramento" "🔄 Atualizações" "⚙️  Sistema" "🩺 Diagnóstico" "🚪 Sair")
+[ "${#menu_order[@]}" = "${#expected_order[@]}" ] || {
+    echo "FAIL: quantidade de itens do menu principal mudou" >&2; exit 1
+}
+for idx in "${!expected_order[@]}"; do
+    [ "${menu_order[$idx]}" = "${expected_order[$idx]}" ] || {
+        echo "FAIL: ordem inesperada no menu, posicao $idx" >&2; exit 1
+    }
+done
+# The border must close on BOTH text rows in the Hub header.
+[ "$(grep -Fc "printf '%b│%b %-42s %b│%b" "$root/crias-tui.sh")" = 2 ] || {
+    echo "FAIL: moldura do cabecalho nao fecha nas duas linhas" >&2; exit 1
+}
+
 # Deploy happens before the heavyweight stack installer begins.
 first="$(grep -n "^    deploy_crias_tui$" "$root/install.sh" | head -n1 | cut -d: -f1)"
 stack="$(grep -n "^    run_selected_stack_installer$" "$root/install.sh" | head -n1 | cut -d: -f1)"

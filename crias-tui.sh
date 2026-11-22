@@ -56,15 +56,26 @@ hub_ensure_gum() {
     printf '%s\n' "[Hub] gum pronto. Use setas e Enter para navegar."
 }
 
-# Menu numerado se gum nao estiver presente; mantem TUI acessivel.
+# Os chamadores usam choice=$(hub_choose ...). Em uma substituicao de comando,
+# stdout vira PIPE, portanto [ -t 1 ] sempre falha AQUI, mesmo via SSH/TTY.
+# Gum desenha o menu em stderr (terminal) e escreve a escolha em stdout.
+# Testamos stdin+stderr como TTY para manter as setas funcionais.
+hub_gum_interactive() {
+    [ -t 0 ] && [ -t 2 ] && [ "${TERM:-}" != "dumb" ] &&
+        command -v gum >/dev/null 2>&1 && gum --version >/dev/null 2>&1
+}
+
 hub_choose() {
     local header="$1" picked opt i=1
     shift
-    if command -v gum >/dev/null 2>&1 && [ -t 0 ] && [ -t 1 ]; then
-        gum choose --header="$header" "$@"
+    if hub_gum_interactive; then
+        gum choose --header="$header  ·  ↑/↓ mover  Enter selecionar  Esc voltar" \
+            --cursor="❯ " --height="$#" "$@"
         return $?
     fi
-    printf "%s\n" "$header" >&2
+    # Apenas ambientes realmente sem terminal interativo/gum usam numeros.
+    # Nunca prometer setas enquanto o fallback estiver ativo.
+    printf "%s (modo numerado)\n" "$header" >&2
     for opt in "$@"; do printf "  %s) %s\n" "$i" "$opt" >&2; i=$((i + 1)); done
     printf "Escolha (numero ou nome, Enter para voltar): " >&2
     IFS= read -r picked || return 1
@@ -186,18 +197,19 @@ get_service_name() {
 }
 
 show_header() {
-    local stack="$1"
-    local service="$2"
-    local status="parado"
+    local stack="$1" service="$2" status="parado"
     if systemctl is-active --quiet "$service" 2>/dev/null; then
         status="rodando"
     fi
+    local title="Crias-Server  |  Painel de controle"
+    local detail="Jogo: $stack    Estado: $status"
     echo ""
-    printf "${GREEN}╔══════════════════════════════════════════╗${NC}\n"
-    printf "${GREEN}║        Crias-Server Hub                ${NC}  ${NC}\n"
-    printf "${GREEN}╠══════════════════════════════════════════╣${NC}\n"
-    printf "${GREEN}║  Stack: %-10s  Status: %-10s   ${NC}  ${NC}\n" "$stack" "$status"
-    printf "${GREEN}╚══════════════════════════════════════════╝${NC}\n"
+    # Borda completa, largura fixa e sem truncamentos por sequencias ANSI.
+    printf '%b\n' "${GREEN}╭────────────────────────────────────────────╮${NC}"
+    printf '%b│%b %-42s %b│%b\n' "$GREEN" "$NC" "$title" "$GREEN" "$NC"
+    printf '%b\n' "${GREEN}├────────────────────────────────────────────┤${NC}"
+    printf '%b│%b %-42s %b│%b\n' "$GREEN" "$NC" "$detail" "$GREEN" "$NC"
+    printf '%b\n' "${GREEN}╰────────────────────────────────────────────╯${NC}"
     echo ""
 }
 
@@ -234,23 +246,23 @@ main() {
 
         local choice
         if [ "$stack" = "minecraft" ]; then
-            choice=$(hub_choose "Crias-Server Hub (↑/↓ + Enter para navegar):" \
+            choice=$(hub_choose "Menu principal — Minecraft" \
                 "🎮 Servidor" \
+                "💾 Backup" \
                 "📁 Arquivos" \
                 "🎙️ Voice Chat" \
                 "📊 Monitoramento" \
                 "🔄 Atualizações" \
-                "💾 Backup" \
                 "⚙️  Sistema" \
                 "🩺 Diagnóstico" \
                 "🚪 Sair") || break
         else
-            choice=$(hub_choose "Crias-Server Hub (↑/↓ + Enter para navegar):" \
+            choice=$(hub_choose "Menu principal — Terraria" \
                 "🎮 Servidor" \
+                "💾 Backup" \
                 "📁 Arquivos" \
                 "📊 Monitoramento" \
                 "🔄 Atualizações" \
-                "💾 Backup" \
                 "⚙️  Sistema" \
                 "🩺 Diagnóstico" \
                 "🚪 Sair") || break
@@ -260,23 +272,26 @@ main() {
             "🎮 Servidor")
                 local srv_choice
                 if [ "$stack" = "minecraft" ]; then
-                    srv_choice=$(hub_choose "Servidor ($stack):" \
-                        "Start" "Stop" "Restart" "Status" "Console" "Configurar console RCON" "Logs" "← Voltar") || continue
+                    srv_choice=$(hub_choose "Servidor — Minecraft" \
+                        "Status do servidor" "Console interativo" "Logs do servidor" \
+                        "Iniciar servidor" "Reiniciar servidor" "Parar servidor" \
+                        "Configurar console RCON" "← Voltar") || continue
                 else
-                    srv_choice=$(hub_choose "Servidor ($stack):" \
-                        "Start" "Stop" "Restart" "Status" "Console" "Logs" "← Voltar") || continue
+                    srv_choice=$(hub_choose "Servidor — Terraria" \
+                        "Status do servidor" "Console interativo" "Logs do servidor" \
+                        "Iniciar servidor" "Reiniciar servidor" "Parar servidor" "← Voltar") || continue
                 fi
                 case "$srv_choice" in
-                    "Start") sudo "$manager_script" start ;;
-                    "Stop") sudo "$manager_script" stop ;;
-                    "Restart") sudo "$manager_script" restart ;;
-                    "Status") sudo "$manager_script" status; read -r -p "Enter..." ;;
-                    "Console") sudo "$manager_script" console ;;
+                    "Iniciar servidor") sudo "$manager_script" start ;;
+                    "Parar servidor") sudo "$manager_script" stop ;;
+                    "Reiniciar servidor") sudo "$manager_script" restart ;;
+                    "Status do servidor") sudo "$manager_script" status; read -r -p "Enter para voltar..." _ || true ;;
+                    "Console interativo") sudo "$manager_script" console ;;
                     "Configurar console RCON")
                         sudo "$manager_script" setup-console || true
                         read -r -p "Enter para voltar..." _ || true
                         ;;
-                    "Logs")
+                    "Logs do servidor")
                         if [ "$stack" = "minecraft" ]; then
                             local log_choice
                             log_choice=$(hub_choose "Logs do Minecraft:" \
@@ -304,9 +319,9 @@ main() {
                 local files_choice files_area
                 files_choice=$(hub_choose "Arquivos do servidor ($stack):" \
                     "Pasta principal do servidor" \
+                    "Mundo atual" \
                     "Mods do servidor" \
                     "Configuracoes (config)" \
-                    "Mundo atual" \
                     "Backups locais" \
                     "Logs locais" \
                     "Instalar gerenciador de arquivos" \
@@ -341,10 +356,10 @@ main() {
             "🎙️ Voice Chat")
                 if [ "$stack" != "minecraft" ]; then continue; fi
                 local vc_choice
-                vc_choice=$(hub_choose "Simple Voice Chat (Minecraft):" \
+                vc_choice=$(hub_choose "Simple Voice Chat — Minecraft" \
                     "Status e diagnostico" \
-                    "Alterar porta UDP" \
                     "Editar configuracao" \
+                    "Alterar porta UDP" \
                     "Ajuda Tailscale / firewall" \
                     "← Voltar") || continue
                 case "$vc_choice" in
@@ -432,13 +447,13 @@ main() {
                 ;;
             "💾 Backup")
                 local bk_choice
-                bk_choice=$(hub_choose "Backup:" \
+                bk_choice=$(hub_choose "Backups do servidor" \
                     "Backup agora" \
-                    "Configurar timer systemd" \
+                    "Configurar backups automaticos" \
                     "← Voltar") || continue
                 case "$bk_choice" in
                     "Backup agora") sudo "$manager_script" backup ;;
-                    "Configurar timer systemd") sudo "$manager_script" setup-cron ;;
+                    "Configurar backups automaticos") sudo "$manager_script" setup-cron ;;
                     "← Voltar") continue ;;
                 esac
                 ;;
