@@ -273,7 +273,8 @@ main() {
                 local srv_choice
                 if [ "$stack" = "minecraft" ]; then
                     srv_choice=$(hub_choose "Servidor — Minecraft" \
-                        "Status do servidor" "Console SSH (estavel)" "Logs do servidor" \
+                        "Status do servidor" "Console SSH (estavel)" "Progresso Chunky (ao vivo)" \
+                        "Logs do servidor" "Memoria Java (Xms/Xmx)" \
                         "Iniciar servidor" "Reiniciar servidor" "Parar servidor" \
                         "Console em tela cheia (avancado)" "Ajuda: Chunky" \
                         "Configurar console RCON" "← Voltar") || continue
@@ -299,6 +300,70 @@ main() {
                             read -r -p "Enter para voltar..." _ || true
                         fi
                         ;;
+                    "Progresso Chunky (ao vivo)")
+                        local chunk_interval
+                        chunk_interval=$(hub_choose "Atualizar progresso do Chunky a cada:" \
+                            "10 segundos (recomendado)" "5 segundos" "30 segundos" "60 segundos" "← Voltar") || continue
+                        case "$chunk_interval" in
+                            "5 segundos") chunk_interval=5 ;;
+                            "10 segundos"*) chunk_interval=10 ;;
+                            "30 segundos") chunk_interval=30 ;;
+                            "60 segundos") chunk_interval=60 ;;
+                            *) continue ;;
+                        esac
+                        sudo "$manager_script" chunky watch "$chunk_interval" || true
+                        ;;
+                    "Memoria Java (Xms/Xmx)")
+                        local ram_choice ram_amount ram_growth ram_mode
+                        ram_choice=$(hub_choose "Heap Java (Minecraft deve estar parado para alterar):" \
+                            "Ver configuracao atual" \
+                            "Xms igual a Xmx (limite seguro automatico)" \
+                            "Definir Xmx manualmente" \
+                            "Voltar para tuning automatico" \
+                            "← Voltar") || continue
+                        case "$ram_choice" in
+                            "Ver configuracao atual")
+                                sudo "$manager_script" memory status || true
+                                read -r -p "Enter para voltar..." _ || true
+                                ;;
+                            "Xms igual a Xmx"*)
+                                echo "Requer Minecraft parado. Xms sera igual ao Xmx seguro calculado pelo host."
+                                ram_mode=$(hub_choose "Confirmar heap fixo? Sem reiniciar o servidor." \
+                                    "Confirmar heap fixo" "Cancelar") || continue
+                                if [ "$ram_mode" = "Confirmar heap fixo" ]; then
+                                    sudo "$manager_script" memory fixed || true
+                                    read -r -p "Enter para voltar..." _ || true
+                                fi
+                                ;;
+                            "Definir Xmx manualmente")
+                                echo "Valor em MiB; teto calculado pelo hardware. Minecraft deve estar parado."
+                                if hub_gum_interactive; then
+                                    ram_amount=$(gum input --header="Heap maximo em MiB (ex.: 4096):" --placeholder="4096") || continue
+                                else
+                                    read -r -p "Heap maximo (MiB): " ram_amount || continue
+                                fi
+                                [[ "$ram_amount" =~ ^[0-9]{3,6}$ ]] || { echo "[ERRO] Informe um inteiro em MiB."; read -r -p "Enter..." _ || true; continue; }
+                                ram_growth=$(hub_choose "Modo do heap:" \
+                                    "Fixo: Xms = Xmx (consome mais RAM)" \
+                                    "Adaptativo: Xms menor que Xmx" "← Voltar") || continue
+                                case "$ram_growth" in
+                                    "Fixo:"*) ram_mode=fixed ;;
+                                    "Adaptativo:"*) ram_mode=dynamic ;;
+                                    *) continue ;;
+                                esac
+                                sudo "$manager_script" memory set "$ram_amount" "$ram_mode" || true
+                                read -r -p "Enter para voltar..." _ || true
+                                ;;
+                            "Voltar para tuning automatico")
+                                ram_mode=$(hub_choose "Restaurar a politica automatica Xms/Xmx?" \
+                                    "Restaurar automatico" "Cancelar") || continue
+                                if [ "$ram_mode" = "Restaurar automatico" ]; then
+                                    sudo "$manager_script" memory auto || true
+                                    read -r -p "Enter para voltar..." _ || true
+                                fi
+                                ;;
+                        esac
+                        ;;
                     "Ajuda: Chunky")
                         cat <<'CHUNKY_HELP'
 === Chunky: pre-geracao segura ===
@@ -310,7 +375,9 @@ main() {
    chunky radius 1500
    chunky selection
    chunky start
-3. Acompanhar: chunky progress
+3. Atualizacoes automaticas no log: chunky quiet 10
+   Ou abra Servidor -> Progresso Chunky (ao vivo).
+   Consultar manualmente: chunky progress
    Pausar:      chunky pause
    Retomar:     chunky continue
 4. Digite sair para deixar o console. O Chunky continua no
