@@ -114,37 +114,50 @@ Para garantir backups consistentes com servidor online, o `backup-cron.sh` usa R
 3. `tar -I zstd` dos diretórios `world/`, `world_nether/`, `world_the_end/`
 4. `save-on` (reativa saves)
 
-### Pré-requisitos: mcrcon
+### Console interativo com mcrcon
 
-`mcrcon` não está nos repositórios oficiais do Arch Linux. Instale via AUR.
+O Crias-Server usa o [mcrcon moderno](https://github.com/mcrcon/mcrcon) (versão fixa `v1.3.0`): console em **tela cheia**, histórico de comandos pelas setas, sugestões com Tab, rolagem PgUp/PgDn e `F1` para ajuda. O instalador do Minecraft tenta instalar o cliente automaticamente; indisponibilidade de rede não impede o jogo de ser instalado. O pacote é baixado por HTTPS e o SHA-256 é conferido antes da instalação.
 
-> **Backup consistente:** por padrão, backups de Minecraft exigem
-> `mcrcon`, RCON habilitado e senha válida. Sem eles, o backup falha e não
-> publica um arquivo potencialmente inconsistente. A instalação do agente
-> Discord oferece habilitar o RCON. Para instalações existentes, confira
-> `BACKUP_REQUIRE_CONSISTENT` em `runtime.env`: um valor `false` antigo é
-> preservado e deve ser alterado para `true` se desejar esta proteção.
+**Ativar em uma instalação existente (sem reinstalar o mundo):**
 
 ```bash
-yay -S mcrcon
-# ou construir manualmente:
-git clone https://aur.archlinux.org/mcrcon.git
-cd mcrcon && makepkg -si
+# Exige os novos scripts administrativos implantados a partir desta versão.
+sudo /usr/local/libexec/crias/mc-manager.sh setup-console
+
+# Faça o reinício somente quando puder interromper o jogo:
+sudo systemctl restart minecraft
+
+# Abra um console de comandos interativo no terminal ou via SSH:
+sudo /usr/local/libexec/crias/mc-manager.sh console
+# ou crias-tui > Servidor > Console
 ```
 
-### Configurar RCON no server.properties
+O comando `setup-console` instala o cliente se preciso, gera uma senha forte **apenas quando não existe outra**, e preserva configurações do `server.properties` como `online-mode`, `level-name`, `motd`, `whitelist` e a senha antiga. O arquivo passa a ter permissões `0600` e pertencer ao usuário do servidor. **Não** reinicia o Minecraft por conta própria. No Hub há também `Servidor > Configurar console RCON`.
 
-O installer **não** configura RCON automaticamente (você precisa definir a senha). Edite `/opt/minecraft-server/server.properties`:
+Para atualizar **somente as ferramentas administrativas** a partir de um ZIP novo já extraído (sem reinstalar o servidor nem alterar o mundo), execute na pasta do projeto:
+
+```bash
+sudo install -D -o root -g root -m 0755 minecraft/mc-manager.sh /usr/local/libexec/crias/mc-manager.sh
+sudo install -D -o root -g root -m 0755 minecraft/install-mcrcon.sh /usr/local/libexec/crias/install-mcrcon.sh
+sudo install -D -o root -g root -m 0644 shared/lib/manager-common.sh /usr/local/libexec/crias/lib/manager-common.sh
+sudo install -D -o root -g root -m 0755 crias-tui.sh /usr/local/bin/crias-tui
+```
+
+**O console interativo é diferente dos logs:** RCON permite executar comandos e visualizar as respostas. Para mensagens contínuas de mods, erros e inicialização, use separadamente `mc-manager.sh logs`. Se RCON estiver ausente ou não houver TTY, `console` explica o problema em vez de abrir um fluxo de logs inesperado.
+
+**Proteção:** RCON tem privilégios de administrador e **não é criptografado**. O cliente se conecta a `127.0.0.1` **a partir do próprio host**, inclusive quando você entra por SSH via Tailscale. A configuração do Java pode escutar em mais interfaces; **bloqueie a porta TCP 25575 no firewall, inclusive para outros dispositivos da tailnet**, e nunca encaminhe essa porta no roteador. Não publique a senha nos logs, prints ou comandos com `-p`. Consulte [Segurança](../security.md).
+
+### Configuração RCON para administração
+
+O comando `setup-console` grava ou mantém estas propriedades:
 
 ```properties
 enable-rcon=true
-rcon.password=sua_senha_segura_aqui
 rcon.port=25575
+rcon.password=<senha-aleatoria-gerada-ou-preservada>
 ```
 
-Depois reinicie o servidor: `sudo systemctl restart minecraft`.
-
-> **Atenção:** se `rcon.password` contiver aspas duplas (`"`) ou newlines, o `crias-agent` não conseguirá gerar o `agent.yaml` válido. Use senha alfanumérica.
+Se já houver uma configuração RCON ativa e senha própria, ela é preservada. Se você usa o agente Discord com RCON, mantenha uma senha compatível com as restrições de configuração YAML do agente.
 
 ### Sem RCON
 
@@ -230,7 +243,7 @@ sudo journalctl -u minecraft-backup.service -n 50
 
 ### Console interativo não abre
 
-Requer `mcrcon` instalado (AUR). Veja a seção "Backup com RCON save-lock" acima para instruções de instalação.
+Execute `sudo /usr/local/libexec/crias/mc-manager.sh setup-console`, confira `enable-rcon=true` e reinicie o Minecraft quando puder. O console exige um terminal TTY (local ou SSH); ele não funciona ao redirecionar stdin para arquivo ou pipe. Use `logs recent` separadamente para inspecionar falhas do servidor.
 
 ## Veja também
 
