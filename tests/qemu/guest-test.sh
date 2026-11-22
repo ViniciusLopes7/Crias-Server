@@ -45,6 +45,7 @@ bash tests/minecraft-voicechat-test.sh
 bash tests/crias-tui-deploy-test.sh
 bash tests/hub-gum-test.sh
 bash tests/hub-files-test.sh
+bash tests/crias-update-test.sh
 
 # Contraprova funcional do deploy: comando real em /usr/local/bin, permissao
 # root:root, modo executavel e --doctor independente de servico instalado.
