@@ -211,11 +211,11 @@ cmd_hardware_report() {
 # must NEVER grant the full-screen file browser root privileges. Only files
 # accessible to the game service account can be modified.
 cmd_files() {
-    if [ "$#" -ne 0 ]; then
-        err "Uso: files (sem argumentos)"
+    if [ "$#" -gt 1 ]; then
+        err "Uso: files [root|mods|config|world|backups|logs]"
         return 2
     fi
-    manager_need_root "$SELF" files
+    manager_need_root "$SELF" files "$@"
     if [ ! -t 0 ] || [ ! -t 1 ]; then
         err "O gerenciador de arquivos precisa de um terminal interativo (TTY)."
         return 1
@@ -228,10 +228,68 @@ cmd_files() {
         err "Usuario ou diretorio do servidor invalido; recusando explorador."
         return 1
     fi
-    echo "[Arquivos] Abrindo $SERVER_DIR como usuario $SERVER_USER, sem privilegios de root."
-    # Midnight Commander may run a shell/editor; as the game user it can
-    # edit game configuration but cannot write to root-owned admin scripts.
-    sudo -u "$SERVER_USER" -- env HOME="$SERVER_DIR" mc "$SERVER_DIR"
+
+    local area="root" candidate root_dir resolved level_name
+    if [ "$#" -eq 1 ]; then area="$1"; fi
+    case "$area" in
+        root)
+            candidate="$SERVER_DIR"
+            ;;
+        mods)
+            if [ "$SERVICE_NAME" = "terraria" ]; then
+                candidate="$SERVER_DIR/Mods"
+            else
+                candidate="$SERVER_DIR/mods"
+            fi
+            ;;
+        config)
+            candidate="$SERVER_DIR/config"
+            ;;
+        world)
+            if [ "$SERVICE_NAME" = "minecraft" ]; then
+                level_name="world"
+                if [ -r "$SERVER_DIR/server.properties" ]; then
+                    level_name="$(awk -F= '$1=="level-name" {print substr($0,index($0,"=")+1); exit}' "$SERVER_DIR/server.properties")"
+                    [ -n "$level_name" ] || level_name="world"
+                fi
+                # level-name is a single directory name, never a path to another
+                # location. Custom world names with spaces are supported.
+                case "$level_name" in
+                    .|..|*/*|*\\*) err "level-name nao e um nome de diretorio seguro."; return 1 ;;
+                esac
+                candidate="$SERVER_DIR/$level_name"
+            else
+                candidate="$SERVER_DIR/Worlds"
+            fi
+            ;;
+        backups)
+            candidate="$SERVER_DIR/backups"
+            ;;
+        logs)
+            candidate="$SERVER_DIR/logs"
+            ;;
+        *)
+            err "Area desconhecida: $area. Use root|mods|config|world|backups|logs."
+            return 2
+            ;;
+    esac
+
+    if [ ! -d "$candidate" ]; then
+        err "Pasta nao encontrada: $candidate. Abra 'Arquivos > Pasta principal' para navegar manualmente."
+        return 1
+    fi
+    root_dir="$(realpath -e -- "$SERVER_DIR")" || return 1
+    resolved="$(realpath -e -- "$candidate")" || return 1
+    # Do not follow a shortcut symlink pointing outside the game directory.
+    case "$resolved" in
+        "$root_dir"|"$root_dir"/*) ;;
+        *) err "Atalho fora da pasta do servidor: $candidate"; return 1 ;;
+    esac
+
+    echo "[Arquivos] Abrindo $resolved como $SERVER_USER, sem privilegios de root."
+    # mc is an interactive file manager that can launch a shell/editor;
+    # invoking it as root would give unbounded write access to the host.
+    sudo -u "$SERVER_USER" -- env HOME="$SERVER_DIR" mc "$resolved"
 }
 
 cmd_setup_files() {
