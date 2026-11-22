@@ -568,7 +568,7 @@ jobs:
           rm -rf release-assets/_pkg/slim/.github/workflows
           # Falha se um zip distribuido estiver sem componentes basicos.
           for pkg in full slim; do
-            for mandatory in install.sh crias-bootstrap.sh crias-tui.sh config.env shared/lib/common.sh; do
+            for mandatory in install.sh crias-bootstrap.sh crias-tui.sh crias-update.sh config.env shared/lib/common.sh; do
               test -s "release-assets/_pkg/$pkg/$mandatory" || {
                 echo "ERROR: $pkg sem arquivo obrigatorio: $mandatory" >&2
                 exit 1
