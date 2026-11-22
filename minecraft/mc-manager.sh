@@ -129,7 +129,7 @@ get_prop() {
 
 # Descrições específicas para o show_help compartilhado (console/health diferem
 # entre Minecraft e Terraria).
-MANAGER_DESC_CONSOLE="Console interativo via RCON (fallback para logs)"
+MANAGER_DESC_CONSOLE="Console interativo em tela cheia via RCON (setas, historico e comandos)"
 MANAGER_DESC_HEALTH="Verifica porta e RCON do servidor"
 MANAGER_DESC_LOGS="Logs: follow (padrao), recent, boot, alerts"
 
@@ -171,30 +171,369 @@ cmd_logs() {
     esac
 }
 
+# O RCON envia comandos e respostas em tela interativa. Logs completos continuam
+# em "logs" — nunca mascarar um RCON ausente com journalctl -f.
 cmd_console() {
+    if [ "$#" -ne 0 ]; then
+        err "Uso: console (sem argumentos)"
+        return 2
+    fi
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        err "Console RCON requer terminal interativo (TTY). Abra pelo SSH ou crias-tui."
+        return 1
+    fi
+    if ! command -v mcrcon >/dev/null 2>&1; then
+        err "mcrcon nao instalado. Execute: sudo /usr/local/libexec/crias/mc-manager.sh setup-console"
+        return 1
+    fi
+    local rcon_pass rcon_port rcon_enabled
+    rcon_enabled="$(get_prop "enable-rcon" "false")"
+    rcon_pass="$(get_prop "rcon.password" "")"
+    rcon_port="$(get_prop "rcon.port" "25575")"
+    if [ "$rcon_enabled" != "true" ] || [ -z "$rcon_pass" ]; then
+        err "RCON ainda nao ativado. Execute 'sudo /usr/local/libexec/crias/mc-manager.sh setup-console' e reinicie o Minecraft."
+        return 1
+    fi
+    if ! [[ "$rcon_port" =~ ^[0-9]+$ ]] || [ "$rcon_port" -lt 1 ] || [ "$rcon_port" -gt 65535 ]; then
+        err "rcon.port invalida em $PROPS_FILE."
+        return 1
+    fi
+    if ! systemctl is-active --quiet "$SERVICE_NAME"; then
+        err "Minecraft nao esta ativo. Inicie o servidor antes de abrir o console RCON."
+        return 1
+    fi
+    echo "[Minecraft] Console RCON em 127.0.0.1:$rcon_port — setas=historico, Tab=completar, PgUp/PgDn=rolar, F1=ajuda, Ctrl+C=sair."
+    # Nao passar senha via -p: evita exposicao por ps / historico do shell.
+    MCRCON_PASSWORD="$rcon_pass" MCRCON_PASS="$rcon_pass" exec mcrcon -H 127.0.0.1 -P "$rcon_port" -t
+}
+
+# Ativacao deliberada: nao interromper um servidor que ja esteja funcionando.
+# Usa senha gerada criptograficamente, preserva ajustes e troca o arquivo
+# atomicamente. A porta RCON deve ser bloqueada externamente no firewall.
+cmd_setup_console() {
+    if [ "$#" -ne 0 ]; then
+        err "Uso: setup-console (sem argumentos)"
+        return 2
+    fi
+    manager_need_root "$SELF" "setup-console"
+    local installer="$CRIS_LIBEXEC_DIR/install-mcrcon.sh"
+    if [ ! -f "$installer" ]; then
+        installer="$SCRIPT_DIR/install-mcrcon.sh"
+    fi
+    if [ ! -f "$installer" ]; then
+        err "Instalador do mcrcon nao localizado. Atualize as ferramentas administrativas do Crias-Server."
+        return 1
+    fi
+    manager_assert_root_safe "$installer" || return 1
+    if [ ! -f "$PROPS_FILE" ] || [ -L "$PROPS_FILE" ]; then
+        err "server.properties ausente ou link simbolico: $PROPS_FILE"
+        return 1
+    fi
+    if ! bash "$installer"; then
+        err "Falha ao instalar mcrcon. Nenhuma configuracao do Minecraft foi alterada."
+        return 1
+    fi
+
+    local pass port mc_port tmp line
+    pass="$(get_prop "rcon.password" "")"
+    port="$(get_prop "rcon.port" "25575")"
+    mc_port="$(get_prop "server-port" "25565")"
+    if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ] || [ "$port" = "$mc_port" ]; then
+        err "rcon.port invalida ou igual a server-port em $PROPS_FILE."
+        return 1
+    fi
+    if [ -z "$pass" ]; then
+        # 32 bytes aleatorios => 64 digitos hexadecimais (sem caracteres YAML).
+        pass="$(od -An -N32 -tx1 /dev/urandom | tr -d '[:space:]')"
+        [[ "$pass" =~ ^[0-9a-f]{64}$ ]] || { err "Nao foi possivel gerar senha segura para RCON."; return 1; }
+    fi
+    if [[ "$pass" == *
+cmd_setup_cron() {
+    if [ ! -x "$SETUP_CRON_SCRIPT" ]; then
+        err "Script de setup-cron nao encontrado: $SETUP_CRON_SCRIPT"
+        return 1
+    fi
+    manager_need_root "$SELF" "setup-cron" "$@"
+    SERVER_USER="$SERVER_USER" "$SETUP_CRON_SCRIPT"
+}
+
+cmd_reconfigure_hardware() {
+    local forced_tier="${1:-}"
+    local server_port online_mode motd
+    forced_tier="${forced_tier^^}"
+
+    manager_need_root "$SELF" "reconfigure-hardware" "$forced_tier"
+
+    if [ ! -f "$HARDWARE_LIB" ] || [ ! -f "$MC_TUNING_LIB" ]; then
+        err "Bibliotecas de tuning nao encontradas em $SHARED_DIR"
+        return 1
+    fi
+
+    case "$forced_tier" in
+        ""|LOW|MID|HIGH) ;;
+        *)
+            err "Tier invalido: $forced_tier (use LOW, MID ou HIGH)"
+            return 1
+            ;;
+    esac
+
+    # shellcheck source=/dev/null
+    source "$HARDWARE_LIB"
+    # shellcheck source=/dev/null
+    source "$MC_TUNING_LIB"
+
+    # Nao reduza/aumente limites em processo ativo: pare o Minecraft antes
+    # de reconciliar heap, MemoryMax e demais arquivos.
+    local unit_state
+    unit_state="$(systemctl show "$SERVICE_NAME.service" -p ActiveState --value 2>/dev/null || true)"
+    case "$unit_state" in
+        inactive|failed) ;;
+        *)
+            err "Minecraft deve estar completamente parado para recalibrar: estado=${unit_state:-desconhecido}. Execute sudo systemctl stop $SERVICE_NAME"
+            return 1
+            ;;
+    esac
+    if ! systemctl cat "$SERVICE_NAME.service" >/dev/null 2>&1; then
+        err "A unidade $SERVICE_NAME.service nao existe. Complete a instalacao antes de recalibrar."
+        return 1
+    fi
+    if ! validate_server_dir "$SERVER_DIR"; then
+        err "Diretorio de servidor invalido: $SERVER_DIR"
+        return 1
+    fi
+    for managed_file in "$RUNTIME_ENV" "$PROPS_FILE" "$TUNING_STATE"; do
+        if [ -L "$managed_file" ]; then
+            err "Arquivo administrativo e link simbolico: $managed_file"
+            return 1
+        fi
+    done
+
+    detect_hardware_profile "$SERVER_DIR" "$forced_tier"
+    compute_minecraft_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER" "$HW_AVAILABLE_RAM_MB" || return 1
+
+    # O systemd recebe a mesma cota de memoria calculada para runtime.env.
+    # O helper valida e reverte o drop-in se daemon-reload/verify falhar.
+    write_minecraft_systemd_memory_limit "$MC_SERVICE_MEMORY_MAX_MB" || return 1
+    write_minecraft_runtime_env "$RUNTIME_ENV"
+
+    server_port="$(config_read_value "$PROPS_FILE" "server-port")"
+    online_mode="$(config_read_value "$PROPS_FILE" "online-mode")"
+    motd="$(config_read_value "$PROPS_FILE" "motd")"
+    server_port="${server_port:-25565}"
+    online_mode="${online_mode:-false}"
+    motd="${motd:-Servidor Minecraft}"
+
+    write_minecraft_server_properties "$PROPS_FILE" "$server_port" "$online_mode" "$motd"
+    write_minecraft_tuning_state "$TUNING_STATE"
+
+    echo "Tier detectado: $HW_DETECTED_TIER"
+    echo "Tier aplicado: $HW_TIER"
+    echo "Heap aplicado: $MC_MIN_RAM -> $MC_MAX_RAM"
+    echo "View/Simulation: $MC_VIEW_DISTANCE / $MC_SIMULATION_DISTANCE"
+    echo "Max players: $MC_MAX_PLAYERS"
+
+    # Nunca varra os mundos com chown -R apenas para editar tres configs.
+    chown "${SERVER_USER}:${SERVER_USER}" "$RUNTIME_ENV" "$PROPS_FILE" "$TUNING_STATE"
+
+    echo "MemoryHigh/MemoryMax aplicados: ${MC_SERVICE_MEMORY_HIGH_MB}/${MC_SERVICE_MEMORY_MAX_MB} MB"
+    echo "Reserva para SO: ${MC_HOST_RESERVE_MB} MB | memoria JVM nativa: ${MC_NATIVE_OVERHEAD_MB} MB"
+    warn "Heap, MemoryHigh e MemoryMax sincronizados. Servico continua parado; confira os limites e execute: sudo systemctl reset-failed $SERVICE_NAME; sudo systemctl start $SERVICE_NAME"
+}
+
+cmd_health() {
+    local server_port
     local rcon_pass
     local rcon_port
 
-    if ! command -v mcrcon >/dev/null 2>&1; then
-        warn "Console interativo requer mcrcon. Instale via AUR (ex: yay -S mcrcon) ou construa a partir do PKGBUILD do AUR."
-        cmd_logs
-        return 0
+    server_port="$(get_prop "server-port" "25565")"
+    if ! [[ "$server_port" =~ ^[0-9]+$ ]]; then
+        server_port=25565
+    fi
+
+    if ! port_is_listening "$server_port"; then
+        err "Porta $server_port nao esta em escuta."
+        return 1
     fi
 
     rcon_pass="$(get_prop "rcon.password" "")"
     rcon_port="$(get_prop "rcon.port" "25575")"
-
-    if [ -z "$rcon_pass" ]; then
-        warn "RCON nao configurado em $PROPS_FILE (rcon.password)."
-        cmd_logs
-        return 0
-    fi
-
     if ! [[ "$rcon_port" =~ ^[0-9]+$ ]]; then
         rcon_port=25575
     fi
 
-    MCRCON_PASS="$rcon_pass" exec mcrcon -H localhost -P "$rcon_port"
+    if [ -n "$rcon_pass" ] && command -v mcrcon >/dev/null 2>&1; then
+        if MCRCON_PASS="$rcon_pass" timeout 10 mcrcon -H localhost -P "$rcon_port" "list" >/dev/null 2>&1; then
+            log "Health OK: porta $server_port e RCON responderam."
+            return 0
+        fi
+
+        err "Porta $server_port em escuta, mas RCON nao respondeu."
+        return 1
+    fi
+
+    warn "Health limitado a porta em escuta; RCON indisponivel para verificacao."
+    return 0
+}
+
+manager_dispatch "$@"
+\n'* ]] || [[ "$pass" == *
+cmd_setup_cron() {
+    if [ ! -x "$SETUP_CRON_SCRIPT" ]; then
+        err "Script de setup-cron nao encontrado: $SETUP_CRON_SCRIPT"
+        return 1
+    fi
+    manager_need_root "$SELF" "setup-cron" "$@"
+    SERVER_USER="$SERVER_USER" "$SETUP_CRON_SCRIPT"
+}
+
+cmd_reconfigure_hardware() {
+    local forced_tier="${1:-}"
+    local server_port online_mode motd
+    forced_tier="${forced_tier^^}"
+
+    manager_need_root "$SELF" "reconfigure-hardware" "$forced_tier"
+
+    if [ ! -f "$HARDWARE_LIB" ] || [ ! -f "$MC_TUNING_LIB" ]; then
+        err "Bibliotecas de tuning nao encontradas em $SHARED_DIR"
+        return 1
+    fi
+
+    case "$forced_tier" in
+        ""|LOW|MID|HIGH) ;;
+        *)
+            err "Tier invalido: $forced_tier (use LOW, MID ou HIGH)"
+            return 1
+            ;;
+    esac
+
+    # shellcheck source=/dev/null
+    source "$HARDWARE_LIB"
+    # shellcheck source=/dev/null
+    source "$MC_TUNING_LIB"
+
+    # Nao reduza/aumente limites em processo ativo: pare o Minecraft antes
+    # de reconciliar heap, MemoryMax e demais arquivos.
+    local unit_state
+    unit_state="$(systemctl show "$SERVICE_NAME.service" -p ActiveState --value 2>/dev/null || true)"
+    case "$unit_state" in
+        inactive|failed) ;;
+        *)
+            err "Minecraft deve estar completamente parado para recalibrar: estado=${unit_state:-desconhecido}. Execute sudo systemctl stop $SERVICE_NAME"
+            return 1
+            ;;
+    esac
+    if ! systemctl cat "$SERVICE_NAME.service" >/dev/null 2>&1; then
+        err "A unidade $SERVICE_NAME.service nao existe. Complete a instalacao antes de recalibrar."
+        return 1
+    fi
+    if ! validate_server_dir "$SERVER_DIR"; then
+        err "Diretorio de servidor invalido: $SERVER_DIR"
+        return 1
+    fi
+    for managed_file in "$RUNTIME_ENV" "$PROPS_FILE" "$TUNING_STATE"; do
+        if [ -L "$managed_file" ]; then
+            err "Arquivo administrativo e link simbolico: $managed_file"
+            return 1
+        fi
+    done
+
+    detect_hardware_profile "$SERVER_DIR" "$forced_tier"
+    compute_minecraft_tuning "$HW_TOTAL_RAM_MB" "$HW_CPU_CORES" "$HW_DISK_TYPE" "$HW_TIER" "$HW_AVAILABLE_RAM_MB" || return 1
+
+    # O systemd recebe a mesma cota de memoria calculada para runtime.env.
+    # O helper valida e reverte o drop-in se daemon-reload/verify falhar.
+    write_minecraft_systemd_memory_limit "$MC_SERVICE_MEMORY_MAX_MB" || return 1
+    write_minecraft_runtime_env "$RUNTIME_ENV"
+
+    server_port="$(config_read_value "$PROPS_FILE" "server-port")"
+    online_mode="$(config_read_value "$PROPS_FILE" "online-mode")"
+    motd="$(config_read_value "$PROPS_FILE" "motd")"
+    server_port="${server_port:-25565}"
+    online_mode="${online_mode:-false}"
+    motd="${motd:-Servidor Minecraft}"
+
+    write_minecraft_server_properties "$PROPS_FILE" "$server_port" "$online_mode" "$motd"
+    write_minecraft_tuning_state "$TUNING_STATE"
+
+    echo "Tier detectado: $HW_DETECTED_TIER"
+    echo "Tier aplicado: $HW_TIER"
+    echo "Heap aplicado: $MC_MIN_RAM -> $MC_MAX_RAM"
+    echo "View/Simulation: $MC_VIEW_DISTANCE / $MC_SIMULATION_DISTANCE"
+    echo "Max players: $MC_MAX_PLAYERS"
+
+    # Nunca varra os mundos com chown -R apenas para editar tres configs.
+    chown "${SERVER_USER}:${SERVER_USER}" "$RUNTIME_ENV" "$PROPS_FILE" "$TUNING_STATE"
+
+    echo "MemoryHigh/MemoryMax aplicados: ${MC_SERVICE_MEMORY_HIGH_MB}/${MC_SERVICE_MEMORY_MAX_MB} MB"
+    echo "Reserva para SO: ${MC_HOST_RESERVE_MB} MB | memoria JVM nativa: ${MC_NATIVE_OVERHEAD_MB} MB"
+    warn "Heap, MemoryHigh e MemoryMax sincronizados. Servico continua parado; confira os limites e execute: sudo systemctl reset-failed $SERVICE_NAME; sudo systemctl start $SERVICE_NAME"
+}
+
+cmd_health() {
+    local server_port
+    local rcon_pass
+    local rcon_port
+
+    server_port="$(get_prop "server-port" "25565")"
+    if ! [[ "$server_port" =~ ^[0-9]+$ ]]; then
+        server_port=25565
+    fi
+
+    if ! port_is_listening "$server_port"; then
+        err "Porta $server_port nao esta em escuta."
+        return 1
+    fi
+
+    rcon_pass="$(get_prop "rcon.password" "")"
+    rcon_port="$(get_prop "rcon.port" "25575")"
+    if ! [[ "$rcon_port" =~ ^[0-9]+$ ]]; then
+        rcon_port=25575
+    fi
+
+    if [ -n "$rcon_pass" ] && command -v mcrcon >/dev/null 2>&1; then
+        if MCRCON_PASS="$rcon_pass" timeout 10 mcrcon -H localhost -P "$rcon_port" "list" >/dev/null 2>&1; then
+            log "Health OK: porta $server_port e RCON responderam."
+            return 0
+        fi
+
+        err "Porta $server_port em escuta, mas RCON nao respondeu."
+        return 1
+    fi
+
+    warn "Health limitado a porta em escuta; RCON indisponivel para verificacao."
+    return 0
+}
+
+manager_dispatch "$@"
+\r'* ]]; then
+        err "rcon.password existente contem quebra de linha; corrija manualmente."
+        return 1
+    fi
+
+    tmp="$(mktemp "$SERVER_DIR/.crias-rcon-XXXXXXXX")" || return 1
+    chmod 0600 "$tmp" || { rm -f -- "$tmp"; return 1; }
+    if ! {
+        while IFS= read -r line || [ -n "$line" ]; do
+            case "$line" in
+                enable-rcon=*|rcon.password=*|rcon.port=*) ;;
+                *) printf '%s\n' "$line" ;;
+            esac
+        done < "$PROPS_FILE"
+        printf 'enable-rcon=true\nrcon.port=%s\nrcon.password=%s\n' "$port" "$pass"
+    } > "$tmp"; then
+        rm -f -- "$tmp"
+        err "Falha ao preparar configuracao RCON."
+        return 1
+    fi
+    if ! chown "$SERVER_USER:$SERVER_USER" "$tmp" || ! mv -f -T -- "$tmp" "$PROPS_FILE"; then
+        rm -f -- "$tmp"
+        err "Falha ao aplicar server.properties."
+        return 1
+    fi
+    log "mcrcon interativo e RCON configurados em $PROPS_FILE (porta $port; senha nao exibida)."
+    warn "A porta RCON nao deve ser exposta: mantenha TCP $port bloqueada em WAN/LAN/Tailscale pelo firewall; use o console local via SSH."
+    warn "O servidor nao foi reiniciado. Para ativar a mudanca, quando for conveniente execute: sudo systemctl restart minecraft"
+    echo "Depois abra: sudo /usr/local/libexec/crias/mc-manager.sh console"
 }
 
 cmd_setup_cron() {
