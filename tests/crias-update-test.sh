@@ -152,8 +152,13 @@ if (
 fi
 test "$(readlink -f "$tmp/app")" = "$crashref"
 grep -q 'partial admin file' "$tmp/bin/crias-tui"
-# Recovery must not need network, new downloads, or the process that crashed.
-update_recover
+# Recovery in a FRESH Bash process, without in-memory state or a network.
+# The parent test shell sourced the updater earlier and still owns fd 9.
+flock -u 9 || true
+(
+    source "$root/crias-update.sh"
+    update_recover
+)
 test "$(readlink -f "$tmp/app")" = "$newref"
 test ! -d "$tmp/app.releases/.update-transaction"
 ! grep -q 'partial admin file' "$tmp/bin/crias-tui"

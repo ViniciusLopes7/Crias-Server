@@ -249,7 +249,7 @@ jobs:
           pacman-key --init
           pacman-key --populate archlinux
           # zstd/tar: exigidos pelo backup-integrity-test (EXP-57).
-          pacman -Syu --noconfirm --needed git bash gettext jq zstd tar
+          pacman -Syu --noconfirm --needed git bash gettext jq zstd tar curl zip unzip
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -257,6 +257,8 @@ jobs:
         run: |
           bash tests/arch-smoke.sh
           bash tests/arch-dry-install.sh
+          # Real, pinned GitHub release assets tested on Arch as well as Ubuntu.
+          bash tests/real-release-migration-test.sh
 
   test-minecraft-jvm:
     name: Minecraft launcher (Java ${{ matrix.java }})

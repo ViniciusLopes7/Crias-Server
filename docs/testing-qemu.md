@@ -77,3 +77,10 @@ O teste é demorado e baixa imagens e instaladores reais. Ele é adequado a CI o
 ## Casos adversariais para temporários
 
 `tests/temp-cleanup-test.sh` e o job QEMU exercitam registro privado, permissões 0600/0700, recusa de caminhos não cadastrados, recusa de traversal, troca por link simbólico e isolamento de `TMPDIR` quando o instalador atua como root. O teste de rollback valida a restauração de artefatos existentes. A proteção não garante imunidade a todas as corridas do sistema de arquivos, especialmente se a conta administrativa já estiver comprometida.
+
+
+## Migração entre releases GitHub reais
+
+O job `test-release-migration` e o container Arch executam `tests/real-release-migration-test.sh` em ambiente descartável, independente do QEMU. Esse teste baixa, verifica com digests SHA-256 fixados e extrai os ZIPs originais das releases `v2026.11.21-6674985` e `v2026.11.22-8877a39`. Primeiro testa a migração do updater originalmente publicado; depois aplica o código candidato ao arquivo oficial e testa novamente, preservando `config.env`, mundo, mods, `runtime.env`, `server.properties` e scripts administrativos. O teste do QEMU complementa isso com o sistema Arch real, systemd e falhas simuladas, mas não tem acesso ao hardware do usuário.
+
+A integração é bloqueante no job de release: nenhum ZIP novo deve ser publicado com a migração histórica falhando. Em futuras atualizações, amplie os casos para abranger a release de produção imediatamente anterior, sem remover o caso de migração inicial.

@@ -65,6 +65,11 @@ update_local_tag() {
 }
 
 update_check() {
+    local txn="${CRIAS_UPDATE_INSTALL_DIR}.releases/.update-transaction"
+    if [ -f "$txn/prepared" ] && [ ! -f "$txn/committed" ]; then
+        warn "Atualizacao anterior interrompida; execute sudo crias-update recover."
+        return 1
+    fi
     update_fetch_release || return 1
     local installed
     installed="$(update_local_tag)"
@@ -123,6 +128,8 @@ update_preflight() {
         update_fail "Release contem symlinks; abortando"
         return 1
     fi
+    # Do not include audit metadata generated in /tmp inside deployed source.
+    rm -f -- "$listing" "$metadata" || return 1
     UPDATE_SOURCE_DIR="$dir"
     for file in \
         install.sh crias-bootstrap.sh crias-tui.sh crias-update.sh \

@@ -15,10 +15,10 @@ Este fluxo:
 
 1. Consulta a **release oficial publicada** de [ViniciusLopes7/Crias-Server](https://github.com/ViniciusLopes7/Crias-Server/releases). **Não** executa código de commits da `main` que ainda não passaram pelo processo de release.
 2. Baixa `crias-server-slim.zip` e `sha256sums.txt` por HTTPS, compara o SHA-256 e verifica scripts obrigatórios e sua sintaxe antes da publicação.
-3. Reutiliza a publicação versionada do bootstrap: nova versão em `/opt/crias-server.releases/release.*` e troca atômica do link `/opt/crias-server`. Mantém a versão anterior para recuperação.
+3. Usa **publicação versionada própria**, independente das rotinas de limpeza de versões do bootstrap antigo: prepara uma nova pasta em `/opt/crias-server.releases/release.*`, troca atomicamente o link `/opt/crias-server` e preserva a versão anterior para recuperação.
 4. **Preserva o `config.env` local**, sem carregá-lo como shell ou imprimi-lo. O arquivo é instalado com permissão `0600`.
 5. Atualiza `/usr/local/bin/crias-tui`, `/usr/local/bin/crias-update`, os managers e bibliotecas em `/usr/local/libexec/crias`; cada arquivo administrativo é instalado com propriedade `root:root` e permissão controlada.
-6. Se a atualização administrativa falhar, restaura os scripts anteriores e o link da versão anterior.
+6. Antes de alterar arquivos administrativos, grava snapshots privados e um **journal persistente em disco**, sincronizando-os antes de publicar a nova versão. Se houver falha, restaura os scripts anteriores e o link da versão anterior. Após um encerramento abrupto, a próxima tentativa recupera a transação pendente antes de consultar a rede.
 
 **Não altera:** `/opt/minecraft-server`, `/opt/terraria-server`, mundos, mods, modpacks, loaders, `server.properties`, `runtime.env`, units systemd, quantidade de RAM, Java, Tailscale, SSH ou regras de firewall. O Minecraft/Terraria **não é interrompido nem reiniciado** por este comando.
 
@@ -42,7 +42,7 @@ Essa opção baixa a release oficial, verifica seu SHA-256 e executa o updater c
 
 A checagem SHA-256 é contra o manifesto da *mesma release do GitHub*, portanto confirma integridade do pacote mas **não prova autenticidade de forma independente** caso um invasor controle a release e seu checksum. Confira a origem oficial, as notas da release e o CI antes de atualizar. Falha de rede/checksum aborta antes de tocar na versão instalada. Execute o procedimento somente com privilégios de administrador.
 
-O rollback protege os scripts administrativos dentro de uma mesma atualização; não é um snapshot do sistema operacional, e um desligamento abrupto/SIGKILL durante o deploy pode exigir reparo administrativo manual. Não substitui backups de dados do mundo.
+O rollback protege os scripts administrativos dentro de uma mesma atualização; **não** é um snapshot do sistema operacional ou dos mundos. Se o processo cair por SIGKILL ou faltar energia, reinicie o computador normalmente e execute `sudo crias-update recover` (ou tente `sudo crias-update apply`, que recupera antes de baixar). O journal permanece no disco até a confirmação. Se o armazenamento estiver corrompido ou a versão anterior tiver sido removida manualmente, a recuperação pode exigir intervenção. Não substitui backups dos mundos.
 
 ## 2. Atualizar pacotes Arch Linux
 
@@ -71,6 +71,8 @@ Antes de trocar o pacote/loader, faça um backup verificável, registre as vers�
 
 ## Validação
 
-O CI do PR executa testes de download simulado sem rede, checksum correto/incorreto, preservação de `config.env`, idempotência, falha após deploy parcial e restauração do link/arquivos administrativos. A bateria roda também na VM Arch/QEMU. Isso testa os contratos do atualizador, mas não substitui um teste no notebook real com uma release já publicada.
+O CI valida o checksum, preservação de `config.env`, idempotência, falha parcial e SIGKILL seguido de recuperação em outro processo. Essa bateria também roda em Arch/QEMU.
+
+Além disso, `tests/real-release-migration-test.sh` **baixa os ZIPs oficiais e imutáveis das releases `v2026.11.21-6674985` e `v2026.11.22-8877a39`**, valida checksums publicados e digests fixados, executa a primeira migração real e repete o cenário com o atualizador candidato sobre o pacote publicado. O teste roda tanto no Ubuntu quanto em container Arch, e bloqueia releases futuras em caso de falha. Nenhum teste substitui completamente a execução no notebook físico do operador.
 
 Se a atualização falhar, execute `sudo crias-tui --doctor` e confira `readlink -f /opt/crias-server`. Não execute uma reinstalação completa de Minecraft como forma de atualizar o Hub.
