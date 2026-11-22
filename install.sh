@@ -2082,6 +2082,37 @@ show_install_summary() {
     return 1
 }
 
+# O Hub e sua navegacao por setas dependem de gum no HOST instalado.
+# O bootstrap ja tenta instalar no ambiente de origem (que pode ser ISO live);
+# validar aqui evita que o host minimalista fique sem o pacote.
+ensure_hub_gum() {
+    if is_true "${DRY_RUN:-false}"; then
+        print_step "[DRY_RUN] Verificando gum para os menus do Hub (sem pacman)."
+        return 0
+    fi
+
+    if command -v gum >/dev/null 2>&1 && gum --version >/dev/null 2>&1; then
+        return 0
+    fi
+
+    print_step "Instalando gum (menus do Hub navegaveis por setas) no host..."
+    if ! command -v pacman >/dev/null 2>&1; then
+        print_error "pacman nao encontrado; nao e possivel garantir gum neste host Arch."
+        return 1
+    fi
+    # Sem --needed: tenta reparar tambem um pacote existente cujo executavel
+    # esteja ausente/quebrado. Instalar antes de baixar o modpack.
+    if ! pacman -S --noconfirm gum; then
+        print_error "Nao foi possivel instalar gum. O Hub interativo precisa dele."
+        return 1
+    fi
+    if ! command -v gum >/dev/null 2>&1 || ! gum --version >/dev/null 2>&1; then
+        print_error "gum nao respondeu apos instalar; confira o pacote com: pacman -Q gum"
+        return 1
+    fi
+    print_success "gum instalado e validado para o Hub."
+}
+
 deploy_crias_tui() {
     if is_true "$DRY_RUN"; then
         print_step "[DRY_RUN] Pulando deploy do crias-tui."
@@ -2127,6 +2158,10 @@ main() {
         check_root
         check_arch
     fi
+
+    # Garanta gum no HOST instalado, inclusive quando o usuario invoca
+    # install.sh diretamente sem passar pelo bootstrap.
+    ensure_hub_gum
 
     # Instale o hub antes das etapas que podem falhar (rede, mods, SSH, agent,
     # systemd): ele permanece disponivel em instalacoes parciais.
