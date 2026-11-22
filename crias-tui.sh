@@ -195,13 +195,26 @@ main() {
         show_header "$stack" "$service"
 
         local choice
-        choice=$(hub_choose "Crias-Server Hub — selecione:" \
-            "🎮 Servidor" \
-            "📊 Monitoramento" \
-            "💾 Backup" \
-            "⚙️  Sistema" \
-            "🩺 Diagnóstico" \
-            "🚪 Sair") || break
+        if [ "$stack" = "minecraft" ]; then
+            choice=$(hub_choose "Crias-Server Hub (↑/↓ + Enter para navegar):" \
+                "🎮 Servidor" \
+                "📁 Arquivos" \
+                "🎙️ Voice Chat" \
+                "📊 Monitoramento" \
+                "💾 Backup" \
+                "⚙️  Sistema" \
+                "🩺 Diagnóstico" \
+                "🚪 Sair") || break
+        else
+            choice=$(hub_choose "Crias-Server Hub (↑/↓ + Enter para navegar):" \
+                "🎮 Servidor" \
+                "📁 Arquivos" \
+                "📊 Monitoramento" \
+                "💾 Backup" \
+                "⚙️  Sistema" \
+                "🩺 Diagnóstico" \
+                "🚪 Sair") || break
+        fi
 
         case "$choice" in
             "🎮 Servidor")
@@ -243,6 +256,65 @@ main() {
                         else
                             sudo "$manager_script" logs
                         fi
+                        ;;
+                    "← Voltar") continue ;;
+                esac
+                ;;
+            "📁 Arquivos")
+                local files_choice
+                files_choice=$(hub_choose "Arquivos do servidor ($stack):" \
+                    "Abrir gerenciador de arquivos (Midnight Commander)" \
+                    "Instalar gerenciador de arquivos" \
+                    "← Voltar") || continue
+                case "$files_choice" in
+                    "Abrir gerenciador"*)
+                        # O manager abre mc como usuario do jogo, nunca como root.
+                        sudo "$manager_script" files || true
+                        ;;
+                    "Instalar gerenciador"*)
+                        local confirm_install
+                        confirm_install=$(hub_choose "Instalar pacote 'mc' do repositorio oficial Arch?" \
+                            "Sim, instalar" "Cancelar") || continue
+                        if [ "$confirm_install" = "Sim, instalar" ]; then
+                            sudo "$manager_script" setup-files || true
+                            read -r -p "Enter para voltar..." _ || true
+                        fi
+                        ;;
+                    "← Voltar") continue ;;
+                esac
+                ;;
+            "🎙️ Voice Chat")
+                if [ "$stack" != "minecraft" ]; then continue; fi
+                local vc_choice
+                vc_choice=$(hub_choose "Simple Voice Chat (Minecraft):" \
+                    "Status e diagnostico" \
+                    "Alterar porta UDP" \
+                    "Editar configuracao" \
+                    "Ajuda Tailscale / firewall" \
+                    "← Voltar") || continue
+                case "$vc_choice" in
+                    "Status e diagnostico")
+                        sudo "$manager_script" voicechat status || true
+                        read -r -p "Enter para voltar..." _ || true
+                        ;;
+                    "Alterar porta UDP")
+                        local vc_port
+                        if command -v gum >/dev/null 2>&1 && [ -t 0 ] && [ -t 1 ]; then
+                            vc_port=$(gum input --header="Porta UDP do Voice Chat (1024-65535):" --placeholder="24454") || continue
+                        else
+                            printf "Porta UDP do Voice Chat (1024-65535; Enter cancela): "
+                            IFS= read -r vc_port || continue
+                        fi
+                        [ -n "$vc_port" ] || continue
+                        sudo "$manager_script" voicechat set-port "$vc_port" || true
+                        read -r -p "Enter para voltar..." _ || true
+                        ;;
+                    "Editar configuracao")
+                        sudo "$manager_script" voicechat edit || true
+                        ;;
+                    "Ajuda Tailscale / firewall")
+                        sudo "$manager_script" voicechat network || true
+                        read -r -p "Enter para voltar..." _ || true
                         ;;
                     "← Voltar") continue ;;
                 esac
