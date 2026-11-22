@@ -70,6 +70,7 @@ setup_old_install() {
     )
     test -L "$location/opt/crias-server"
     test -x "$location/opt/crias-server/install.sh"
+    readlink -f "$location/opt/crias-server" > "$location/previous-release"
     cp "$location/opt/crias-server/crias-tui.sh" "$location/bin/crias-tui"
     cp "$location/opt/crias-server/minecraft/mc-manager.sh" "$location/libexec/mc-manager.sh"
     printf '\nMINECRAFT_PORT="24590"\nCUSTOM_LOCAL_SECRET="preserve-me"\n' \
@@ -89,7 +90,7 @@ verify_migrated() {
     local oldref
     oldref="$(readlink -f "$active")"
     test -L "$active"
-    test "$oldref" != "$location/opt/crias-server.releases/release.before"
+    test "$oldref" != "$location/previous-release"
     test "$(cat "$active/.crias-release-tag")" = "$newtag"
     grep -q 'MINECRAFT_PORT="24590"' "$active/config.env"
     grep -q 'CUSTOM_LOCAL_SECRET="preserve-me"' "$active/config.env"
@@ -142,10 +143,9 @@ cp "$ROOT/crias-update.sh" "$tmp/candidate-payload/crias-update.sh"
 cp "$ROOT/crias-bootstrap.sh" "$tmp/candidate-payload/crias-bootstrap.sh"
 (
     cd "$tmp/candidate-payload"
-    zip -qry "$tmp/candidate-slim.zip" .
+    zip -qr "$tmp/candidate-slim.zip" .
 )
-sha256sum "$tmp/candidate-slim.zip" |
-    sed 's|candidate-slim.zip|crias-server-slim.zip|' > "$tmp/candidate.sha256"
+printf '%s  crias-server-slim.zip\n' "$(sha256sum "$tmp/candidate-slim.zip" | awk '{print $1}')" > "$tmp/candidate.sha256"
 cp "$ROOT/crias-update.sh" "$tmp/candidate-script/crias-update.sh"
 # Live code under test, but REAL release payload for every other file.
 (
