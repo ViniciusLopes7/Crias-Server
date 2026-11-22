@@ -214,6 +214,24 @@ release_count=$(find "$legacy_install.releases" -maxdepth 1 -mindepth 1 -type d 
 [ "$release_count" -le 3 ] || { echo "FAIL: retencao deixou $release_count versoes" >&2; exit 1; }
 [ -f "$legacy_install/install.sh" ] || { echo 'FAIL: release ativa removida' >&2; exit 1; }
 
+# Explicitly pin an old release, then update. Cleanup must not delete the
+# previous active version even when multiple newer inactive releases exist.
+pinned_dir="$legacy_install.releases/release.pinned"
+mkdir -p "$pinned_dir"
+printf '#!/bin/bash\n# release antiga selecionada manualmente\n' > "$pinned_dir/install.sh"
+touch -t 202001010000 "$pinned_dir"
+ln -s "$pinned_dir" "$WORK_DIR/pinned-link"
+mv -f -T "$WORK_DIR/pinned-link" "$legacy_install"
+crias_extract_to "$real_zip" "$legacy_install" >/dev/null
+[ -d "$pinned_dir" ] || {
+    echo "FAIL: cleanup apagou release anterior usada para rollback" >&2; exit 1
+}
+release_count=$(find "$legacy_install.releases" -maxdepth 1 -mindepth 1 -type d | wc -l)
+[ "$release_count" -le 3 ] || {
+    echo "FAIL: retencao excedeu 3 versoes: $release_count" >&2; exit 1
+}
+echo "  OK: versao anterior pinada preservada mesmo sendo antiga"
+
 echo "[crias-bootstrap-test] 6c. Atualizacao tools-only da release verificada..."
 mkdir -p "$WORK_DIR/update-src"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$WORK_DIR/update-src/crias-update.sh"
