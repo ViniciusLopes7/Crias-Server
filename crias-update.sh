@@ -145,7 +145,9 @@ UPDATE_TEMP=""
 
 update_track_install() {
     local src="$1" dest="$2" mode="$3"
-    local n="${#UPDATE_DESTS[@]}" backup="$UPDATE_TEMP/backup-$n"
+    local n backup
+    n="${#UPDATE_DESTS[@]}"
+    backup="$UPDATE_TEMP/backup-$n"
     mkdir -p "$(dirname "$dest")" || return 1
     if [ -e "$dest" ] || [ -L "$dest" ]; then
         cp -a -- "$dest" "$backup" || return 1
