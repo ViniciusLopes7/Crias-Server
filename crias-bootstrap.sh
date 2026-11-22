@@ -255,13 +255,15 @@ crias_extract_to() {
     local current_target
     current_target="$(readlink -f "$install_dir" 2>/dev/null || true)"
     local old_release kept=0
+    if [ -n "$previous_target" ] && [ "$previous_target" != "$current_target" ] && [ -d "$previous_target" ]; then
+        kept=1
+    fi
     while IFS= read -r old_release; do
         [ -z "$old_release" ] && continue
         [ "$(readlink -f "$old_release")" = "$current_target" ] && continue
         # Count the previous active release toward retention. Always keep it
         # even if older than newer, inactive releases.
         if [ -n "$previous_target" ] && [ "$(readlink -f "$old_release")" = "$previous_target" ]; then
-            kept=$((kept + 1))
             continue
         fi
         kept=$((kept + 1))
