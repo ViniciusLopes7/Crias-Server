@@ -48,6 +48,22 @@ Para a interface alternativa, use **Servidor → Console em tela cheia (avançad
 
 Se a **sessão SSH inteira** cair (e não apenas a conexão RCON), isso é um problema diferente: examine `journalctl -u sshd -b --no-pager -n 80`, `journalctl -u tailscaled -b --no-pager -n 80` e `journalctl -k -b --no-pager | grep -Ei 'oom|killed|memory'` antes de atribuir a falha ao console. Se ocorrer por inatividade de rede, configure keepalive no **cliente SSH**, por exemplo `ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -t usuario@IP_TAILSCALE`. Isso não garante estabilidade quando o servidor estiver travando por RAM/CPU.
 
+### Ajustar a RAM do Minecraft pelo Hub
+
+Abra **Servidor → Memória Java (Xms/Xmx)**. Há opções para verificar o heap atual, usar o orçamento automático do hardware, fixar `Xms = Xmx` no teto seguro calculado ou escolher um Xmx manual em MiB, mantendo Xms fixo ou adaptativo. O menu também permite retornar ao modo automático. Via CLI:
+
+```bash
+sudo /usr/local/libexec/crias/mc-manager.sh memory status
+sudo /usr/local/libexec/crias/mc-manager.sh memory fixed
+sudo /usr/local/libexec/crias/mc-manager.sh memory set 3072 fixed
+sudo /usr/local/libexec/crias/mc-manager.sh memory set 3072 dynamic
+sudo /usr/local/libexec/crias/mc-manager.sh memory auto
+```
+
+**O serviço Minecraft precisa estar parado para aplicar alterações**; o Hub não o para nem reinicia automaticamente. Primeiro pause o Chunky, aguarde o salvamento, realize backup e pare o servidor. Depois ajuste o heap e inicie-o manualmente. Os valores são lidos de `runtime.env`, validados contra o orçamento da RAM física e de cgroups, e escritos atomicamente sem modificar as demais opções de modpack, backup ou versão do Minecraft. O sistema sempre preserva reserva para o SO, SSH, Tailscale, overhead nativo da JVM e limites existentes de systemd. Em `reconfigure-hardware`, o limite manual é preservado se ainda estiver dentro do orçamento calculado, ou a operação é recusada.
+
+`Xms=Xmx` evita expansão do heap do G1, mas pode manter mais memória comprometida; **não representa garantia de menos lag**. Se o gargalo for a geração de chunks, disco ou threads, mudar o heap pode não resolver. O modo automático permanece o padrão. Como `Xmx` é apenas heap Java, não iguale a RAM total da máquina.
+
 ### Pré-geração com Chunky
 
 O Chunky (mod ou plugin compatível com o loader instalado) gera terreno dentro do próprio processo Minecraft. Confirme no console que o comando `chunky` existe e faça backup antes de iniciar. Para começar em uma região controlada no Overworld, digite separadamente:
@@ -60,6 +76,8 @@ chunky radius 1500
 chunky selection
 chunky start
 ```
+
+Para progresso automático, execute `chunky quiet 10` uma vez no console (mensagens de progresso a cada aproximadamente 10 segundos), depois use **Servidor → Logs → Acompanhar ao vivo**. Na nova interface, **Servidor → Progresso Chunky (ao vivo)** também consulta `chunky progress` automaticamente por RCON a cada 5, 10, 30 ou 60 segundos (Ctrl+C encerra apenas a visualização). O monitor não inicia nem interrompe a tarefa e sai se o servidor parar ou o RCON falhar três vezes.
 
 O nome da dimensão pode variar; confira os mundos aceitos pelo Chunky se `minecraft:overworld` não funcionar. O **raio é em blocos** (não chunks), então 1500 cobre 3000 × 3000 blocos em formato quadrado. Comece com raios menores em modpacks pesados e monitore CPU, RAM e espaço em disco. Para acompanhar use `chunky progress`, para pausar use `chunky pause`, e para retomar use `chunky continue`. É possível fechar o console e o SSH sem interromper a tarefa **desde que o serviço Minecraft continue rodando**; em reinicializações, consulte o progresso e retome explicitamente se necessário. Não inicie Nether/End simultaneamente em uma máquina limitada. Não use `chunky trim` sem backup: ele apaga chunks.
 
