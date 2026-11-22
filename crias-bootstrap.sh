@@ -195,6 +195,13 @@ crias_extract_to() {
     fi
 
     # (CR-16) Deploy versionado + symlink atomico.
+    # Preserve both the new target and the version that was active BEFORE
+    # publication, even if the administrator previously pinned an older one.
+    # Without this, cleanup could delete the rollback target prematurely.
+    local previous_target=""
+    if [ -L "$install_dir" ]; then
+        previous_target="$(readlink -f "$install_dir" 2>/dev/null || true)"
+    fi
     local releases_root="${install_dir}.releases"
     local new_dir legacy_dir=""
     mkdir -p "$releases_root"
@@ -251,6 +258,12 @@ crias_extract_to() {
     while IFS= read -r old_release; do
         [ -z "$old_release" ] && continue
         [ "$(readlink -f "$old_release")" = "$current_target" ] && continue
+        # Count the previous active release toward retention. Always keep it
+        # even if older than newer, inactive releases.
+        if [ -n "$previous_target" ] && [ "$(readlink -f "$old_release")" = "$previous_target" ]; then
+            kept=$((kept + 1))
+            continue
+        fi
         kept=$((kept + 1))
         [ "$kept" -le 2 ] && continue
         rm -rf -- "$old_release" 2>/dev/null || true
