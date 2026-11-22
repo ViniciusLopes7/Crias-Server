@@ -359,7 +359,9 @@ EOF
             start)                      desc="Inicia o servico (systemd)" ;;
             stop)                       desc="Para o servico (systemd)" ;;
             restart)                    desc="Reinicia o servico (systemd)" ;;
-            status)                     desc="Mostra status (systemd)" ;;
+            status)                     desc="Mostra status resumido" ;;
+            chunky)                     desc="Progresso Chunky: watch [5|10|15|20|30|60]" ;;
+            memory)                     desc="Heap Java: status|auto|fixed|set <MiB> fixed|dynamic" ;;
             logs)                       desc="${MANAGER_DESC_LOGS:-Tail dos logs (journalctl)}" ;;
             console)                    desc="${MANAGER_DESC_CONSOLE:-Console do servico}" ;;
             setup-console)              desc="Instala mcrcon e configura RCON (sem reiniciar Minecraft)" ;;
@@ -391,6 +393,8 @@ manager_dispatch() {
         status) shift; cmd_status "$@" ;;
         logs) shift; cmd_logs "$@" ;;
         console) shift; cmd_console "$@" ;;
+        chunky) shift; if declare -F cmd_chunky >/dev/null; then cmd_chunky "$@"; else err "Chunky indisponivel neste stack"; return 2; fi ;;
+        memory) shift; if declare -F cmd_memory >/dev/null; then cmd_memory "$@"; else err "Controle de memoria indisponivel neste stack"; return 2; fi ;;
         files) shift; cmd_files "$@" ;;
         setup-files) shift; cmd_setup_files "$@" ;;
         voicechat) shift; if declare -F cmd_voicechat >/dev/null; then cmd_voicechat "$@"; else err "Voice Chat nao suportado neste stack."; return 2; fi ;;
