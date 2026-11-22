@@ -2,7 +2,7 @@
 # Simple Voice Chat server settings. Execute ONLY as Minecraft service user.
 # Never restart the server, install mods or modify firewall rules.
 set -euo pipefail
-SERVER_DIR="\${SERVER_DIR:-/opt/minecraft-server}"
+SERVER_DIR="${SERVER_DIR:-/opt/minecraft-server}"
 CONF="$SERVER_DIR/config/voicechat/voicechat-server.properties"
 GAME_PROPS="$SERVER_DIR/server.properties"
 
@@ -19,7 +19,7 @@ prop() {
             END {print last}
         ' "$file")"
     fi
-    printf '%s\n' "\${found:-$default}"
+    printf '%s\n' "${found:-$default}"
 }
 
 check_conf() {
@@ -110,7 +110,7 @@ network() {
     echo 'Este comando NAO modifica o firewall.'
 }
 
-case "\${1:-}" in
+case "${1:-}" in
     status) [ "$#" -eq 1 ] || exit 2; status ;;
     set-port) [ "$#" -eq 2 ] || exit 2; set_port "$2" ;;
     edit) [ "$#" -eq 1 ] || exit 2; edit_conf ;;
