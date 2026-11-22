@@ -239,6 +239,7 @@ main() {
                 "📁 Arquivos" \
                 "🎙️ Voice Chat" \
                 "📊 Monitoramento" \
+                "🔄 Atualizações" \
                 "💾 Backup" \
                 "⚙️  Sistema" \
                 "🩺 Diagnóstico" \
@@ -248,6 +249,7 @@ main() {
                 "🎮 Servidor" \
                 "📁 Arquivos" \
                 "📊 Monitoramento" \
+                "🔄 Atualizações" \
                 "💾 Backup" \
                 "⚙️  Sistema" \
                 "🩺 Diagnóstico" \
@@ -381,6 +383,50 @@ main() {
                 case "$mon_choice" in
                     "btop"*) sudo "$manager_script" monitor cpu ;;
                     "ncdu"*) sudo "$manager_script" monitor disk ;;
+                    "← Voltar") continue ;;
+                esac
+                ;;
+            "🔄 Atualizações")
+                local update_choice updater
+                updater="/usr/local/bin/crias-update"
+                if [ ! -x "$updater" ]; then
+                    echo "[ERRO] Atualizador indisponivel. Atualize as ferramentas do Hub pela release mais recente."
+                    read -r -p "Enter para voltar..." _ || true
+                    continue
+                fi
+                update_choice=$(hub_choose "Atualizacoes (separadas do modpack e do mundo):" \
+                    "Verificar release Crias-Server" \
+                    "Atualizar Hub e ferramentas Crias-Server" \
+                    "Verificar pacotes Arch" \
+                    "Atualizar pacotes Arch (manutencao)" \
+                    "← Voltar") || continue
+                case "$update_choice" in
+                    "Verificar release"*)
+                        "$updater" check || true
+                        read -r -p "Enter para voltar..." _ || true
+                        ;;
+                    "Atualizar Hub"*)
+                        local update_confirm
+                        update_confirm=$(hub_choose "Confirmar update SOMENTE do Hub/scripts? Minecraft/Terraria nao reiniciam." \
+                            "Aplicar atualizacao Crias-Server" "Cancelar") || continue
+                        if [ "$update_confirm" = "Aplicar atualizacao Crias-Server" ]; then
+                            sudo "$updater" apply || true
+                            read -r -p "Enter para voltar..." _ || true
+                        fi
+                        ;;
+                    "Verificar pacotes Arch")
+                        "$updater" arch-check || true
+                        read -r -p "Enter para voltar..." _ || true
+                        ;;
+                    "Atualizar pacotes Arch"*)
+                        local arch_confirm
+                        arch_confirm=$(hub_choose "Atualizar Arch requer jogos PARADOS e confirmacao digitada. Continuar?" \
+                            "Iniciar verificacao de manutencao" "Cancelar") || continue
+                        if [ "$arch_confirm" = "Iniciar verificacao de manutencao" ]; then
+                            sudo "$updater" arch-apply || true
+                            read -r -p "Enter para voltar..." _ || true
+                        fi
+                        ;;
                     "← Voltar") continue ;;
                 esac
                 ;;
