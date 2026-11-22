@@ -51,6 +51,8 @@ table inet filter {
 
         # Tailscale (interface VPN — tráfego de confiança)
         iifname "tailscale0" tcp dport 25565 accept comment "Minecraft"
+        # Se usar Simple Voice Chat: canal de voz UDP separado, so pela tailnet
+        iifname "tailscale0" udp dport 24454 accept comment "Minecraft Voice Chat"
         iifname "tailscale0" tcp dport 7777 accept comment "Terraria"
 
         # SSH admin — ajuste a interface/porta para a SUA topologia antes de
