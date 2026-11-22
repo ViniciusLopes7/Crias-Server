@@ -13,6 +13,11 @@ for option in "logs recent" "logs alerts" "logs boot" "logs follow"; do
     grep -Fq "$option" "$root/crias-tui.sh" || { echo "FAIL: opcao TUI ausente: $option" >&2; exit 1; }
 done
 
+# Hub must expose the core administrative flows, not just raw CLI actions.
+for item in "📁 Arquivos" "🎙️ Voice Chat" "files" "setup-files" "voicechat status" "voicechat set-port" "voicechat edit" "voicechat network"; do
+    grep -Fq "$item" "$root/crias-tui.sh" || { echo "FAIL: falta no Hub: $item" >&2; exit 1; }
+done
+
 # Deploy happens before the heavyweight stack installer begins.
 first="$(grep -n "^    deploy_crias_tui$" "$root/install.sh" | head -n1 | cut -d: -f1)"
 stack="$(grep -n "^    run_selected_stack_installer$" "$root/install.sh" | head -n1 | cut -d: -f1)"
