@@ -24,7 +24,19 @@ Este fluxo:
 
 O procedimento exige que `/opt/crias-server` seja um **symlink versionado gerenciado pelo bootstrap**. Se você instalou a partir de uma pasta Git comum, o atualizador recusa a troca e informa como procurar uma instalação compatível; ele não transforma arbitrariamente uma árvore desconhecida em instalação gerenciada.
 
-Em versões anteriores à introdução do atualizador, o Hub ainda não oferece esse menu. Será preciso instalar a primeira versão que já inclui `crias-update` e, a partir dela, usar as atualizações isoladas.
+### Primeira atualização de um servidor já instalado
+
+Se a versão instalada ainda não possui `crias-update`, **não execute uma reinstalação completa do Minecraft** para apenas atualizar o Hub. A partir da primeira release que inclua este recurso, o bootstrap terá a opção `--update-tools`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ViniciusLopes7/Crias-Server/main/crias-bootstrap.sh | sudo bash -s -- --update-tools
+```
+
+Essa opção baixa a release oficial, verifica seu SHA-256 e executa o updater contido no pacote já verificado, **sem chamar `install.sh`**. O updater consulta e valida novamente a release antes de substituir as ferramentas administrativas. Esse caminho exige que a instalação já use o symlink versionado do bootstrap. Quando a atualização terminar, reabra `crias-tui` e use a seção **Atualizações** normalmente.
+
+**Importante:** este comando só deve ser usado quando a versão que inclui a opção já estiver na `main` e publicada em release. Enquanto o PR estiver pendente de aprovação, ele não modifica o seu servidor atual.
+
+
 
 ### Segurança e limites
 
