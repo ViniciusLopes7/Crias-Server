@@ -293,7 +293,7 @@ cmd_voicechat() {
     if [ ! -f "$script" ]; then
         script="$SCRIPT_DIR/voicechat-tools.sh"
     fi
-    if [ ! -x "$script" ]; then
+    if [ ! -f "$script" ]; then
         err "Ferramenta Voice Chat nao instalada. Atualize os scripts administrativos."
         return 1
     fi
