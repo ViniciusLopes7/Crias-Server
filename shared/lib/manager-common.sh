@@ -281,6 +281,7 @@ EOF
             monitor)                    desc="Ferramentas de monitoramento: btop/htop/ncdu (cpu|disk|net)" ;;
             files)                      desc="Explora arquivos do servidor com Midnight Commander (usuario do jogo)" ;;
             setup-files)                desc="Instala Midnight Commander do repositorio Arch sob demanda" ;;
+            voicechat)                  desc="Simple Voice Chat: status|set-port|edit|network" ;;
             health)                     desc="${MANAGER_DESC_HEALTH:-Health check do servidor}" ;;
             backup)                     desc="Executa backup imediato" ;;
             setup-cron)                 desc="Configura timer systemd de backup" ;;
@@ -307,6 +308,7 @@ manager_dispatch() {
         console) shift; cmd_console "$@" ;;
         files) shift; cmd_files "$@" ;;
         setup-files) shift; cmd_setup_files "$@" ;;
+        voicechat) shift; if declare -F cmd_voicechat >/dev/null; then cmd_voicechat "$@"; else err "Voice Chat nao suportado neste stack."; return 2; fi ;;
         setup-console) shift; cmd_setup_console "$@" ;;
         monitor) shift; cmd_monitor "$@" ;;
         health) shift; cmd_health "$@" ;;
