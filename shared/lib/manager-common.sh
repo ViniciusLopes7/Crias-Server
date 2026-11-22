@@ -228,6 +228,7 @@ EOF
             status)                     desc="Mostra status (systemd)" ;;
             logs)                       desc="${MANAGER_DESC_LOGS:-Tail dos logs (journalctl)}" ;;
             console)                    desc="${MANAGER_DESC_CONSOLE:-Console do servico}" ;;
+            setup-console)              desc="Instala mcrcon e configura RCON (sem reiniciar Minecraft)" ;;
             monitor)                    desc="Ferramentas de monitoramento: btop/htop/ncdu (cpu|disk|net)" ;;
             health)                     desc="${MANAGER_DESC_HEALTH:-Health check do servidor}" ;;
             backup)                     desc="Executa backup imediato" ;;
@@ -253,6 +254,7 @@ manager_dispatch() {
         status) shift; cmd_status "$@" ;;
         logs) shift; cmd_logs "$@" ;;
         console) shift; cmd_console "$@" ;;
+        setup-console) shift; cmd_setup_console "$@" ;;
         monitor) shift; cmd_monitor "$@" ;;
         health) shift; cmd_health "$@" ;;
         backup) shift; cmd_backup "$@" ;;
