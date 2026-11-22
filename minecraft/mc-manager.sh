@@ -282,6 +282,25 @@ cmd_setup_console() {
     echo "Depois abra: sudo /usr/local/libexec/crias/mc-manager.sh console"
 }
 
+cmd_voicechat() {
+    # Todos os comandos Voice Chat rodam com o usuario do Minecraft.
+    manager_need_root "$SELF" voicechat "$@"
+    if ! validate_server_dir "$SERVER_DIR" || ! id "$SERVER_USER" >/dev/null 2>&1; then
+        err "Diretorio/usuario do Minecraft invalido."
+        return 1
+    fi
+    local script="$CRIS_LIBEXEC_DIR/voicechat-tools.sh"
+    if [ ! -f "$script" ]; then
+        script="$SCRIPT_DIR/voicechat-tools.sh"
+    fi
+    if [ ! -x "$script" ]; then
+        err "Ferramenta Voice Chat nao instalada. Atualize os scripts administrativos."
+        return 1
+    fi
+    manager_assert_root_safe "$script" || return 1
+    sudo -u "$SERVER_USER" -- env SERVER_DIR="$SERVER_DIR" bash "$script" "$@"
+}
+
 cmd_setup_cron() {
     if [ ! -x "$SETUP_CRON_SCRIPT" ]; then
         err "Script de setup-cron nao encontrado: $SETUP_CRON_SCRIPT"
