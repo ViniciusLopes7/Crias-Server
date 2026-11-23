@@ -19,7 +19,7 @@
 - `/opt/minecraft-server/` e equivalente do Terraria: dados controlados pelo usuário do serviço, nunca origem confiável para scripts root.
 - `/opt/crias-server`: referência versionada para a release administrativa; atualizador mantém um alvo anterior para recuperação.
 - `runtime.env` e `server.properties` podem conter segredos ou parâmetros que mudam o comportamento; evitar expor valores completos em logs.
-- RCON do Minecraft é local e não criptografado; o SSH/Tailscale protege o caminho de administração, não a porta RCON exposta.
+- O **cliente RCON do Hub conecta a `127.0.0.1`**, mas o servidor Minecraft pode escutar em interfaces de rede adicionais. RCON não cifra comandos nem senha: restringir a porta TCP administrativa no firewall, inclusive na tailnet; SSH/Tailscale por si só não fecham essa porta.
 - `systemd` é autoridade para cota de processo e estado da unit; `-Xmx` limita apenas o heap Java, não memória nativa.
 
 ## Fluxo de alteração segura

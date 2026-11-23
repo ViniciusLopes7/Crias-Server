@@ -14,7 +14,7 @@ Não são objetivos: diminuir linhas a qualquer custo, adotar arquitetura de gra
 2. **Uma fonte por regra.** Priorizar implementação canônica para cálculo de orçamento, parsing, deduplicação e transações; evitar cópias com comportamento divergente.
 3. **Separar responsabilidades.** CLI/TUI orquestra; bibliotecas decidem regras; persistência possui contrato; ferramenta de diagnóstico não muda estado.
 4. **Fail-closed onde há risco.** Falha de validação, cota, senha, atualização ou consistência bloqueia escrita irreversível; erro e recuperação são visíveis.
-5. **Privilégio mínimo.** Código root fora da árvore gravável pelo usuário do jogo; nenhum script do jogo executado como root; RCON restrito à máquina.
+5. **Privilégio mínimo.** Código root fora da árvore gravável pelo usuário do jogo; nenhum script do jogo executado como root; cliente RCON via loopback e porta administrativa protegida no firewall (não presumir bind restrito do Minecraft).
 6. **Alterações duráveis são transacionais.** Escrever em temporário no mesmo filesystem, validar, sincronizar/renomear; se múltiplos arquivos representam uma operação, definir journal, estado parcial e recuperação. Não afirmar atomicidade multi-arquivo sem prova.
 7. **Compatibilidade explícita.** Preservar formatos, env, serviços e mundos; registrar consumidores de aliases legados antes da exclusão.
 8. **Sem efeitos surpresa.** Abrir um menu, consultar status ou verificar atualização deve ser observacional. Ações perigosas exigem confirmação; não reiniciar jogo por efeito colateral.
