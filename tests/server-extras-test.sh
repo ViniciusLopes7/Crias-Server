@@ -1,5 +1,5 @@
 #!/bin/bash
-# Characterization: current extra/QoL identity rules, before refactoring.
+# Characterization + regression: shared extra/QoL identity rules.
 # Real fixture JARs + stubbed download; no network or live server.
 set -euo pipefail
 exec </dev/null

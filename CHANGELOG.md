@@ -8,6 +8,12 @@ O histórico de versões antigas é mantido para rastreabilidade; não interpret
 
 ## [Unreleased]
 
+### Melhorado — Deduplicação segura de mods (PR #30)
+
+- Unificada a identificação de Spark, Chunky e Skin Restorer entre o instalador de mods extras e o QoL padrão; reconhece nomes versionados, JARs renomeados por ID Fabric/Forge/NeoForge e arquivo de destino já existente.
+- Corrigido o laço QoL que não recebia arquivos para analisar e podia baixar novamente um mod já presente. Mantidas as políticas de loader, versão efetiva, download, hash e pendências/strict.
+- Expandido o teste de caracterização com fixtures JAR, sem necessidade de rede ou mundo ativo. Não constitui homologação de modpack real.
+
 ### Documentação e engenharia
 
 - Define princípios de qualidade e revisão, linha de base reproduzível, fronteiras da arquitetura e template de PR.
