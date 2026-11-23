@@ -8,6 +8,12 @@ O histórico de versões antigas é mantido para rastreabilidade; não interpret
 
 ## [Unreleased]
 
+### Refatorado — atalhos de arquivos no Hub (PR #36)
+
+- Extraído o menu **Arquivos** para `hub_files_menu()`, no próprio `crias-tui.sh`, sem criar dependências ou alterar a ordem, os atalhos e os comandos dos gerenciadores Minecraft/Terraria.
+- Acrescentados 17 casos de navegação real no fallback numerado, com `sudo` simulado, cobrindo as seis pastas, instalação do gerenciador `mc`, cancelamento, erro e opções adjacentes; a validação de paths, symlinks e usuário do jogo permanece nos testes dos managers.
+- A função `main()` passa de **336 para 301 linhas (-35)**; o arquivo completo passa de **611 para 619 linhas (+8)**, mantendo uma única responsabilidade por função. Não há modificações persistentes no servidor ou no mundo.
+
 ### Refatorado — navegação de memória Java no Hub (PR #34)
 
 - Extraído o controlador do submenu de heap Java de `crias-tui.sh:main()`, mantendo os comandos, mensagens, confirmações e cancelamentos anteriores. Sem mudanças nas políticas de memória, no serviço, no mundo ou no instalador.

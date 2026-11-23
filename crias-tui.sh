@@ -269,6 +269,49 @@ hub_minecraft_memory_menu() {
     return 0
 }
 
+# UI-only: manager scripts enforce directory boundaries and game-user access.
+# Cancellations return to the main menu without changing files or services.
+hub_files_menu() {
+    local stack="$1" manager_script="$2"
+    local files_choice files_area
+    files_choice=$(hub_choose "Arquivos do servidor ($stack):" \
+        "Pasta principal do servidor" \
+        "Mundo atual" \
+        "Mods do servidor" \
+        "Configuracoes (config)" \
+        "Backups locais" \
+        "Logs locais" \
+        "Instalar gerenciador de arquivos" \
+        "← Voltar") || return 0
+    files_area=""
+    case "$files_choice" in
+        "Pasta principal"*) files_area="root" ;;
+        "Mods do servidor") files_area="mods" ;;
+        "Configuracoes"*) files_area="config" ;;
+        "Mundo atual") files_area="world" ;;
+        "Backups locais") files_area="backups" ;;
+        "Logs locais") files_area="logs" ;;
+        "Instalar gerenciador"*)
+            local confirm_install
+            confirm_install=$(hub_choose "Instalar pacote 'mc' do repositorio oficial Arch?" \
+                "Sim, instalar" "Cancelar") || return 0
+            if [ "$confirm_install" = "Sim, instalar" ]; then
+                sudo "$manager_script" setup-files || true
+                read -r -p "Enter para voltar..." _ || true
+            fi
+            ;;
+        "← Voltar") return 0 ;;
+    esac
+    if [ -n "$files_area" ]; then
+        # Abre direto na pasta escolhida; o manager executa o mc
+        # como usuario do jogo, jamais como root.
+        if ! sudo "$manager_script" files "$files_area"; then
+            read -r -p "Enter para voltar..." _ || true
+        fi
+    fi
+    return 0
+}
+
 main() {
     case "${1:-}" in
         --doctor|doctor|diagnose) show_diagnostics; return 0 ;;
@@ -425,42 +468,7 @@ CHUNKY_HELP
                 esac
                 ;;
             "📁 Arquivos")
-                local files_choice files_area
-                files_choice=$(hub_choose "Arquivos do servidor ($stack):" \
-                    "Pasta principal do servidor" \
-                    "Mundo atual" \
-                    "Mods do servidor" \
-                    "Configuracoes (config)" \
-                    "Backups locais" \
-                    "Logs locais" \
-                    "Instalar gerenciador de arquivos" \
-                    "← Voltar") || continue
-                files_area=""
-                case "$files_choice" in
-                    "Pasta principal"*) files_area="root" ;;
-                    "Mods do servidor") files_area="mods" ;;
-                    "Configuracoes"*) files_area="config" ;;
-                    "Mundo atual") files_area="world" ;;
-                    "Backups locais") files_area="backups" ;;
-                    "Logs locais") files_area="logs" ;;
-                    "Instalar gerenciador"*)
-                        local confirm_install
-                        confirm_install=$(hub_choose "Instalar pacote 'mc' do repositorio oficial Arch?" \
-                            "Sim, instalar" "Cancelar") || continue
-                        if [ "$confirm_install" = "Sim, instalar" ]; then
-                            sudo "$manager_script" setup-files || true
-                            read -r -p "Enter para voltar..." _ || true
-                        fi
-                        ;;
-                    "← Voltar") continue ;;
-                esac
-                if [ -n "$files_area" ]; then
-                    # Abre direto na pasta escolhida; o manager executa o mc
-                    # como usuario do jogo, jamais como root.
-                    if ! sudo "$manager_script" files "$files_area"; then
-                        read -r -p "Enter para voltar..." _ || true
-                    fi
-                fi
+                hub_files_menu "$stack" "$manager_script"
                 ;;
             "🎙️ Voice Chat")
                 if [ "$stack" != "minecraft" ]; then continue; fi

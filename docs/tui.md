@@ -111,6 +111,13 @@ bash tests/tui-fallback-test.sh
 # Hub: navegação de memória Java e Chunky por entrada real no menu numerado,
 # com chamadas administrativas simuladas (não altera servidor nem arquivos).
 bash tests/hub-memory-menu-test.sh
+
+# Atalhos Arquivos do Hub: Minecraft/Terraria, erro e confirmacoes;
+# o sudo é simulado, e nenhum arquivo real do servidor é modificado.
+bash tests/hub-files-menu-test.sh
+
+# Restrições reais dos diretórios e usuário do jogo pelo manager (PTY):
+bash tests/hub-files-test.sh
 ```
 
 O caminho do **Hub** com Gum e TTY é exercitado em testes automatizados com pseudo-TTY (`tests/hub-gum-test.sh`), inclusive com stdout capturado. Isso não substitui revisão visual e teste com SSH real. A biblioteca de interface do **instalador** mantém testes próprios de fallback (`tests/tui-fallback-test.sh`). O Hub oferece menu numerado quando não há Gum ou terminal adequado.
@@ -123,6 +130,8 @@ O caminho do **Hub** com Gum e TTY é exercitado em testes automatizados com pse
 - [`shared/lib/tui.sh`](../shared/lib/tui.sh) — código-fonte da biblioteca.
 
 ## Hub de gerenciamento e recuperação
+
+O menu principal **Arquivos** utiliza o controlador de interface `hub_files_menu()`, mantido no próprio `crias-tui.sh`. Os atalhos **Pasta principal, Mundo, Mods, Configurações, Backups e Logs** continuam delegados ao `mc-manager.sh` ou `tt-manager.sh`. O gerenciador, e não o Hub, verifica os diretórios, as permissões e a execução como usuário do jogo. A instalação opcional do gerenciador de arquivos `mc` continua exigindo confirmação explícita; cancelar ou voltar não executa ações.
 
 O submenu **Servidor → Memória Java (Xms/Xmx)** mantém as mesmas opções e comandos (`memory status`, `memory fixed`, `memory set`, `memory auto`), mas agora tem um controlador de interface próprio (`hub_minecraft_memory_menu`). O `crias-tui.sh:main()` apenas delega a escolha; o gerenciador Minecraft continua responsável por validar valores, gravar configuração e manter as proteções do systemd. Cancelar, voltar ou digitar um valor inválido não deve alterar o heap nem reiniciar o servidor.
 
