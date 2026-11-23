@@ -3,6 +3,8 @@
 # Scenario A: old ZIP -> published new ZIP, using the real first-update entry.
 # Scenario B: old ZIP -> new ZIP with candidate updater/bootstraps overlaid.
 # Never touches a live game or any real /opt/, /usr/local/, systemd or pacman.
+# These tags must remain published with their original immutable zip digests.
+# The former 2026-11-21 pinned release was no longer available (HTTP 404).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 if [ "$(id -u)" -ne 0 ]; then
@@ -16,10 +18,10 @@ for command in curl zip unzip sha256sum flock jq; do
     }
 done
 
-OLD_TAG="v2026.11.21-6674985"
-NEW_TAG="v2026.11.22-8877a39"
-OLD_ZIP_SHA="c81cb912a9435bb91781d40c3b228395ff81362d811d4c00ef1fdc73e4e327c0"
-NEW_ZIP_SHA="06de2666d20739d69af7882da9943b39aa8694b3dd15740b64e6acc251ea3020"
+OLD_TAG="v2026.11.22-8877a39"
+NEW_TAG="v2026.11.22-9496a5f"
+OLD_ZIP_SHA="06de2666d20739d69af7882da9943b39aa8694b3dd15740b64e6acc251ea3020"
+NEW_ZIP_SHA="8f945aebd3537850eb04012908f2c2ae4f51450d8a3924ad5383e39278119867"
 URL_PREFIX="https://github.com/ViniciusLopes7/Crias-Server/releases/download"
 tmp="$(mktemp -d /tmp/crias-real-migration-XXXXXXXX)"
 chmod 0700 "$tmp"
@@ -159,7 +161,7 @@ cp "$ROOT/crias-update.sh" "$tmp/candidate-script/crias-update.sh"
         CRIAS_RELEASE_TAG_NAME="$NEW_TAG"
         CRIAS_ZIP_URL="$URL_PREFIX/$NEW_TAG/crias-server-slim.zip"
         CRIAS_SHA_URL="$URL_PREFIX/$NEW_TAG/sha256sums.txt"
-        CRIAS_RELEASE_TARGET="8877a39"
+        CRIAS_RELEASE_TARGET="9496a5f"
     }
     update_download() {
         case "$1" in
