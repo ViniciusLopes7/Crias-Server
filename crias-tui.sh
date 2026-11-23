@@ -213,6 +213,62 @@ show_header() {
     echo ""
 }
 
+# UI controller only: the manager owns memory validation, persistence and systemd.
+# Return to the main menu on cancel/error; do not restart the game implicitly.
+hub_minecraft_memory_menu() {
+    local manager_script="$1"
+    local ram_choice ram_amount ram_growth ram_mode
+    ram_choice=$(hub_choose "Heap Java (Minecraft deve estar parado para alterar):" \
+        "Ver configuracao atual" \
+        "Xms igual a Xmx (limite seguro automatico)" \
+        "Definir Xmx manualmente" \
+        "Voltar para tuning automatico" \
+        "← Voltar") || return 0
+    case "$ram_choice" in
+        "Ver configuracao atual")
+            sudo "$manager_script" memory status || true
+            read -r -p "Enter para voltar..." _ || true
+            ;;
+        "Xms igual a Xmx"*)
+            echo "Requer Minecraft parado. Xms sera igual ao Xmx seguro calculado pelo host."
+            ram_mode=$(hub_choose "Confirmar heap fixo? Sem reiniciar o servidor." \
+                "Confirmar heap fixo" "Cancelar") || return 0
+            if [ "$ram_mode" = "Confirmar heap fixo" ]; then
+                sudo "$manager_script" memory fixed || true
+                read -r -p "Enter para voltar..." _ || true
+            fi
+            ;;
+        "Definir Xmx manualmente")
+            echo "Valor em MiB; teto calculado pelo hardware. Minecraft deve estar parado."
+            if hub_gum_interactive; then
+                ram_amount=$(gum input --header="Heap maximo em MiB (ex.: 4096):" --placeholder="4096") || return 0
+            else
+                read -r -p "Heap maximo (MiB): " ram_amount || return 0
+            fi
+            [[ "$ram_amount" =~ ^[1-9][0-9]{2,5}$ ]] || { echo "[ERRO] Informe um inteiro em MiB."; read -r -p "Enter..." _ || true; return 0; }
+            ram_growth=$(hub_choose "Modo do heap:" \
+                "Fixo: Xms = Xmx (consome mais RAM)" \
+                "Adaptativo: Xms menor que Xmx" "← Voltar") || return 0
+            case "$ram_growth" in
+                "Fixo:"*) ram_mode=fixed ;;
+                "Adaptativo:"*) ram_mode=dynamic ;;
+                *) return 0 ;;
+            esac
+            sudo "$manager_script" memory set "$ram_amount" "$ram_mode" || true
+            read -r -p "Enter para voltar..." _ || true
+            ;;
+        "Voltar para tuning automatico")
+            ram_mode=$(hub_choose "Restaurar a politica automatica Xms/Xmx?" \
+                "Restaurar automatico" "Cancelar") || return 0
+            if [ "$ram_mode" = "Restaurar automatico" ]; then
+                sudo "$manager_script" memory auto || true
+                read -r -p "Enter para voltar..." _ || true
+            fi
+            ;;
+    esac
+    return 0
+}
+
 main() {
     case "${1:-}" in
         --doctor|doctor|diagnose) show_diagnostics; return 0 ;;
@@ -314,55 +370,7 @@ main() {
                         sudo "$manager_script" chunky watch "$chunk_interval" || true
                         ;;
                     "Memoria Java (Xms/Xmx)")
-                        local ram_choice ram_amount ram_growth ram_mode
-                        ram_choice=$(hub_choose "Heap Java (Minecraft deve estar parado para alterar):" \
-                            "Ver configuracao atual" \
-                            "Xms igual a Xmx (limite seguro automatico)" \
-                            "Definir Xmx manualmente" \
-                            "Voltar para tuning automatico" \
-                            "← Voltar") || continue
-                        case "$ram_choice" in
-                            "Ver configuracao atual")
-                                sudo "$manager_script" memory status || true
-                                read -r -p "Enter para voltar..." _ || true
-                                ;;
-                            "Xms igual a Xmx"*)
-                                echo "Requer Minecraft parado. Xms sera igual ao Xmx seguro calculado pelo host."
-                                ram_mode=$(hub_choose "Confirmar heap fixo? Sem reiniciar o servidor." \
-                                    "Confirmar heap fixo" "Cancelar") || continue
-                                if [ "$ram_mode" = "Confirmar heap fixo" ]; then
-                                    sudo "$manager_script" memory fixed || true
-                                    read -r -p "Enter para voltar..." _ || true
-                                fi
-                                ;;
-                            "Definir Xmx manualmente")
-                                echo "Valor em MiB; teto calculado pelo hardware. Minecraft deve estar parado."
-                                if hub_gum_interactive; then
-                                    ram_amount=$(gum input --header="Heap maximo em MiB (ex.: 4096):" --placeholder="4096") || continue
-                                else
-                                    read -r -p "Heap maximo (MiB): " ram_amount || continue
-                                fi
-                                [[ "$ram_amount" =~ ^[1-9][0-9]{2,5}$ ]] || { echo "[ERRO] Informe um inteiro em MiB."; read -r -p "Enter..." _ || true; continue; }
-                                ram_growth=$(hub_choose "Modo do heap:" \
-                                    "Fixo: Xms = Xmx (consome mais RAM)" \
-                                    "Adaptativo: Xms menor que Xmx" "← Voltar") || continue
-                                case "$ram_growth" in
-                                    "Fixo:"*) ram_mode=fixed ;;
-                                    "Adaptativo:"*) ram_mode=dynamic ;;
-                                    *) continue ;;
-                                esac
-                                sudo "$manager_script" memory set "$ram_amount" "$ram_mode" || true
-                                read -r -p "Enter para voltar..." _ || true
-                                ;;
-                            "Voltar para tuning automatico")
-                                ram_mode=$(hub_choose "Restaurar a politica automatica Xms/Xmx?" \
-                                    "Restaurar automatico" "Cancelar") || continue
-                                if [ "$ram_mode" = "Restaurar automatico" ]; then
-                                    sudo "$manager_script" memory auto || true
-                                    read -r -p "Enter para voltar..." _ || true
-                                fi
-                                ;;
-                        esac
+                        hub_minecraft_memory_menu "$manager_script"
                         ;;
                     "Ajuda: Chunky")
                         cat <<'CHUNKY_HELP'

@@ -81,3 +81,12 @@ A primeira mudança **não reduziu necessariamente as linhas totais**, mas elimi
 - **Limite:** `run-all.sh` não equivale à matriz de CI completa (Java, Go, integração Arch/QEMU, migração de releases e testes Python dedicados). As dependências de testes locais continuam necessárias.
 
 A meta aqui não é diminuir linhas, e sim impedir que um problema não seja percebido e que a lista de testes locais continue divergindo do CI.
+
+
+## Ciclo 3 — Controlador de memória Java do Hub (issue #33 / PR #34)
+
+- **Referência anterior:** `main@7e0dd73` (Ciclo 2 consolidado).
+- **Caracterização:** commit `3c5e10a`, 13 cenários de navegação real pelo fallback numerado (`tests/hub-memory-menu-test.sh`), preservando fluxos de status, fixed, valor manual fixo/adaptativo, auto, cancelar, entradas inválidas, retorno e Chunky. Todas as chamadas administrativas são interceptadas; nenhum servidor é alterado.
+- **Refatoração:** commit `b02397b`, extrai a função `hub_minecraft_memory_menu()` no mesmo arquivo, sem biblioteca/sourcing novo e com retorno explícito ao menu principal após cancelamentos. `main()` passa de **384 para 336 linhas (-48, ~12,5%)**; `crias-tui.sh` inteiro passa de **603 para 611 linhas (+8)**. Mais linhas totais não significam aumento de complexidade aqui: uma responsabilidade deixa de estar embutida em `main()`.
+- **Contratos preservados:** ordem das opções, prompts, argumentos passados ao manager, bloqueio de valores inválidos, ausência de ação ao cancelar, e sem reiniciar automaticamente o jogo; menu Chunky adjacente continua com a mesma seleção de intervalos.
+- **Limites:** os novos testes cobrem o fallback numerado com `sudo` stubado e não afirmam homologação SSH/TTY real ou funcionamento do mundo. Os testes existentes de Hub/Gum/PTy e QEMU continuam sendo necessários.

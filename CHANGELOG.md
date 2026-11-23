@@ -8,6 +8,12 @@ O histórico de versões antigas é mantido para rastreabilidade; não interpret
 
 ## [Unreleased]
 
+### Refatorado — navegação de memória Java no Hub (PR #34)
+
+- Extraído o controlador do submenu de heap Java de `crias-tui.sh:main()`, mantendo os comandos, mensagens, confirmações e cancelamentos anteriores. Sem mudanças nas políticas de memória, no serviço, no mundo ou no instalador.
+- Adicionados 13 cenários de caracterização do menu de memória e da navegação vizinha do Chunky, com entradas reais do fallback e interceptação de comandos administrativos.
+- A função principal do Hub passou de aproximadamente **384 para 336 linhas**; o arquivo total passou de **603 para 611**, pois a separação das responsabilidades aumenta ligeiramente a estrutura em vez de apenas reduzir linhas.
+
 ### Corrigido — confiabilidade do executor de testes (PR #32)
 
 - `tests/run-all.sh` passa a reportar os totais de PASS/FAIL/SKIP e a retornar código diferente de zero quando algum teste falha, evitando aprovação local falsa.

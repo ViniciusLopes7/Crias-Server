@@ -107,6 +107,10 @@ bash shared/lib/tui.sh selftest
 
 # Teste de cobertura (caminho fallback):
 bash tests/tui-fallback-test.sh
+
+# Hub: navegação de memória Java e Chunky por entrada real no menu numerado,
+# com chamadas administrativas simuladas (não altera servidor nem arquivos).
+bash tests/hub-memory-menu-test.sh
 ```
 
 O caminho do **Hub** com Gum e TTY é exercitado em testes automatizados com pseudo-TTY (`tests/hub-gum-test.sh`), inclusive com stdout capturado. Isso não substitui revisão visual e teste com SSH real. A biblioteca de interface do **instalador** mantém testes próprios de fallback (`tests/tui-fallback-test.sh`). O Hub oferece menu numerado quando não há Gum ou terminal adequado.
@@ -119,6 +123,8 @@ O caminho do **Hub** com Gum e TTY é exercitado em testes automatizados com pse
 - [`shared/lib/tui.sh`](../shared/lib/tui.sh) — código-fonte da biblioteca.
 
 ## Hub de gerenciamento e recuperação
+
+O submenu **Servidor → Memória Java (Xms/Xmx)** mantém as mesmas opções e comandos (`memory status`, `memory fixed`, `memory set`, `memory auto`), mas agora tem um controlador de interface próprio (`hub_minecraft_memory_menu`). O `crias-tui.sh:main()` apenas delega a escolha; o gerenciador Minecraft continua responsável por validar valores, gravar configuração e manter as proteções do systemd. Cancelar, voltar ou digitar um valor inválido não deve alterar o heap nem reiniciar o servidor.
 
 O executável `/usr/local/bin/crias-tui` é implantado **antes** da seleção dos jogos, dos downloads e da instalação de serviços. Isso mantém o diagnóstico acessível se a instalação falhar depois dessa etapa.
 
