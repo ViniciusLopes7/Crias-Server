@@ -8,6 +8,12 @@ O histórico de versões antigas é mantido para rastreabilidade; não interpret
 
 ## [Unreleased]
 
+### Refatorado — submenu Monitoramento no Hub (PR #42)
+
+- Isolado o controlador do submenu Monitoramento em `hub_monitoring_menu()`, preservando escolhas, textos, ordem, atalhos btop/ncdu, chamadas dos managers e semântica de cancelamento para Minecraft/Terraria.
+- Adicionados 10 cenários de caracterização por menu numerado real com comandos administrativos simulados, registrando-os no CI e na suíte local.
+- A `main()` do Hub passa de **269 para 260 linhas (−9)**; `crias-tui.sh` total passa de **627 para 635 (+8)**. O objetivo é manter responsabilidades separadas, não reduzir linhas a qualquer custo.
+
 ### Refatorado — submenu Voice Chat no Hub (PR #40)
 
 - Extraído o submenu de Simple Voice Chat para `hub_minecraft_voicechat_menu()`, sem alterar comandos, prompts, opções, cancelamentos ou a restrição ao Minecraft; nenhuma lógica de rede, permissões ou validação de portas migrou do gerenciador.

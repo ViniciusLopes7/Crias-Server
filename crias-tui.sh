@@ -352,6 +352,23 @@ hub_minecraft_voicechat_menu() {
     return 0
 }
 
+# UI only: manager scripts launch monitoring tools with their existing privileges.
+# Returning from this controller resumes the unchanged main menu.
+hub_monitoring_menu() {
+    local manager_script="$1"
+    local mon_choice
+    mon_choice=$(hub_choose "Monitoramento:" \
+        "btop (CPU/RAM/processos)" \
+        "ncdu (uso de disco)" \
+        "← Voltar") || return 0
+    case "$mon_choice" in
+        "btop"*) sudo "$manager_script" monitor cpu ;;
+        "ncdu"*) sudo "$manager_script" monitor disk ;;
+        "← Voltar") return 0 ;;
+    esac
+    return 0
+}
+
 main() {
     case "${1:-}" in
         --doctor|doctor|diagnose) show_diagnostics; return 0 ;;
@@ -515,16 +532,7 @@ CHUNKY_HELP
                 hub_minecraft_voicechat_menu "$manager_script"
                 ;;
             "📊 Monitoramento")
-                local mon_choice
-                mon_choice=$(hub_choose "Monitoramento:" \
-                    "btop (CPU/RAM/processos)" \
-                    "ncdu (uso de disco)" \
-                    "← Voltar") || continue
-                case "$mon_choice" in
-                    "btop"*) sudo "$manager_script" monitor cpu ;;
-                    "ncdu"*) sudo "$manager_script" monitor disk ;;
-                    "← Voltar") continue ;;
-                esac
+                hub_monitoring_menu "$manager_script"
                 ;;
             "🔄 Atualizações")
                 local update_choice updater

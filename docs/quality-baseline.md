@@ -108,3 +108,12 @@ A meta aqui não é diminuir linhas, e sim impedir que um problema não seja per
 - **Refatoração:** `18ca10b` extrai `hub_minecraft_voicechat_menu(manager_script)` no mesmo script, sem novos imports nem mudança persistida. `main()` passa de **301 para 269 linhas (−32; ~10,6%)**; `crias-tui.sh` completo passa de **619 para 627 linhas (+8)**. O ganho é a responsabilidade isolada e protegida por contratos.
 - **Comportamento mantido:** opções, ordem, prompts, comandos enviados ao manager, `|| true`, pausas de retorno, cancela/volta e disponibilidade exclusivamente para Minecraft. As cinco saídas `continue` originalmente associadas ao submenu passam a `return 0` no controlador, retornando ao mesmo laço principal.
 - **Fronteira de segurança:** `minecraft/voicechat-tools.sh` permanece inalterado, com os testes existentes de validação de portas, colisão com a porta do jogo, proibição de symlinks e restrições de terminal em `tests/minecraft-voicechat-test.sh`. Os novos testes não alteram o servidor real ou a interface do firewall; os cenários de pseudo-TTY verificam controle de fluxo, não conexão real.
+
+
+## Ciclo 6 — Monitoramento do Hub (issue #41 / PR #42)
+
+- **Base:** `main@eba7779` após ciclo 5, `crias-tui.sh` com 627 linhas, `main()` com 269.
+- **Caracterização pré-refatoração:** commit `0b65507`, novo `tests/hub-monitoring-menu-test.sh` com **10 casos**: atalhos btop/ncdu, escolha vazia/inválida, EOF, voltar, equivalência Minecraft/Terraria e opção adjacente Arquivos. O teste invoca o menu real em fallback numerado e intercepta `sudo`, evitando execução de ferramentas/serviços.
+- **Extração:** commit `a6f81fe`, move apenas a escolha para `hub_monitoring_menu(manager_script)` no mesmo script; `main()` **269 → 260 linhas (−9; ~3,3%)**, `crias-tui.sh` **627 → 635 linhas (+8)**. O pequeno ganho na função principal não justifica alterações maiores fora de escopo.
+- **Contratos:** textos, ordem de opções, argumentos exatos dos managers, tratamento de retorno e acesso a ambos os jogos mantidos; o caminho de Gum/TTY já é coberto por testes gerais existentes do Hub.
+- **Limite:** testes simulam `sudo`; não executam `btop`/`ncdu` em host real e não medem desempenho nem experiência SSH. A função não altera privilégios, hardware ou regras de monitoramento.

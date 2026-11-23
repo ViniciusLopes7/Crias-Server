@@ -226,6 +226,7 @@ jobs:
           bash tests/minecraft-console-contract-test.sh
           bash tests/minecraft-voicechat-test.sh
           bash tests/hub-voicechat-menu-test.sh
+          bash tests/hub-monitoring-menu-test.sh
           bash tests/minecraft-memory-contract-test.sh
           bash tests/server-extras-test.sh
           bash tests/terraria-tuning-test.sh
