@@ -17,10 +17,16 @@ def git_output(root: Path, *args: str) -> bytes:
     return subprocess.check_output(["git", "-C", str(root), *args], stderr=subprocess.DEVNULL)
 
 
-def tracked_files(root: Path) -> list[Path]:
-    """Only tracked files count; never include local caches, secrets or .git."""
-    names = git_output(root, "ls-files", "-z").decode("utf-8").split("\0")
-    return [root / p for p in sorted(n for n in names if n) if (root / p).is_file()]
+def tracked_files(root: Path, ref: str | None = None) -> list[Path]:
+    """Only version-controlled files, including those in an explicit historical commit."""
+    if ref is None:
+        names = git_output(root, "ls-files", "-z").decode("utf-8").split("\0")
+    else:
+        names = git_output(root, "ls-tree", "-r", "-z", "--name-only", ref).decode("utf-8").split("\0")
+    return [
+        root / p for p in sorted(n for n in names if n)
+        if ref is not None or (root / p).is_file()
+    ]
 
 
 def shell_function_spans(source: str) -> list[tuple[str, int, int]]:
@@ -33,8 +39,8 @@ def shell_function_spans(source: str) -> list[tuple[str, int, int]]:
     ]
 
 
-def report(root: Path = ROOT) -> dict:
-    files = tracked_files(root)
+def report(root: Path = ROOT, ref: str | None = None) -> dict:
+    files = tracked_files(root, ref)
     extension_counts: Counter[str] = Counter()
     test_files = docs_files = production_lines = 0
     hotspots: list[dict] = []
@@ -49,10 +55,13 @@ def report(root: Path = ROOT) -> dict:
         if path.suffix not in (".sh", ".go", ".py", ".md"):
             continue
         extension_counts[path.suffix] += 1
-        if not path.is_file():
+        if ref is None and not path.is_file():
             continue
         try:
-            source = path.read_text(encoding="utf-8")
+            if ref is None:
+                source = path.read_text(encoding="utf-8")
+            else:
+                source = git_output(root, "show", f"{ref}:{rel}").decode("utf-8")
         except UnicodeError:
             continue
         lines = len(source.splitlines())
@@ -69,7 +78,7 @@ def report(root: Path = ROOT) -> dict:
                 if len(set(paths)) > 1]
     return {
         "schema_version": 1,
-        "git_sha": git_output(root, "rev-parse", "HEAD").decode().strip(),
+        "git_sha": git_output(root, "rev-parse", f"{ref}^{{commit}}" if ref else "HEAD").decode().strip(),
         "tracked_files": len(files),
         "shell_files": extension_counts[".sh"],
         "go_files": extension_counts[".go"],
@@ -114,14 +123,21 @@ def as_markdown(data: dict, comparison: dict | None = None) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--format", choices=("json", "markdown"), default="markdown")
-    parser.add_argument("--compare", type=Path, help="JSON de referência gerado por esta ferramenta")
+    reference = parser.add_mutually_exclusive_group()
+    reference.add_argument("--compare", type=Path, help="JSON de referência gerado por esta ferramenta")
+    reference.add_argument("--compare-ref", help="SHA/tag Git histórico; exige objeto presente no clone")
     args = parser.parse_args()
     current = report()
     previous = None
-    if args.compare is not None:
+    if args.compare_ref is not None:
+        try:
+            previous = report(ref=args.compare_ref)
+        except subprocess.CalledProcessError:
+            parser.error("ref histórico indisponível: use um clone com histórico completo")
+    elif args.compare is not None:
         previous = json.loads(args.compare.read_text(encoding="utf-8"))
-        if previous.get("schema_version") != current["schema_version"]:
-            parser.error("schema_version da referência incompatível")
+    if previous is not None and previous.get("schema_version") != current["schema_version"]:
+        parser.error("schema_version da referência incompatível")
     if args.format == "json":
         if previous:
             current["delta_vs_baseline"] = {

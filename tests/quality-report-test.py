@@ -44,6 +44,15 @@ class QualityReportTests(unittest.TestCase):
             self.assertEqual(report["docs_directory_markdown"], 1)
             self.assertEqual(report["production_code_lines"], 3)
             self.assertEqual(report["tracked_files"], 4)
+            baseline = subprocess.check_output(
+                ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
+            ).strip()
+            (root / "app.sh").write_text("main() {\n  true\n  echo changed\n}\n", encoding="utf-8")
+            newer = module.report(root)
+            old = module.report(root, ref=baseline)
+            self.assertEqual(old["production_code_lines"], 3)
+            self.assertEqual(newer["production_code_lines"], 4)
+            self.assertEqual(old["git_sha"], baseline)
 
     def test_cli_json_and_markdown(self) -> None:
         result = subprocess.check_output(
@@ -59,6 +68,12 @@ class QualityReportTests(unittest.TestCase):
             cwd=ROOT, text=True,
         )
         self.assertIn("Inventário de qualidade", text)
+        compare = subprocess.check_output(
+            ["python3", str(ROOT / "tools/quality-report.py"), "--format", "json",
+             "--compare-ref", "HEAD"], cwd=ROOT, text=True,
+        )
+        delta = json.loads(compare)["delta_vs_baseline"]
+        self.assertTrue(all(value == 0 for value in delta.values()))
 
     def test_policy_links_exist(self) -> None:
         for path in ("CONTRIBUTING.md", "docs/engineering-quality.md",

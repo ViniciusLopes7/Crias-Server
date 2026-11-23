@@ -34,7 +34,13 @@ Execute no checkout de cada SHA:
 ```bash
 python3 tools/quality-report.py --format markdown
 python3 tools/quality-report.py --format json > quality-report.json
+# Comparação direta com a versão anterior aos fundamentos (clone com histórico completo):
+python3 tools/quality-report.py --compare-ref 9496a5f04e3c2f093926f21f69b38251c11af8fe --format markdown
+# Alternativa para runners rasos: salve o JSON da baseline num checkout com histórico e compare:
+python3 tools/quality-report.py --compare quality-baseline.json --format markdown
 ```
+
+O modo `--compare-ref` lê os arquivos **diretamente do objeto Git histórico**, mesmo que o commit antigo não contenha essa ferramenta. Em clones superficiais (`fetch-depth: 1`), obtenha o histórico necessário antes da comparação; o relatório em CI permanece apenas observacional. Não atribuir alterações locais não commitadas ao SHA do HEAD.
 
 Comparar por módulo e explicar a diferença. O relatório automático é observacional; não há gate automático para reduzir linhas. Analisar separadamente linhas de produção, testes e documentação.
 

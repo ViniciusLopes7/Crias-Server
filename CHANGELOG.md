@@ -8,7 +8,7 @@ O histórico de versões antigas é mantido para rastreabilidade; não interpret
 
 ## [Unreleased]
 
-### Documentação e engenharia (proposto)
+### Documentação e engenharia
 
 - Define princípios de qualidade e revisão, linha de base reproduzível, fronteiras da arquitetura e template de PR.
 - Acrescenta relatório informativo de inventário e teste de contrato, sem modificar fluxos de produção nem impor redução artificial de linhas.

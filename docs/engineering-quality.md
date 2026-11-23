@@ -1,6 +1,6 @@
 # Política de qualidade e melhoria contínua
 
-**Estado:** proposta para revisão do mantenedor (2026-11-23). Torna-se política do repositório após merge. Aplica-se a Shell, Java runtime, systemd, Go, Python, CI e documentação.
+**Estado:** política instituída com a integração do PR #28 à `main` (2026-11-23). Aplica-se a Shell, Java runtime, systemd, Go, Python, CI e documentação.
 
 ## Objetivo e não objetivos
 
@@ -39,7 +39,7 @@ A solução pode ser manter o código existente com justificativa. Métricas sã
 
 ## Linha de base e definição de melhora
 
-Gerar relatório com `python3 tools/quality-report.py --format markdown`; comparar o SHA de referência e o SHA do PR. Arquivar o resumo, não substituir o original. Reportar por módulo: arquivos/linhas, funções Shell candidatas a revisão, testes disponíveis e diferenças documentais.
+Gerar relatório com `python3 tools/quality-report.py --format markdown`; comparar com a referência histórica via `--compare-ref 9496a5f` quando o histórico Git estiver disponível, ou via `--compare` com JSON salvo. Arquivar o resumo, não substituir o original. Reportar por módulo: arquivos/linhas, funções Shell candidatas a revisão, testes disponíveis e diferenças documentais.
 
 Usar indicadores de resultado quando houver dados verificáveis: regressões após release, necessidade de hotfix/rollback, recuperação de atualização, incidentes OOM, disponibilidade de SSH e validação física. **Sem série temporal real, anotar “não medido”; não inventar índice de qualidade.** DORA sugere métricas de falha e retrabalho, que não devem ser usadas para premiar mais releases.
 

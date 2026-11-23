@@ -42,6 +42,7 @@ A classificação depende do impacto, não do número de linhas. Alterações P0
 
 - `bash tests/run-all.sh`: executor local histórico; **não** é equivalente integral ao CI no estado de referência de 2026-11-23.
 - `python3 tools/quality-report.py --format markdown`: inventário reprodutível de tamanho e candidatos de complexidade, sem limites cegos.
+- `python3 tools/quality-report.py --compare-ref 9496a5f --format markdown`: comparação com a linha de base em clone com histórico Git disponível (ou use `--compare baseline.json`).
 - `python3 tests/docs-links-test.py`: links Markdown locais.
 - GitHub Actions: executar a matriz completa, inclusive QEMU, quando requerida pelo impacto.
 

@@ -1,14 +1,14 @@
 # ADR-0001 — Qualidade antes de novas funcionalidades
 
 - **Data:** 2026-11-23
-- **Status:** Proposto (pendente de revisão e merge)
+- **Status:** Aceito com a integração do PR #28 à `main`
 - **Escopo:** Desenvolvimento do Crias-Server
 
 ## Contexto
 
 PRs consecutivos corrigiram RAM/OOM, updater, Hub, RCON e Chunky, mas surgiram duplicações, longas funções, desvios entre suites de testes e documentação defasada. Refatorar sem registrar a referência tornaria impossível demonstrar resultado.
 
-## Decisão proposta
+## Decisão
 
 Adotar política de engenharia sustentável: subtração/reutilização antes de adição; PRs pequenos com justificativa, risco e testes; baseline reprodutível; documentação sincronizada no mesmo PR; preservação de mundo e rollback acima de metas de linhas. Avaliar refatorações separadamente de novas funcionalidades.
 
