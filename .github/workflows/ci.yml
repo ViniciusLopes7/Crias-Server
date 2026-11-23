@@ -216,6 +216,7 @@ jobs:
           bash tests/chunky-progress-watch-test.sh
           bash tests/minecraft-heap-control-test.sh
           bash tests/hub-files-test.sh
+          bash tests/hub-files-menu-test.sh
           bash tests/crias-update-test.sh
           bash tests/remote-access-setup-test.sh
           bash tests/modpack-state-test.sh
