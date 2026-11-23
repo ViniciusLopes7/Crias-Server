@@ -34,6 +34,10 @@ class QualityReportTests(unittest.TestCase):
             (root / ".gitignore").write_text("untracked.sh\n", encoding="utf-8")
             (root / "untracked.sh").write_text("nope() {}\n", encoding="utf-8")
             subprocess.run(["git", "-C", str(root), "add", "."], check=True)
+            # A new repository has no HEAD until its first commit.
+            subprocess.run(["git", "-C", str(root), "-c", "user.name=CI",
+                            "-c", "user.email=ci@example.invalid",
+                            "commit", "-qm", "fixture"], check=True)
             report = module.report(root)
             self.assertEqual(report["shell_files"], 2)
             self.assertEqual(report["test_directory_files"], 1)

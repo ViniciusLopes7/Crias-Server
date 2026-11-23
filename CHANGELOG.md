@@ -2,8 +2,9 @@
 
 Todas as mudanças relevantes do projeto Crias-Server são registradas neste arquivo. Entradas antigas permanecem como histórico e não substituem a documentação operacional atual.
 
-O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
-e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+O formato do histórico é inspirado no [Keep a Changelog](https://keepachangelog.com/),
+e as releases atuais usam tags datadas com o SHA de referência (por exemplo, `v2026.11.22-9496a5f`).
+O histórico de versões antigas é mantido para rastreabilidade; não interpretar os números 1.x como o esquema vigente.
 
 ## [Unreleased]
 
@@ -11,7 +12,7 @@ e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 - Define princípios de qualidade e revisão, linha de base reproduzível, fronteiras da arquitetura e template de PR.
 - Acrescenta relatório informativo de inventário e teste de contrato, sem modificar fluxos de produção nem impor redução artificial de linhas.
-- Corrige referências documentais desatualizadas sobre Hub/Gum e critérios de validação; não altera mundo, mods, serviços ou tunning.
+- Corrige referências documentais desatualizadas sobre Hub/Gum e critérios de validação; não altera mundo, mods, serviços ou tuning.
 
 ## [2026-11-22] — Hub, atualizações recuperáveis e administração cotidiana
 
@@ -29,8 +30,6 @@ e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 ### Limites de validação
 
 - CI, QEMU e migração de arquivos foram aprovados; não substituem mundo modded ativo, RCON real prolongado ou testes de jogadores no host físico.
-
-
 
 ## [2026-11-21] — Proteções de operação após auditoria de prontidão
 
