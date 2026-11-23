@@ -84,32 +84,32 @@ MINECRAFT_EXTRA_MODS="spark"
 stack_install_extra_mods
 assert_downloads ""
 
-# BASELINE GAP: NeoForge-specific metadata is not read for a renamed JAR.
+# NeoForge-specific root metadata identifies a renamed JAR.
 reset_case
 MINECRAFT_LOADER=neoforge
 make_jar "opaque.jar" "META-INF/neoforge.mods.toml" '[[mods]]\nmodId="spark"\n'
 MINECRAFT_EXTRA_MODS="spark"
 stack_install_extra_mods
-assert_downloads 'spark|neoforge|1.20.1|spark|'
-echo 'BASELINE GAP: renamed NeoForge JAR not detected by extras'
+assert_downloads ''
+echo 'OK: renamed NeoForge JAR is detected by extras'
 
-# BASELINE GAP: QoL versioned-name loop receives no file input.
+# QoL must also recognize versioned names without input from stdin.
 reset_case
 MINECRAFT_LOADER=fabric
 touch "$MINECRAFT_SERVER_DIR/mods/Chunky-1.3.jar"
 MINECRAFT_QOL_MODS="chunky:chunky"
 install_minecraft_qol_mods
-assert_downloads 'chunky|fabric|1.20.1|chunky|MOD_CHUNKY_SHA256'
-echo 'BASELINE GAP: QoL downloads an existing versioned Chunky JAR'
+assert_downloads ''
+echo 'OK: QoL recognizes versioned Chunky JAR'
 
-# BASELINE GAP: QoL ignores matching mod ID in renamed Fabric JAR.
+# The same metadata identity lookup must work for QoL.
 reset_case
 MINECRAFT_LOADER=fabric
 make_jar "opaque.jar" "fabric.mod.json" '{"id":"spark"}'
 MINECRAFT_QOL_MODS="spark:spark"
 install_minecraft_qol_mods
-assert_downloads 'spark|fabric|1.20.1|spark|MOD_SPARK_SHA256'
-echo 'BASELINE GAP: QoL ignores renamed Fabric mod ID'
+assert_downloads ''
+echo 'OK: QoL recognizes renamed Fabric mod ID'
 
 # Separate QoL policy: file_name is destination, slug is project.
 reset_case
@@ -117,6 +117,27 @@ MINECRAFT_LOADER=fabric
 MINECRAFT_QOL_MODS="server-tool:spark"
 install_minecraft_qol_mods
 assert_downloads 'spark|fabric|1.20.1|server-tool|MOD_SERVER_TOOL_SHA256'
+
+# The installed destination alias also counts as present on a second run.
+reset_case
+MINECRAFT_LOADER=fabric
+touch "$MINECRAFT_SERVER_DIR/mods/server-tool.jar"
+MINECRAFT_QOL_MODS="server-tool:spark"
+install_minecraft_qol_mods
+assert_downloads ""
+
+# Invalid JARs with unrelated names must never count as the desired mod.
+reset_case
+printf 'not a zip' > "$MINECRAFT_SERVER_DIR/mods/opaque.jar"
+MINECRAFT_EXTRA_MODS="spark"
+stack_install_extra_mods
+assert_downloads 'spark|forge|1.20.1|spark|'
+
+# Re-running an installer with the downloaded destination JAR is idempotent.
+: > "$CALLS"
+touch "$MINECRAFT_SERVER_DIR/mods/spark.jar"
+stack_install_extra_mods
+assert_downloads ""
 
 # The QoL set is gated by loader; extras are skipped on vanilla.
 reset_case
