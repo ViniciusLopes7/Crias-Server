@@ -189,6 +189,8 @@ jobs:
           bash tests/crias-bootstrap-test.sh
           bash tests/install-contracts.sh
           bash tests/static-audit.sh
+          # Contrato: o runner local deve falhar se um teste falha e cobrir a suite shell do CI.
+          bash tests/run-all-contract-test.sh
           # Policy + reproducible baseline smoke (no new LoC threshold).
           python3 tests/quality-report-test.py
           python3 tools/quality-report.py --format markdown
