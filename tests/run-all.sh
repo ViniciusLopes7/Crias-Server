@@ -241,6 +241,7 @@ run_test "minecraft-console-contract-test" "tests/minecraft-console-contract-tes
 run_test "minecraft-voicechat-test"     "tests/minecraft-voicechat-test.sh"
 run_test "hub-voicechat-menu-test"      "tests/hub-voicechat-menu-test.sh"
 run_test "hub-monitoring-menu-test"     "tests/hub-monitoring-menu-test.sh"
+run_test "hub-updates-menu-test"        "tests/hub-updates-menu-test.sh"
 # Contraprova do próprio runner; impede reportar sucesso falso ao chamador.
 run_test "run-all-contract-test"        "tests/run-all-contract-test.sh"
 
