@@ -2,7 +2,19 @@
 
 > Visão consolidada do produto e das lacunas de validação. Registros de fases antigas permanecem como referência histórica; o estado atual deve ser conferido na branch `main` e nas execuções recentes do CI.
 
-## ✅ Implementado (v1.3.0)
+## Estado atual e histórico de implantação (releases de novembro de 2026)
+
+> A tabela abaixo mantém marcos históricos das versões 1.2.x/1.3.0 para rastreabilidade. O mecanismo vigente de publicação usa tags datadas (por exemplo, `v2026.11.22-9496a5f`), não a indicação de versão deste cabeçalho.
+
+### Consolidação de qualidade — prioridade atual
+
+- [x] Base de critérios, documentação de arquitetura e inventário inicial preparados para revisão.
+- [ ] Homologar princípios após merge e evoluir métricas com referências por SHA.
+- [ ] Refatorar duplicações verificadas com testes antes/depois e sem novos recursos.
+- [ ] Homologar memória, RCON/Chunky, backup e atualização com mundo de teste real.
+- [ ] Corrigir documentação histórica ainda vinculada à antiga ISO, mantendo apenas o que for necessário para consulta.
+
+### Marcos históricos implementados
 
 > **Nota**: ISO customizada removida — use a ISO oficial do Arch Linux. ISO customizada é um objetivo futuro quando o projeto tiver maturidade.
 

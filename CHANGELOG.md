@@ -7,7 +7,30 @@ e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
-Nenhuma alteração adicional aguardando publicação.
+### Documentação e engenharia (proposto)
+
+- Define princípios de qualidade e revisão, linha de base reproduzível, fronteiras da arquitetura e template de PR.
+- Acrescenta relatório informativo de inventário e teste de contrato, sem modificar fluxos de produção nem impor redução artificial de linhas.
+- Corrige referências documentais desatualizadas sobre Hub/Gum e critérios de validação; não altera mundo, mods, serviços ou tunning.
+
+## [2026-11-22] — Hub, atualizações recuperáveis e administração cotidiana
+
+### Adicionado
+
+- **PR #24:** Hub com console RCON, arquivos sem root, Simple Voice Chat e atualização isolada de ferramentas administrativas.
+- **PR #27:** consultas periódicas de progresso Chunky e controle do heap Java por modos automático, fixo ou personalizado.
+
+### Corrigido
+
+- **PR #25:** atualização resiliente a interrupção, com journal persistente, recuperação e testes de migração de releases reais pinadas.
+- **PR #26:** navegação por setas do Gum sob substituição de comando e hierarquia dos menus.
+- **PR #27:** console RCON SSH de conexões curtas, status compacto e formatação ANSI de encerramento.
+
+### Limites de validação
+
+- CI, QEMU e migração de arquivos foram aprovados; não substituem mundo modded ativo, RCON real prolongado ou testes de jogadores no host físico.
+
+
 
 ## [2026-11-21] — Proteções de operação após auditoria de prontidão
 
