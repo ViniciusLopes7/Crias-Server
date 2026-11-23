@@ -122,6 +122,10 @@ bash tests/hub-files-test.sh
 # Hub Voice Chat: menu numerado e Gum input via pseudo-TTY, com sudo simulado:
 bash tests/hub-voicechat-menu-test.sh
 
+# Monitoramento: atalhos btop/ncdu, cancelamentos e duas stacks,
+# usando o menu numerado real, sem executar ferramentas no servidor.
+bash tests/hub-monitoring-menu-test.sh
+
 # Proteções de porta, symlink, configuração e TTY no gerenciador:
 bash tests/minecraft-voicechat-test.sh
 ```
@@ -136,6 +140,8 @@ O caminho do **Hub** com Gum e TTY é exercitado em testes automatizados com pse
 - [`shared/lib/tui.sh`](../shared/lib/tui.sh) — código-fonte da biblioteca.
 
 ## Hub de gerenciamento e recuperação
+
+O submenu **Monitoramento** tem seu controlador de interface `hub_monitoring_menu()` no mesmo `crias-tui.sh`. As escolhas **btop (CPU/RAM/processos)** e **ncdu (uso de disco)** delegam `monitor cpu` e `monitor disk` ao gerenciador Minecraft/Terraria, sem mudar permissões ou execução. Voltar/cancelar retorna ao menu principal. Um teste adicional exercita esses atalhos no fallback numerado e confirma a paridade entre stacks.
 
 O submenu **Voice Chat (Minecraft)** agora tem um controlador de interface `hub_minecraft_voicechat_menu()`, no próprio `crias-tui.sh`. São mantidos status, edição da configuração, porta UDP, orientações de Tailscale/firewall e voltar. O Hub continua encaminhando `voicechat status|edit|set-port|network` ao gerenciador, sem validar ou gravar diretamente a configuração. As verificações de faixa da porta, colisão com a porta do jogo, TTY e symlinks permanecem em `minecraft/voicechat-tools.sh` e seus testes. Não há opção Voice Chat para Terraria. Cancelar no menu ou no `gum input` não solicita mudanças.
 
