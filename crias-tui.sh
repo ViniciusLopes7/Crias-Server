@@ -369,6 +369,54 @@ hub_monitoring_menu() {
     return 0
 }
 
+# UI-only: all update/migration validation remains in crias-update.
+# Distinguish readonly checks from explicitly confirmed sudo operations.
+hub_updates_menu() {
+    local update_choice updater
+    updater="/usr/local/bin/crias-update"
+    if [ ! -x "$updater" ]; then
+        echo "[ERRO] Atualizador indisponivel. Atualize as ferramentas do Hub pela release mais recente."
+        read -r -p "Enter para voltar..." _ || true
+        return 0
+    fi
+    update_choice=$(hub_choose "Atualizacoes (separadas do modpack e do mundo):" \
+        "Verificar release Crias-Server" \
+        "Atualizar Hub e ferramentas Crias-Server" \
+        "Verificar pacotes Arch" \
+        "Atualizar pacotes Arch (manutencao)" \
+        "← Voltar") || return 0
+    case "$update_choice" in
+        "Verificar release"*)
+            "$updater" check || true
+            read -r -p "Enter para voltar..." _ || true
+            ;;
+        "Atualizar Hub"*)
+            local update_confirm
+            update_confirm=$(hub_choose "Confirmar update SOMENTE do Hub/scripts? Minecraft/Terraria nao reiniciam." \
+                "Aplicar atualizacao Crias-Server" "Cancelar") || return 0
+            if [ "$update_confirm" = "Aplicar atualizacao Crias-Server" ]; then
+                sudo "$updater" apply || true
+                read -r -p "Enter para voltar..." _ || true
+            fi
+            ;;
+        "Verificar pacotes Arch")
+            "$updater" arch-check || true
+            read -r -p "Enter para voltar..." _ || true
+            ;;
+        "Atualizar pacotes Arch"*)
+            local arch_confirm
+            arch_confirm=$(hub_choose "Atualizar Arch requer jogos PARADOS e confirmacao digitada. Continuar?" \
+                "Iniciar verificacao de manutencao" "Cancelar") || return 0
+            if [ "$arch_confirm" = "Iniciar verificacao de manutencao" ]; then
+                sudo "$updater" arch-apply || true
+                read -r -p "Enter para voltar..." _ || true
+            fi
+            ;;
+        "← Voltar") return 0 ;;
+    esac
+    return 0
+}
+
 main() {
     case "${1:-}" in
         --doctor|doctor|diagnose) show_diagnostics; return 0 ;;
@@ -535,48 +583,7 @@ CHUNKY_HELP
                 hub_monitoring_menu "$manager_script"
                 ;;
             "🔄 Atualizações")
-                local update_choice updater
-                updater="/usr/local/bin/crias-update"
-                if [ ! -x "$updater" ]; then
-                    echo "[ERRO] Atualizador indisponivel. Atualize as ferramentas do Hub pela release mais recente."
-                    read -r -p "Enter para voltar..." _ || true
-                    continue
-                fi
-                update_choice=$(hub_choose "Atualizacoes (separadas do modpack e do mundo):" \
-                    "Verificar release Crias-Server" \
-                    "Atualizar Hub e ferramentas Crias-Server" \
-                    "Verificar pacotes Arch" \
-                    "Atualizar pacotes Arch (manutencao)" \
-                    "← Voltar") || continue
-                case "$update_choice" in
-                    "Verificar release"*)
-                        "$updater" check || true
-                        read -r -p "Enter para voltar..." _ || true
-                        ;;
-                    "Atualizar Hub"*)
-                        local update_confirm
-                        update_confirm=$(hub_choose "Confirmar update SOMENTE do Hub/scripts? Minecraft/Terraria nao reiniciam." \
-                            "Aplicar atualizacao Crias-Server" "Cancelar") || continue
-                        if [ "$update_confirm" = "Aplicar atualizacao Crias-Server" ]; then
-                            sudo "$updater" apply || true
-                            read -r -p "Enter para voltar..." _ || true
-                        fi
-                        ;;
-                    "Verificar pacotes Arch")
-                        "$updater" arch-check || true
-                        read -r -p "Enter para voltar..." _ || true
-                        ;;
-                    "Atualizar pacotes Arch"*)
-                        local arch_confirm
-                        arch_confirm=$(hub_choose "Atualizar Arch requer jogos PARADOS e confirmacao digitada. Continuar?" \
-                            "Iniciar verificacao de manutencao" "Cancelar") || continue
-                        if [ "$arch_confirm" = "Iniciar verificacao de manutencao" ]; then
-                            sudo "$updater" arch-apply || true
-                            read -r -p "Enter para voltar..." _ || true
-                        fi
-                        ;;
-                    "← Voltar") continue ;;
-                esac
+                hub_updates_menu
                 ;;
             "💾 Backup")
                 local bk_choice
