@@ -8,6 +8,12 @@ O histórico de versões antigas é mantido para rastreabilidade; não interpret
 
 ## [Unreleased]
 
+### Refatorado — submenu Voice Chat no Hub (PR #40)
+
+- Extraído o submenu de Simple Voice Chat para `hub_minecraft_voicechat_menu()`, sem alterar comandos, prompts, opções, cancelamentos ou a restrição ao Minecraft; nenhuma lógica de rede, permissões ou validação de portas migrou do gerenciador.
+- Adicionados 14 casos de caracterização do menu numerado e dois casos com entrada Gum em pseudo-TTY, para manter os caminhos com e sem terminal intactos.
+- `crias-tui.sh:main()` passa de **301 para 269 linhas (-32)**; o arquivo completo passa de **619 para 627 linhas (+8)**. A melhoria é a separação de responsabilidades, não um corte arbitrário de linhas.
+
 ### Refatorado — atalhos de arquivos no Hub (PR #36)
 
 - Extraído o menu **Arquivos** para `hub_files_menu()`, no próprio `crias-tui.sh`, sem criar dependências ou alterar a ordem, os atalhos e os comandos dos gerenciadores Minecraft/Terraria.

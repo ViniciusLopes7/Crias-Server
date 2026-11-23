@@ -118,6 +118,12 @@ bash tests/hub-files-menu-test.sh
 
 # Restrições reais dos diretórios e usuário do jogo pelo manager (PTY):
 bash tests/hub-files-test.sh
+
+# Hub Voice Chat: menu numerado e Gum input via pseudo-TTY, com sudo simulado:
+bash tests/hub-voicechat-menu-test.sh
+
+# Proteções de porta, symlink, configuração e TTY no gerenciador:
+bash tests/minecraft-voicechat-test.sh
 ```
 
 O caminho do **Hub** com Gum e TTY é exercitado em testes automatizados com pseudo-TTY (`tests/hub-gum-test.sh`), inclusive com stdout capturado. Isso não substitui revisão visual e teste com SSH real. A biblioteca de interface do **instalador** mantém testes próprios de fallback (`tests/tui-fallback-test.sh`). O Hub oferece menu numerado quando não há Gum ou terminal adequado.
@@ -130,6 +136,8 @@ O caminho do **Hub** com Gum e TTY é exercitado em testes automatizados com pse
 - [`shared/lib/tui.sh`](../shared/lib/tui.sh) — código-fonte da biblioteca.
 
 ## Hub de gerenciamento e recuperação
+
+O submenu **Voice Chat (Minecraft)** agora tem um controlador de interface `hub_minecraft_voicechat_menu()`, no próprio `crias-tui.sh`. São mantidos status, edição da configuração, porta UDP, orientações de Tailscale/firewall e voltar. O Hub continua encaminhando `voicechat status|edit|set-port|network` ao gerenciador, sem validar ou gravar diretamente a configuração. As verificações de faixa da porta, colisão com a porta do jogo, TTY e symlinks permanecem em `minecraft/voicechat-tools.sh` e seus testes. Não há opção Voice Chat para Terraria. Cancelar no menu ou no `gum input` não solicita mudanças.
 
 O menu principal **Arquivos** utiliza o controlador de interface `hub_files_menu()`, mantido no próprio `crias-tui.sh`. Os atalhos **Pasta principal, Mundo, Mods, Configurações, Backups e Logs** continuam delegados ao `mc-manager.sh` ou `tt-manager.sh`. O gerenciador, e não o Hub, verifica os diretórios, as permissões e a execução como usuário do jogo. A instalação opcional do gerenciador de arquivos `mc` continua exigindo confirmação explícita; cancelar ou voltar não executa ações.
 
