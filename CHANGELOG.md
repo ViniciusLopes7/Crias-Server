@@ -8,6 +8,12 @@ O histórico de versões antigas é mantido para rastreabilidade; não interpret
 
 ## [Unreleased]
 
+### Corrigido — confiabilidade do executor de testes (PR #32)
+
+- `tests/run-all.sh` passa a reportar os totais de PASS/FAIL/SKIP e a retornar código diferente de zero quando algum teste falha, evitando aprovação local falsa.
+- Oito testes Shell já executados pelo CI passam a constar também da bateria local (Hub/Gum, SSH RCON, Chunky, heap, arquivos, updater, console e Voice Chat).
+- Incluída uma contraprova automatizada do próprio runner: fixtures de sucesso/falha e verificação de que novos testes Shell no CI não fiquem ausentes da lista local. Testes de sistema/Go/Java continuam com jobs especializados.
+
 ### Melhorado — Deduplicação segura de mods (PR #30)
 
 - Unificada a identificação de Spark, Chunky e Skin Restorer entre o instalador de mods extras e o QoL padrão; reconhece nomes versionados, JARs renomeados por ID Fabric/Forge/NeoForge e arquivo de destino já existente.

@@ -104,8 +104,11 @@ Detalhes, evidências e limites de cobertura: [validação QEMU](testing-qemu.md
 ## Testes
 
 ```bash
-# Bateria local histórica; não substitui o CI completo nem o job QEMU
+# Bateria Shell local (retorna erro se algum teste falhar); não substitui Go/Java, release migration nem QEMU
 bash tests/run-all.sh
+
+# Contraprova do executor: detecta falso sucesso e scripts do CI ausentes do run-all
+bash tests/run-all-contract-test.sh
 
 # Apenas bash rápido
 bash tests/quick-script-tests.sh

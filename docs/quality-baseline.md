@@ -68,3 +68,16 @@ Arquivar uma nova seção de resultados depois de cada ciclo, preservando este e
 - **Limites:** testes usam JARs de fixture e substituem a função de download; não demonstram compatibilidade real do modpack, instalação em host físico nem performance de mundos. Scanner procura manifestos em arquivos JAR locais; não valida assinatura, dependências ou versões de mods instalados.
 
 A primeira mudança **não reduziu necessariamente as linhas totais**, mas eliminou uma divergência comprovada. O próximo ciclo deverá registrar os próprios valores e contraprovas, sem sobrescrever a referência histórica.
+
+
+## Ciclo 2 — Confiabilidade da suíte local (issue #31 / PR #32)
+
+- **Referência anterior ao ciclo:** `main@a2a3cfd` (Ciclo 1 consolidado).
+- **Defeito reproduzido:** `tests/run-all.sh` contabilizava falhas, mas terminava sem verificar `FAIL > 0`; uma execução local reprovada podia retornar **exit code 0**. O primeiro commit de contrato fez o CI falhar, comprovando o problema antes da correção.
+- **Deriva CI/local:** 34 testes Shell invocados diretamente no job `test-shell` do CI contra 39 listados no `run-all` anterior. **Oito** estavam somente no CI; após acrescentar a contraprova como teste 35 no CI, a lista local passa a **48 testes diretos** (39 + 8 + 1).
+- **Correção:** saída final com PASS/FAIL/SKIP, lista de falhas e retorno não-zero; inclusão dos oito testes; verificação automática de alinhamento CI/local. Removido um cabeçalho duplicado.
+- **Teste negativo:** a contraprova executa uma cópia isolada do runner em fixture, injeta uma falha controlada num filho e confirma o código de saída e o nome do teste reprovado. Nenhum serviço ou mundo é executado na fixture.
+- **Escopo:** somente testes, CI e documentação; **zero alteração** de código produtivo ou regras de instalação/backup/JVM.
+- **Limite:** `run-all.sh` não equivale à matriz de CI completa (Java, Go, integração Arch/QEMU, migração de releases e testes Python dedicados). As dependências de testes locais continuam necessárias.
+
+A meta aqui não é diminuir linhas, e sim impedir que um problema não seja percebido e que a lista de testes locais continue divergindo do CI.

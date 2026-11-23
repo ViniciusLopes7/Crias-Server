@@ -1,15 +1,12 @@
 #!/bin/bash
 # tests/run-all.sh
 #
-# Roda toda a bateria de testes do Crias-Server e reporta resultados.
+# Executa a suite local de Shell, verificacoes sintaticas e lint opcional.
 # Uso: bash tests/run-all.sh
 #
-# Este script roda:
-#   - Testes bash que não precisam de ISO real
-#   - Testes de sintaxe Python
-#   - Sintaxe de todos os .sh
-# Testes que precisam de ISO real (iso-initramfs-validate.sh, etc.) são
-# listados como SKIP porque exigem uma ISO construída primeiro.
+# A bateria completa de integracao (Go, Java, releases reais e Arch/QEMU)
+# permanece no GitHub Actions. O script local resume PASS/FAIL/SKIP e
+# devolve exit 1 se qualquer teste efetivamente falhar.
 
 set -uo pipefail
 

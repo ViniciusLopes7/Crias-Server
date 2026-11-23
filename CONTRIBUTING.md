@@ -40,7 +40,7 @@ A classificação depende do impacto, não do número de linhas. Alterações P0
 
 ## Testes e medições
 
-- `bash tests/run-all.sh`: executor local histórico; **não** é equivalente integral ao CI no estado de referência de 2026-11-23.
+- `bash tests/run-all.sh`: executor local Shell, com resumo PASS/FAIL/SKIP e exit code confiável. Desde o ciclo 2, inclui todas as chamadas Shell diretas do job `test-shell`, com proteção contra divergência em `tests/run-all-contract-test.sh`. **Não executa** por si só os jobs Go, Python, Java, migração, Arch/QEMU; o CI completo continua obrigatório.
 - `python3 tools/quality-report.py --format markdown`: inventário reprodutível de tamanho e candidatos de complexidade, sem limites cegos.
 - `python3 tools/quality-report.py --compare-ref 9496a5f --format markdown`: comparação com a linha de base em clone com histórico Git disponível (ou use `--compare baseline.json`).
 - `python3 tests/docs-links-test.py`: links Markdown locais.
