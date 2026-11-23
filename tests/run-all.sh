@@ -1,15 +1,12 @@
 #!/bin/bash
 # tests/run-all.sh
 #
-# Roda toda a bateria de testes do Crias-Server e reporta resultados.
+# Executa a suite local de Shell, verificacoes sintaticas e lint opcional.
 # Uso: bash tests/run-all.sh
 #
-# Este script roda:
-#   - Testes bash que não precisam de ISO real
-#   - Testes de sintaxe Python
-#   - Sintaxe de todos os .sh
-# Testes que precisam de ISO real (iso-initramfs-validate.sh, etc.) são
-# listados como SKIP porque exigem uma ISO construída primeiro.
+# A bateria completa de integracao (Go, Java, releases reais e Arch/QEMU)
+# permanece no GitHub Actions. O script local resume PASS/FAIL/SKIP e
+# devolve exit 1 se qualquer teste efetivamente falhar.
 
 set -uo pipefail
 
@@ -60,10 +57,6 @@ echo "╚═══════════════════════�
 echo ""
 echo "Data: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 echo "Repo: $ROOT_DIR"
-
-# Sintaxe bash de TODOS os scripts.
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Sintaxe bash de TODOS os scripts.
 echo ""
@@ -234,3 +227,27 @@ run_test "custom-mrpack-test"        "tests/custom-mrpack-test.sh"
 # Correções da auditoria pré-entrega (AUDIT-B): contraprovas de CR-10/48/52.
 run_test "download-modrinth-test"   "tests/download-modrinth-test.sh"
 
+# Contratos que chegaram ao CI depois da lista local. Estes testes usam
+# mocks/fixtures e podem ser executados sem QEMU, mundo real ou rede SSH.
+run_test "hub-gum-test"                 "tests/hub-gum-test.sh"
+run_test "hub-ssh-console-status-test"  "tests/hub-ssh-console-status-test.sh"
+run_test "chunky-progress-watch-test"  "tests/chunky-progress-watch-test.sh"
+run_test "minecraft-heap-control-test" "tests/minecraft-heap-control-test.sh"
+run_test "hub-files-test"               "tests/hub-files-test.sh"
+run_test "crias-update-test"            "tests/crias-update-test.sh"
+run_test "minecraft-console-contract-test" "tests/minecraft-console-contract-test.sh"
+run_test "minecraft-voicechat-test"     "tests/minecraft-voicechat-test.sh"
+# Contraprova do próprio runner; impede reportar sucesso falso ao chamador.
+run_test "run-all-contract-test"        "tests/run-all-contract-test.sh"
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+printf 'RESULTADO: PASS=%s FAIL=%s SKIP=%s\n' "$PASS" "$FAIL" "$SKIP"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+if [ "$FAIL" -gt 0 ]; then
+    printf 'Testes com falha:\n'
+    printf '  - %s\n' "${FAILED_TESTS[@]}"
+    exit 1
+fi
+exit 0
