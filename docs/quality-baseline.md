@@ -57,3 +57,14 @@ Indicadores operacionais somente se houver fonte: deploy com recuperação/hotfi
 5. Comprovar recovery de save-on com RCON real em mundo descartável.
 
 Arquivar uma nova seção de resultados depois de cada ciclo, preservando este estado inicial e seu SHA.
+
+## Ciclo 1 — Deduplicação de mods (issue #29 / PR #30)
+
+- **Referência anterior ao ciclo:** `main@645871d` (já com a política de engenharia).
+- **Commit de caracterização:** `eee271c` — somente `tests/server-extras-test.sh`, passando de 23 para 147 linhas e registrando **três falhas de identificação** no comportamento original.
+- **Commit funcional:** `4b45195` — `minecraft/install.sh` passa de 944 para 950 linhas; substitui **duas varreduras divergentes** por uma rotina de identificação compartilhada. O número de linhas é **+6**, e não uma meta de redução.
+- **Efeito verificável:** Spark/Chunky/Skin Restorer identificados tanto por nome versionado quanto por ID de manifesto Fabric, Forge e NeoForge, incluindo arquivos renomeados. Reduz risco de downloads duplicados.
+- **Contratos preservados:** filtros por loader, versão efetiva, destinos distintos de QoL e extras, SHA-256 fixado para QoL, sinalização de pendências e modo strict/best-effort. O test runner no CI já executava `tests/server-extras-test.sh`; não foi criado um segundo executor redundante.
+- **Limites:** testes usam JARs de fixture e substituem a função de download; não demonstram compatibilidade real do modpack, instalação em host físico nem performance de mundos. Scanner procura manifestos em arquivos JAR locais; não valida assinatura, dependências ou versões de mods instalados.
+
+A primeira mudança **não reduziu necessariamente as linhas totais**, mas eliminou uma divergência comprovada. O próximo ciclo deverá registrar os próprios valores e contraprovas, sem sobrescrever a referência histórica.

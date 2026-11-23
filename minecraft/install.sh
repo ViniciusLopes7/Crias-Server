@@ -538,11 +538,66 @@ stack_install_finalize() {
     return 0
 }
 
+# Find a known mod already installed in mods/, irrespective of its JAR name.
+# Pure lookup: stdout=existing path, exit 0 on match; never downloads or writes.
+# Both optional extras and curated QoL use the same identity rules. Keep their
+# distinct loader/strict/download policies in their respective callers.
+_minecraft_find_installed_mod() {
+    local slug="$1" mods_dir="$2" file_name="$3"
+    local file jar_name metadata modid meta direct
+    for direct in "$file_name" "$slug"; do
+        if [ -f "$mods_dir/$direct.jar" ]; then
+            printf '%s\n' "$mods_dir/$direct.jar"
+            return 0
+        fi
+    done
+
+    # Metadata inspection is intentionally limited to the three known tools:
+    # generic Modrinth slugs still use the exact local filename contract.
+    case "$slug" in spark|chunky|skinrestorer) ;; *) return 1 ;; esac
+    [ -d "$mods_dir" ] || return 1
+
+    while IFS= read -r -d '' file; do
+        [ -f "$file" ] || continue
+        jar_name="${file##*/}"
+
+        # Fast path for conventional versioned filenames, including older
+        # packs that do not expose readable loader metadata.
+        case "$slug:$jar_name" in
+            spark:[Ss][Pp][Aa][Rr][Kk]-*.jar|\
+            chunky:[Cc][Hh][Uu][Nn][Kk][Yy]-*.jar|\
+            skinrestorer:[Ss][Kk][Ii][Nn][Rr][Ee][Ss][Tt][Oo][Rr][Ee][Rr]-*.jar)
+                printf '%s\n' "$file"
+                return 0 ;;
+        esac
+
+        # Read root [[mods]] only: a dependency's modId is NOT evidence
+        # that the dependency is installed. NeoForge uses a separate manifest.
+        for meta in META-INF/mods.toml META-INF/neoforge.mods.toml; do
+            metadata="$(unzip -p "$file" "$meta" 2>/dev/null |
+                awk '/^[[:space:]]*\[\[mods\]\]/{inmods=1; next} /^[[:space:]]*\[/{inmods=0} inmods {print}' || true)"
+            if printf '%s\n' "$metadata" |
+                grep -Eiq "^[[:space:]]*modId[[:space:]]*=[[:space:]]*[\"']${slug}[\"']"; then
+                printf '%s\n' "$file"
+                return 0
+            fi
+        done
+
+        modid="$(unzip -p "$file" fabric.mod.json 2>/dev/null |
+            jq -r '.id // empty' 2>/dev/null || true)"
+        if [ "$modid" = "$slug" ]; then
+            printf '%s\n' "$file"
+            return 0
+        fi
+    done < <(find "$mods_dir" -maxdepth 1 -type f -name '*.jar' -print0)
+    return 1
+}
+
 # Mods individuais do usuário (MINECRAFT_EXTRA_MODS, CSV de slugs Modrinth),
-# aplicados POR CIMA do modpack: o QoL acima pula quando mods/ já tem arquivos
-# (os do modpack), então extras têm fluxo próprio sem esse gate, não restringem
-# loader (a filtragem loader+versão é server-side na API) e pulam arquivos já
-# baixados (idempotente em re-runs).
+# aplicados POR CIMA do modpack. QoL e extras fazem deduplicacao por
+# identidade individual, sem pular o diretorio inteiro. Extras nao restringem
+# loader alem de vanilla (API valida loader+versao) e mantem o contrato de
+# download/pendencias independente do QoL.
 stack_install_extra_mods() {
     if [ -z "${MINECRAFT_EXTRA_MODS:-}" ]; then
         return 0
@@ -575,37 +630,9 @@ stack_install_extra_mods() {
             continue
         fi
 
-        # Identify the known tools by their declared mod ID, even when a
-        # launcher renamed the JAR. Fall back to well-known versioned names.
-        local existing= file metadata modid
-        case "$slug" in
-            spark|chunky|skinrestorer)
-                while IFS= read -r -d '' file; do
-                    [ -f "$file" ] || continue
-                    metadata=$(unzip -p "$file" META-INF/mods.toml 2>/dev/null | awk '/^[[:space:]]*\[\[mods\]\]/{inmods=1; next} /^[[:space:]]*\[/{inmods=0} inmods {print}' || true)
-                    if printf '%s\n' "$metadata" | grep -Eiq "^[[:space:]]*modId[[:space:]]*=[[:space:]]*[\"']${slug}[\"']"; then
-                        existing=$file
-                    else
-                        modid=$(unzip -p "$file" fabric.mod.json 2>/dev/null | jq -r '.id // empty' 2>/dev/null || true)
-                        if [ "$modid" = "$slug" ]; then existing=$file; fi
-                    fi
-                    if [ -z "$existing" ]; then
-                        case "${file##*/}" in
-                            [Ss][Pp][Aa][Rr][Kk]-*) if [ "$slug" = spark ]; then existing=$file; fi ;;
-                            [Cc][Hh][Uu][Nn][Kk][Yy]-*) if [ "$slug" = chunky ]; then existing=$file; fi ;;
-                            [Ss][Kk][Ii][Nn][Rr][Ee][Ss][Tt][Oo][Rr][Ee][Rr]-*) if [ "$slug" = skinrestorer ]; then existing=$file; fi ;;
-                        esac
-                    fi
-                    [ -z "$existing" ] || break
-                done < <(find "$MINECRAFT_SERVER_DIR/mods" -maxdepth 1 -type f -name '*.jar' -print0) ;;
-        esac
-        if [ -n "$existing" ]; then
+        local existing
+        if existing="$(_minecraft_find_installed_mod "$slug" "$MINECRAFT_SERVER_DIR/mods" "$slug")"; then
             print_step "Mod extra ja presente: ${existing##*/} (pulando)."
-            continue
-        fi
-
-        if [ -f "$MINECRAFT_SERVER_DIR/mods/${slug}.jar" ]; then
-            print_step "Mod extra ja presente: ${slug}.jar (pulando)."
             continue
         fi
 
@@ -678,30 +705,9 @@ install_minecraft_qol_mods() {
             continue
         fi
 
-        # The curated mods commonly arrive with versioned names in mrpacks.
-        # Avoid installing a second copy over a pack's existing version.
-        local existing= file
-        case "$slug" in
-            spark|chunky|skinrestorer)
-                while IFS= read -r -d '' file; do
-                    [ -f "$file" ] || continue
-                    case "${file##*/}" in
-                        [Ss][Pp][Aa][Rr][Kk]-*.jar|[Cc][Hh][Uu][Nn][Kk][Yy]-*.jar|[Ss][Kk][Ii][Nn][Rr][Ee][Ss][Tt][Oo][Rr][Ee][Rr]-*.jar)
-                            case "${file##*/}" in
-                                [Ss][Pp][Aa][Rr][Kk]-*) if [ "$slug" = spark ]; then existing=$file; fi ;;
-                                [Cc][Hh][Uu][Nn][Kk][Yy]-*) if [ "$slug" = chunky ]; then existing=$file; fi ;;
-                                *) if [ "$slug" = skinrestorer ]; then existing=$file; fi ;;
-                            esac ;;
-                    esac
-                done ;;
-        esac
-        if [ -n "$existing" ]; then
-            print_step "Mod extra ja presente: ${existing##*/} (pulando)."
-            continue
-        fi
-
-        if [ -f "$MINECRAFT_SERVER_DIR/mods/${slug}.jar" ]; then
-            print_step "Mod QoL ja presente: ${slug}.jar (pulando)."
+        local existing
+        if existing="$(_minecraft_find_installed_mod "$slug" "$MINECRAFT_SERVER_DIR/mods" "$file_name")"; then
+            print_step "Mod QoL ja presente: ${existing##*/} (pulando)."
             continue
         fi
 

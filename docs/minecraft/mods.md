@@ -2,6 +2,8 @@
 
 Os mods desta página fazem parte da lista QoL padrão para Fabric/Quilt. A instalação depende de `MINECRAFT_INSTALL_QOL_MODS=true` e de versões compatíveis encontradas no Modrinth. A lista pode ser alterada em `config.env` (`file_name:slug,file_name:slug,...`). Para modpacks próprios, confira primeiro o conteúdo existente: instalar mods duplicados ou incompatíveis pode impedir o servidor de iniciar.
 
+O instalador verifica **cada mod individualmente**: reconhece o arquivo exato (`slug.jar` ou `file_name.jar`) e, para **Spark, Chunky e Skin Restorer**, também nomes versionados e IDs declarados nos manifestos Fabric, Forge e NeoForge, mesmo quando os JARs foram renomeados. A verificação é compartilhada por extras e QoL, mas as políticas de loaders e downloads permanecem distintas. Ela não substitui a verificação de versões/dependências no modpack; um arquivo já presente pode precisar ser atualizado manualmente.
+
 | Mod | Slug Modrinth | Função |
 |-----|---------------|--------|
 | **Chunky** | `chunky` | Pré-geração de chunks (elimina lag de exploração) |
@@ -172,7 +174,7 @@ sudo chown minecraft:minecraft /opt/minecraft-server/mods/meu-mod.jar
 sudo systemctl restart minecraft
 ```
 
-> **Atenção:** o installer pula a instalação de QoL mods se `/opt/minecraft-server/mods/` já contiver `.jar`s. Isso ajuda a evitar conflitos. **Não apague a pasta `mods/` em um mundo existente**: faça um backup e compare as dependências antes de remover ou reinstalar arquivos.
+> **Atenção:** a presença de qualquer `.jar` na pasta **não** desativa a instalação de todos os mods QoL. A deduplicação é feita por mod individual; ausência ou identificação inconclusiva pode resultar em uma tentativa de download. **Não apague a pasta `mods/` em um mundo existente**: faça backup e compare loader, dependências e versões antes de alterar arquivos.
 
 ## Utilitários opcionais independentes
 
