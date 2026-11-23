@@ -312,6 +312,46 @@ hub_files_menu() {
     return 0
 }
 
+# UI controller only: Voice Chat validation and persistence remain with the manager.
+# Keep the Minecraft-only guard in main(); cancelled operations do nothing.
+hub_minecraft_voicechat_menu() {
+    local manager_script="$1"
+    local vc_choice
+    vc_choice=$(hub_choose "Simple Voice Chat — Minecraft" \
+        "Status e diagnostico" \
+        "Editar configuracao" \
+        "Alterar porta UDP" \
+        "Ajuda Tailscale / firewall" \
+        "← Voltar") || return 0
+    case "$vc_choice" in
+        "Status e diagnostico")
+            sudo "$manager_script" voicechat status || true
+            read -r -p "Enter para voltar..." _ || true
+            ;;
+        "Alterar porta UDP")
+            local vc_port
+            if command -v gum >/dev/null 2>&1 && [ -t 0 ] && [ -t 1 ]; then
+                vc_port=$(gum input --header="Porta UDP do Voice Chat (1024-65535):" --placeholder="24454") || return 0
+            else
+                printf "Porta UDP do Voice Chat (1024-65535; Enter cancela): "
+                IFS= read -r vc_port || return 0
+            fi
+            [ -n "$vc_port" ] || return 0
+            sudo "$manager_script" voicechat set-port "$vc_port" || true
+            read -r -p "Enter para voltar..." _ || true
+            ;;
+        "Editar configuracao")
+            sudo "$manager_script" voicechat edit || true
+            ;;
+        "Ajuda Tailscale / firewall")
+            sudo "$manager_script" voicechat network || true
+            read -r -p "Enter para voltar..." _ || true
+            ;;
+        "← Voltar") return 0 ;;
+    esac
+    return 0
+}
+
 main() {
     case "${1:-}" in
         --doctor|doctor|diagnose) show_diagnostics; return 0 ;;
@@ -472,39 +512,7 @@ CHUNKY_HELP
                 ;;
             "🎙️ Voice Chat")
                 if [ "$stack" != "minecraft" ]; then continue; fi
-                local vc_choice
-                vc_choice=$(hub_choose "Simple Voice Chat — Minecraft" \
-                    "Status e diagnostico" \
-                    "Editar configuracao" \
-                    "Alterar porta UDP" \
-                    "Ajuda Tailscale / firewall" \
-                    "← Voltar") || continue
-                case "$vc_choice" in
-                    "Status e diagnostico")
-                        sudo "$manager_script" voicechat status || true
-                        read -r -p "Enter para voltar..." _ || true
-                        ;;
-                    "Alterar porta UDP")
-                        local vc_port
-                        if command -v gum >/dev/null 2>&1 && [ -t 0 ] && [ -t 1 ]; then
-                            vc_port=$(gum input --header="Porta UDP do Voice Chat (1024-65535):" --placeholder="24454") || continue
-                        else
-                            printf "Porta UDP do Voice Chat (1024-65535; Enter cancela): "
-                            IFS= read -r vc_port || continue
-                        fi
-                        [ -n "$vc_port" ] || continue
-                        sudo "$manager_script" voicechat set-port "$vc_port" || true
-                        read -r -p "Enter para voltar..." _ || true
-                        ;;
-                    "Editar configuracao")
-                        sudo "$manager_script" voicechat edit || true
-                        ;;
-                    "Ajuda Tailscale / firewall")
-                        sudo "$manager_script" voicechat network || true
-                        read -r -p "Enter para voltar..." _ || true
-                        ;;
-                    "← Voltar") continue ;;
-                esac
+                hub_minecraft_voicechat_menu "$manager_script"
                 ;;
             "📊 Monitoramento")
                 local mon_choice
