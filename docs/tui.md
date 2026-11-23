@@ -126,6 +126,10 @@ bash tests/hub-voicechat-menu-test.sh
 # usando o menu numerado real, sem executar ferramentas no servidor.
 bash tests/hub-monitoring-menu-test.sh
 
+# Menu Atualizações: confirmações, cancelamentos e comandos diferenciados
+# sem executar a atualização real do Hub ou manutenção do Arch.
+bash tests/hub-updates-menu-test.sh
+
 # Proteções de porta, symlink, configuração e TTY no gerenciador:
 bash tests/minecraft-voicechat-test.sh
 ```
@@ -140,6 +144,8 @@ O caminho do **Hub** com Gum e TTY é exercitado em testes automatizados com pse
 - [`shared/lib/tui.sh`](../shared/lib/tui.sh) — código-fonte da biblioteca.
 
 ## Hub de gerenciamento e recuperação
+
+O submenu **Atualizações** tem um controlador de interface próprio (`hub_updates_menu()`), mantido no `crias-tui.sh`. As ações de consulta `crias-update check` e `crias-update arch-check` continuam sem `sudo`; aplicar ferramentas (`apply`) ou iniciar manutenção do Arch (`arch-apply`) continua dependendo de confirmação explícita no submenu e é encaminhado via `sudo`. Se o atualizador não estiver disponível, o Hub informa o erro e volta ao menu anterior. As verificações de serviços parados, atualização, recuperação e segurança continuam exclusivamente em `crias-update.sh`, não no menu. Voltar, Enter vazio ou cancelar não executam operações.
 
 O submenu **Monitoramento** tem seu controlador de interface `hub_monitoring_menu()` no mesmo `crias-tui.sh`. As escolhas **btop (CPU/RAM/processos)** e **ncdu (uso de disco)** delegam `monitor cpu` e `monitor disk` ao gerenciador Minecraft/Terraria, sem mudar permissões ou execução. Voltar/cancelar retorna ao menu principal. Um teste adicional exercita esses atalhos no fallback numerado e confirma a paridade entre stacks.
 

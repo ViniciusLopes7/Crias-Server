@@ -8,6 +8,12 @@ O histórico de versões antigas é mantido para rastreabilidade; não interpret
 
 ## [Unreleased]
 
+### Refatorado — submenu Atualizações no Hub (PR #44)
+
+- Extraído o controlador de interface do submenu de atualização para `hub_updates_menu()` no próprio `crias-tui.sh`. Preservados os comandos de consulta sem `sudo`, as confirmações e as ações administrativas via `sudo`, incluindo o tratamento de atualizador indisponível.
+- Adicionados 23 cenários de navegação e cancelamento com atualizador/`sudo` simulados, cobrindo os dois jogos e caminhos de sucesso/erro, sem executar manutenção nem atualizar serviços reais.
+- A `main()` do Hub passou de **260 para 219 linhas (−41)**; o arquivo completo passou de **635 para 642 linhas (+7)**. As regras de migração e manutenção do Arch não foram alteradas.
+
 ### Refatorado — submenu Monitoramento no Hub (PR #42)
 
 - Isolado o controlador do submenu Monitoramento em `hub_monitoring_menu()`, preservando escolhas, textos, ordem, atalhos btop/ncdu, chamadas dos managers e semântica de cancelamento para Minecraft/Terraria.

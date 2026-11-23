@@ -117,3 +117,12 @@ A meta aqui não é diminuir linhas, e sim impedir que um problema não seja per
 - **Extração:** commit `a6f81fe`, move apenas a escolha para `hub_monitoring_menu(manager_script)` no mesmo script; `main()` **269 → 260 linhas (−9; ~3,3%)**, `crias-tui.sh` **627 → 635 linhas (+8)**. O pequeno ganho na função principal não justifica alterações maiores fora de escopo.
 - **Contratos:** textos, ordem de opções, argumentos exatos dos managers, tratamento de retorno e acesso a ambos os jogos mantidos; o caminho de Gum/TTY já é coberto por testes gerais existentes do Hub.
 - **Limite:** testes simulam `sudo`; não executam `btop`/`ncdu` em host real e não medem desempenho nem experiência SSH. A função não altera privilégios, hardware ou regras de monitoramento.
+
+
+## Ciclo 7 — Controlador Atualizações do Hub (issue #43 / PR #44)
+
+- **Base:** `main@e6b8dfd` após ciclo 6, `crias-tui.sh` com 635 linhas e `main()` com 260.
+- **Caracterização pré-refatoração:** commit `218d138`, novo `tests/hub-updates-menu-test.sh` com **23 cenários** do menu numerado real. São simulados, sem executar comandos reais, os caminhos do atualizador em `/usr/local/bin/crias-update`, `sudo` e a checagem de permissão `-x`. Verifica `check`, `arch-check`, `apply`, `arch-apply`, confirmações positivas/negativas, falta do executável, erros, volta, EOF e menu adjacente em Minecraft/Terraria.
+- **Extração:** commit `66b70e2`, move somente o submenu para `hub_updates_menu()` no mesmo `crias-tui.sh`; `main()` **260 → 219 linhas (−41; ~15,8%)**, arquivo completo **635 → 642 linhas (+7)**. Cinco `continue` de cancelamento/retorno ao menu principal tornam-se `return 0` no novo controlador; não muda o laço principal.
+- **Fronteira preservada:** consultas sem privilégio, mutações apenas sob confirmação e `sudo`, path fixo do atualizador, mensagens e `|| true` idênticos; `crias-update.sh`, migração real e política de manutenção não sofrem alteração.
+- **Limites:** os testes novos são contraprovas de navegação e de argumentos com chamadas simuladas. Não exercitam rede real, atualização em host ativo ou problemas de manutenção do Arch; os testes existentes de atualização e migração com releases oficiais em CI continuam obrigatórios. Não houve release neste ciclo.
