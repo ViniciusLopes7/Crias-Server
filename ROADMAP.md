@@ -2,7 +2,19 @@
 
 > Visão consolidada do produto e das lacunas de validação. Registros de fases antigas permanecem como referência histórica; o estado atual deve ser conferido na branch `main` e nas execuções recentes do CI.
 
-## ✅ Implementado (v1.3.0)
+## Estado atual e histórico de implantação (releases de novembro de 2026)
+
+> A tabela abaixo mantém marcos históricos das versões 1.2.x/1.3.0 para rastreabilidade. O mecanismo vigente de publicação usa tags datadas (por exemplo, `v2026.11.22-9496a5f`), não a indicação de versão deste cabeçalho.
+
+### Consolidação de qualidade — prioridade atual
+
+- [x] Base de critérios, documentação de arquitetura e inventário inicial preparados para revisão.
+- [ ] Homologar princípios após merge e evoluir métricas com referências por SHA.
+- [ ] Refatorar duplicações verificadas com testes antes/depois e sem novos recursos.
+- [ ] Homologar memória, RCON/Chunky, backup e atualização com mundo de teste real.
+- [ ] Corrigir documentação histórica ainda vinculada à antiga ISO, mantendo apenas o que for necessário para consulta.
+
+### Marcos históricos implementados
 
 > **Nota**: ISO customizada removida — use a ISO oficial do Arch Linux. ISO customizada é um objetivo futuro quando o projeto tiver maturidade.
 
@@ -10,11 +22,11 @@
 
 | Componente | Status | Detalhes |
 |------------|--------|----------|
-| **Bug de login na ISO (F1)** | ✅ (v1.3.0) | Drop-in de autologin do root no tty1 (padrão archiso upstream). Auto-start quebrado removido. Root permanece travado no shadow (hardening preservado). |
+| **Bug de login na ISO (F1)** | Histórico, descontinuado | Correção antiga de archiso; não integra o fluxo atual baseado na ISO oficial Arch. |
 | **Bootstrap mínimo (F1)** | ✅ (v1.3.0) | `crias-bootstrap.sh` baixa a release do GitHub com verificação SHA256 em vez de embutir o repo inteiro na ISO. Username-agnostic. |
 | **tModLoader (Terraria com mods)** | ✅ (v1.2.1) | `shared/lib/tmodloader.sh` — GitHub Releases dinâmico, catálogo curado (Calamity, Thorium, etc.), SteamCMD, `Mods/enabled.json`. Substitui vanilla quando `TERRARIA_USE_TMODLOADER=true`. |
-| **OpenSSH na ISO + host** | ✅ (v1.2.0) | `openssh` em `packages.x86_64`; `install.sh` pergunta se habilita SSH no host → cria usuário `crias` com sudo, `PermitRootLogin no` |
-| **TUI (gum)** | ✅ (v1.2.0) | `shared/lib/tui.sh` — wrapper `gum` com fallback `read` automático; `gum` pré-instalado na ISO |
+| **OpenSSH no host** | ✅ (código atual) | Instalador configura o serviço SSH no Arch instalado; referências a `packages.x86_64` pertencem à ISO antiga. |
+| **TUI (gum)** | ✅ (código atual) | `shared/lib/tui.sh` tem fallback `read`; instalação do `gum` é feita no Arch de destino, não por ISO customizada. |
 | **Versão MC dinâmica** | ✅ (v1.2.0) | `shared/lib/mc-manifests.sh` — busca manifests Mojang/Fabric/Quilt/NeoForge/Forge; seleção fuzzy; snapshots marcados |
 | **Seletor de modpacks Minecraft** | ✅ (código) | Top-10 e busca Modrinth, slug, vanilla, `.mrpack` local/pendrive e URL HTTPS; valida o pacote e reconcilia versão/loader. |
 | **Loaders** | ✅ (v1.2.0) | `fabric | quilt | vanilla | forge | neoforge` — `paper` **removido** |
@@ -39,11 +51,11 @@
 | Versão MC | manifest dinâmico por loader | Atual automaticamente; não fica preso a default hardcoded |
 | Modpacks | API Modrinth v2 + `mrpack-install` | Catálogo sempre atual; compatibilidade server-side |
 | Sugestão versão | heurística semântica (minor → major → latest) | UX: nunca trava o usuário sem saída |
-| SSH live ISO | `openssh` no pacote, `sshd` **não** auto-start | Mantém segurança do auto-login no tty1; usuário ativa manualmente se precisar |
+| SSH live ISO (histórico) | Descontinuado | Decisão aplicável à ISO customizada antiga, não ao fluxo atual de instalação. |
 | SSH host | `INSTALL_SSH=true` → usuário `crias` + sudo + `PermitRootLogin no` | Hardening por padrão; root proibido via SSH |
 | Loaders | fabric/quilt/vanilla/forge/neoforge (sem paper) | `.mrpack` é o formato; paper não tem fluxo equivalente |
 | Branch única | `main` (monorepo) | Sem complexidade de merge; `discord-agent/` e `discord-bot/` como subdirs |
-| Agente: linguagem | Go 1.23 | Binário estático, 5-10 MB RAM ocioso, sem runtime |
+| Agente: linguagem | Go (CI atualmente em 1.27.1) | Build do agente em Go; consumo real em execução requer medição no host. |
 | Bot: linguagem | Python 3.12 + discord.py 2.x | Ecossistema maduro, Railway nativo |
 | Templates `.service` | `envsubst` com `${VAR}` | Elimina injection via sed em MOTD |
 | Backup-engine | Hooks `backup_pre_hook`/`backup_post_hook` | Minecraft usa RCON save-lock; Terraria no-op |

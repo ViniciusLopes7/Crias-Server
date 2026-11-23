@@ -73,6 +73,8 @@ Antes de trocar o pacote/loader, faça um backup verificável, registre as vers�
 
 O CI valida o checksum, preservação de `config.env`, idempotência, falha parcial e SIGKILL seguido de recuperação em outro processo. Essa bateria também roda em Arch/QEMU.
 
-Além disso, `tests/real-release-migration-test.sh` **baixa os ZIPs oficiais e imutáveis das releases `v2026.11.21-6674985` e `v2026.11.22-8877a39`**, valida checksums publicados e digests fixados, executa a primeira migração real e repete o cenário com o atualizador candidato sobre o pacote publicado. O teste roda tanto no Ubuntu quanto em container Arch, e bloqueia releases futuras em caso de falha. Nenhum teste substitui completamente a execução no notebook físico do operador.
+Além disso, `tests/real-release-migration-test.sh` **baixa os ZIPs oficiais e imutáveis das releases históricas `v2026.11.21-6674985` e `v2026.11.22-8877a39`**, valida checksums publicados e digests fixados, executa a primeira migração real e repete o cenário com o atualizador candidato sobre o pacote publicado. O teste roda tanto no Ubuntu quanto em container Arch, e bloqueia releases futuras em caso de falha. Nenhum teste substitui completamente a execução no notebook físico do operador.
 
 Se a atualização falhar, execute `sudo crias-tui --doctor` e confira `readlink -f /opt/crias-server`. Não execute uma reinstalação completa de Minecraft como forma de atualizar o Hub.
+
+> **Escopo da regressão:** a migração histórica acima não comprova, sozinha, atualização a partir da release imediatamente anterior. Essa matriz é um refinamento prioritário documentado em [qualidade](quality-baseline.md).

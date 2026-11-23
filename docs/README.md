@@ -2,6 +2,14 @@
 
 Este índice organiza os guias por tarefa. Comece pelo tutorial para instalar; consulte os guias específicos para configurar, operar e diagnosticar problemas. Para uma visão geral, veja o [README principal](../README.md).
 
+## Engenharia e manutenção
+
+- [Política de qualidade e melhoria contínua](engineering-quality.md): critérios verificáveis para alterações e refatorações.
+- [Arquitetura atual](architecture.md): fluxos, fronteiras de confiança e lacunas conhecidas.
+- [Linha de base e métricas](quality-baseline.md): referência histórica, lacunas e método reprodutível.
+- [ADR-0001](decisions/0001-quality-first.md): justificativa e consequências da política.
+- [Guia de contribuição](../CONTRIBUTING.md): checklist e testes antes do merge.
+
 ## Primeiros passos
 
 | Documento | Descrição |
@@ -91,12 +99,12 @@ Detalhes, evidências e limites de cobertura: [validação QEMU](testing-qemu.md
 
 | Job | Função |
 |-----|--------|
-| `release` | Em tag `v*.*.*` ou `workflow_dispatch` com `create_release=true`: cria UMA release com binários Go + zip do bot + source archives + checksums SHA256 (sem ISO — o pipeline de ISO foi descontinuado) |
+| `release` | Em tag `v*.*.*`, `workflow_dispatch` com `create_release=true` ou push na `main` com `[release]` no commit: publica somente após os gates, com binários Go, bot, arquivos full/slim e checksums (sem ISO) |
 
 ## Testes
 
 ```bash
-# Bateria completa de testes bash + Python + Go (ver tests/run-all.sh para o total atual)
+# Bateria local histórica; não substitui o CI completo nem o job QEMU
 bash tests/run-all.sh
 
 # Apenas bash rápido

@@ -109,7 +109,7 @@ bash shared/lib/tui.sh selftest
 bash tests/tui-fallback-test.sh
 ```
 
-O caminho `gum` (com TTY) é exercitado manualmente, não em CI. O hub de gerenciamento oferece menu numerado quando `gum` não está disponível.
+O caminho do **Hub** com Gum e TTY é exercitado em testes automatizados com pseudo-TTY (`tests/hub-gum-test.sh`), inclusive com stdout capturado. Isso não substitui revisão visual e teste com SSH real. A biblioteca de interface do **instalador** mantém testes próprios de fallback (`tests/tui-fallback-test.sh`). O Hub oferece menu numerado quando não há Gum ou terminal adequado.
 
 ## Veja também
 

@@ -16,6 +16,10 @@
 
 O **Crias-Server** reúne um instalador interativo, scripts de operação e serviços `systemd` para hospedar **Minecraft** ou **Terraria** em um computador com Arch Linux. Ele configura o servidor, aplica ajustes iniciais de hardware e oferece ferramentas de administração e backup. Recursos como Tailscale e controle por Discord são opcionais.
 
+## Qualidade e contribuição
+
+As alterações seguem uma política de qualidade antes de expansão: [CONTRIBUTING.md](CONTRIBUTING.md), [critérios de engenharia](docs/engineering-quality.md), [arquitetura](docs/architecture.md) e [linha de base](docs/quality-baseline.md). Métricas são sinais para revisão, não metas de redução de linhas. Mudanças críticas exigem testes e documentação no mesmo PR.
+
 ## Instalação rápida
 
 **Requisitos:** Arch Linux instalado, acesso `sudo` e conexão com a internet. O projeto não distribui mais uma ISO personalizada; use a [imagem oficial do Arch Linux](https://archlinux.org/download/) para instalar o sistema primeiro.
