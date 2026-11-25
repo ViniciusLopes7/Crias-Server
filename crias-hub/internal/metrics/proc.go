@@ -182,7 +182,7 @@ func ReadMemory(proc fs.FS, at time.Time) Memory {
 			if free > swap {
 				m.SwapUsed = bad
 			} else {
-				m.SwapUsed = bytes(swap-free)
+				m.SwapUsed = bytes(swap - free)
 			}
 		}
 	}

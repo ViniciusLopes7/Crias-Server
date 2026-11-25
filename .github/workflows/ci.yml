@@ -410,7 +410,12 @@ jobs:
           go mod tidy -diff
           go mod download
           go mod verify
-          test -z "$(gofmt -l .)"
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            printf 'Go files requiring gofmt:\n%s\n' "$unformatted"
+            gofmt -d .
+            exit 1
+          fi
           go vet -mod=readonly ./...
           go test -mod=readonly -race -timeout 120s ./...
           CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$RUNNER_TEMP/crias-tui-next" ./cmd/crias-tui-next

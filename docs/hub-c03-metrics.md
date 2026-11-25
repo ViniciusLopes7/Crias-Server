@@ -78,3 +78,17 @@ Testes escritos: retenção, wrap, lacunas, expiração, snapshot obsoleto,
 isolamento CPU/RAM, perfis e cancelamento. CI ainda pendente; não
 declarar testes executados. Sem mudança do workflow ou do binário
 em execução. M2 aberto.
+
+## C03.2a — Correção do gate de formatação
+
+Run 45685769606, aaf4f08: 14 jobs aprovados (QEMU inclusive), job Hub
+139457866749 falhou após go mod verify e antes de vet/race. Reprodução
+local com Go 1.23.2: seis blobs de internal/metrics reconstruídos e
+comparados por SHA Git com o repositório, todos idênticos. gofmt -d
+identificou exclusivamente bytes(swap-free) em proc.go, corrigido para
+bytes(swap - free). Depois da correção, pacote isolado sem dependências
+externas: GO111MODULE=off go test -race -count=10 -timeout=60s -v,
+8 testes por repetição, 80 execuções aprovadas. Não equivale ao CI
+Go 1.27.4 nem ao módulo completo. Diagnóstico de gofmt no job Hub
+passa a mostrar arquivos/diff antes de falhar, sem relaxar o gate.
+Novo CI obrigatório antes de C03.3. Nenhuma mudança funcional.
