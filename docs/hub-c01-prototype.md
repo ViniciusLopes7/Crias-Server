@@ -21,7 +21,7 @@ sem timers, I/O administrativo, coleta ou goroutines próprias.
 A resolução inicial ocorreu no CI de ecff721 com go mod tidy. O go.mod
 efetivo e as 42 entradas de go.sum foram extraídos do log e versionados em
 66cc984. O CI passa a exigir tidy -diff, download, verify, -mod=readonly
-e ausência de mudanças no lock. Revalidação desse candidato pendente.
+e ausência de mudanças no lock. Revalidação aprovada no CI de 6d07067.
 Não inventar checksums nem executar com GOSUMDB=off. Análise de
 vulnerabilidades ainda pendente.
 
@@ -75,15 +75,55 @@ Rollback: descartar binário experimental; nenhuma instalação ou mudança
 de arquivos produtivos. CHANGELOG de produção não alterado por não haver
 entrega/distribuição ao usuário nesta fase.
 
+## Evidências C01.2 — PTY e benchmark validados
+
+[Run 45666474027](https://github.com/ViniciusLopes7/Crias-Server/actions/runs/45666474027),
+commit 6d07067: 13 jobs aprovados, release ignorada. Job Go 139390024548
+confirma lock readonly, gofmt/vet/race, build e sete grupos de verificações
+PTY: navegação/detalhe/resize/Q, Esc, Ctrl+C, SIGTERM, SIGHUP, TERM=dumb
+e hangup. O master fechado demonstra saída limitada do processo, não
+restauração de um terminal já destruído.
+
+Dados brutos: [evidence/hub-c01/pty-6d07067.json](evidence/hub-c01/pty-6d07067.json).
+30 startups, 60 transições, kernel 6.8.0-1070-azure, x86_64, PTY controlador
+120x40 xterm-256color, NO_COLOR. Estatísticas recalculadas e conferidas.
+
+| Indicador | Resultado |
+|---|---:|
+| Startup mediano / p95 (ms) | 21.587 / 21.796 |
+| Navegação mediana / p95 (ms) | 16.419 / 16.727 |
+| RSS principal mediana (KiB) | 5632 |
+| RSS principal p95 (KiB) | 5888 |
+| Binário (bytes) | 5668730 |
+| CPU ociosa (uma janela de 5 s) | 0% observados |
+
+Sem equivalência de carga com Bash/Gum, sem consultas reais de host,
+SSH físico ou jogo em execução. Não confundir zero ticks na janela curta
+com consumo garantidamente nulo. Tamanho igual ao build anterior não
+prova identidade byte a byte. Análise de vulnerabilidades e teste de
+reprodutibilidade ainda pendentes.
+
+## CI seletivo
+
+Commit 6041e38 separa a validação do Hub em job próprio e limita lint,
+testes e build do bot/agente a alterações relevantes, com exceções de
+contrato proto, configuração CI, diff indisponível e releases/dispatch.
+Ver [política e testes](ci-scope.md). A mudança de workflow dispara ambos
+neste PR; economia ainda não comprovada por run independente. Sem reduzir
+gates do release ou alterar branch protection.
+
 ## Gate M1
 
 - [x] Resolver e versionar grafo de dependências/lock (66cc984).
-- [ ] Revalidar lock readonly e revisar vulnerabilidades.
+- [x] Revalidar lock readonly (6d07067).
+- [ ] Revisar vulnerabilidades.
 - [x] Primeiro build, gofmt, vet e race; testes de estado e limites (ecff721).
-- [ ] Revalidar build com lock fixado; verificar reprodutibilidade.
-- [ ] PTY real: entrada/saída alternate screen, Q, Esc, Ctrl+C, SIGTERM,
+- [x] Revalidar build com lock fixado (6d07067).
+- [ ] Verificar reprodutibilidade byte a byte.
+- [x] PTY real: entrada/saída alternate screen, Q, Esc, Ctrl+C, SIGTERM,
   resize, EOF/desconexão e restauração de termios.
-- [ ] Benchmark equivalente ao Bash, RSS/CPU e latência observacionais.
+- [x] Benchmark observacional do protótipo em PTY, RSS/CPU e latência.
+- [ ] Comparação equivalente ao Bash com trabalho e ambiente controlados.
 - [ ] Documentar limitações e evidências, CI final aprovado.
 
 Gates físicos/SSH antes de M3/C04 e homologação C10/C11 continuam obrigatórios.
