@@ -145,18 +145,63 @@ https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck e
 https://pkg.go.dev/charm.land/gum/v2/version. Instalação e execução ainda
 não verificadas neste snapshot.
 
+## C01.5 — Evidências de segurança, rebuild e apresentação
+
+[Run 45672307862](https://github.com/ViniciusLopes7/Crias-Server/actions/runs/45672307862),
+commit 9999f9c, job Hub 139410558886: sucesso confirmado. Classificador,
+bot, agente e demais jobs concluídos com sucesso, exceto QEMU ainda em
+execução na consulta. Não declarar workflow completo neste snapshot.
+
+govulncheck v1.10.0: zero vulnerabilidades alcançáveis no código do protótipo;
+o relatório também aponta uma vulnerabilidade em pacotes importados e 14
+em módulos requeridos sem caminho de chamada identificado. Não somar
+categorias como CVEs distintos. Identificadores individuais não foram
+emitidos no log padrão; obter relatório detalhado antes de ampliar
+funcionalidades e revisar exposição a cada mudança. Nenhuma supressão
+de scanner ou flexibilização de gate. Ausência de caminho de chamada
+identificado não garante ausência de vulnerabilidade.
+
+Rebuild com cache Go independente: cmp aprovado, hashes SHA-256 idênticos:
+`bcda04c380173eb10b0d5f6c77659e9e23b305dbd52797d46ee27092d5141399`. Go 1.27.1 linux/amd64,
+5668730 bytes, mesma fonte/toolchain/ambiente. Não afirmar reprodução
+entre máquinas.
+
+Dados brutos em [evidence/hub-c01/comparison-9999f9c.json](evidence/hub-c01/comparison-9999f9c.json).
+30 startups e 60 transições por interface; estatísticas recalculadas e
+conferidas. Mesmo runner Ubuntu, kernel 6.8.0-1070-azure, PTY 120x40,
+xterm-256color, NO_COLOR. Gum v2.0.2 com hash registrado.
+
+| Métrica | Bash/Gum fixture | Go C01 |
+|---|---:|---:|
+| Startup mediano (ms) | 103.315 | 21.751 |
+| Startup p95 (ms) | 105.459 | 22.042 |
+| Navegação mediana (ms) | 125.291 | 16.419 |
+| Navegação p95 (ms) | 152.412 | 17.279 |
+| RSS mediana (KiB) | 31584 (sessão) | 5632 (principal) |
+| CPU ociosa (% núcleo, uma janela de 5 s) | 0.599 | 0 observados |
+
+Comparação de apresentação, não equivalência administrativa: descoberta
+simulada Bash, Go sem descoberta; submenu vs troca de aba; RSS soma
+páginas compartilhadas no Bash, não PSS. Zero ticks não significa CPU
+sempre nula. Sem jogo, sem SSH físico, sem carga equivalente. Não usar
+para prometer ganho em produção. Comparação completa permanece gate
+posterior; M1 restrito ao protótipo experimental, ainda aberto até
+consolidação do CI e avaliação de exposição das dependências.
+
 ## Gate M1
 
 - [x] Resolver e versionar grafo de dependências/lock (66cc984).
 - [x] Revalidar lock readonly (6d07067).
-- [ ] Revisar vulnerabilidades.
+- [x] Varredura govulncheck no protótipo (zero alcançáveis, 9999f9c).
+- [ ] Obter IDs e revisar alertas não alcançáveis antes de ampliar funcionalidades.
 - [x] Primeiro build, gofmt, vet e race; testes de estado e limites (ecff721).
 - [x] Revalidar build com lock fixado (6d07067).
-- [ ] Verificar reprodutibilidade byte a byte.
+- [x] Reprodutibilidade byte a byte com caches independentes (9999f9c, mesmo ambiente).
 - [x] PTY real: entrada/saída alternate screen, Q, Esc, Ctrl+C, SIGTERM,
   resize, EOF/desconexão e restauração de termios.
 - [x] Benchmark observacional do protótipo em PTY, RSS/CPU e latência.
-- [ ] Comparação equivalente ao Bash com trabalho e ambiente controlados.
+- [x] Comparação observacional de apresentação no mesmo runner (9999f9c).
+- [ ] Comparação administrativa equivalente permanece obrigatória antes da homologação, conforme gates físicos.
 - [ ] Documentar limitações e evidências, CI final aprovado.
 
 Gates físicos/SSH antes de M3/C04 e homologação C10/C11 continuam obrigatórios.
