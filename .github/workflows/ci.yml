@@ -193,6 +193,7 @@ jobs:
           bash tests/run-all-contract-test.sh
           # Policy + reproducible baseline smoke (no new LoC threshold).
           python3 tests/quality-report-test.py
+          python3 tests/hub-baseline-test.py
           python3 tools/quality-report.py --format markdown
           bash tests/stack-installer-test.sh
           bash tests/agent-install-hook-test.sh
@@ -212,6 +213,8 @@ jobs:
           bash tests/crias-tui-deploy-test.sh
           bash tests/hub-gum-test.sh
           bash tests/hub-ssh-console-status-test.sh
+          bash tests/hub-service-menu-test.sh
+          bash tests/hub-backend-contract-test.sh
           bash tests/hub-memory-menu-test.sh
           bash tests/chunky-progress-watch-test.sh
           bash tests/minecraft-heap-control-test.sh
@@ -233,6 +236,13 @@ jobs:
           bash tests/terraria-tuning-test.sh
           bash tests/download-modrinth-test.sh
           python3 tests/docs-links-test.py
+
+      - name: Observe legacy numeric Hub baseline (fixture, non-gating timings)
+        run: |
+          for stack in minecraft terraria; do
+            python3 tools/hub-baseline.py --stack "$stack" --samples 30 |
+              python3 -c 'import json, sys; print("HUB_BASELINE_JSON=" + json.dumps(json.load(sys.stdin), separators=(",", ":")))'
+          done
 
   test-release-migration:
     name: Real release migration (pinned GitHub ZIPs)
