@@ -21,11 +21,18 @@ const (
 type Unit string
 
 const (
-	Percent Unit = "%"
-	Bytes   Unit = "B"
-	MHz     Unit = "MHz"
-	Celsius Unit = "°C"
-	RPM     Unit = "rpm"
+	Percent   Unit = "%"
+	Bytes     Unit = "B"
+	MHz       Unit = "MHz"
+	Celsius   Unit = "°C"
+	RPM       Unit = "rpm"
+	Watts     Unit = "W"
+	WattHours Unit = "Wh"
+	AmpHours  Unit = "Ah"
+	Volts     Unit = "V"
+	Amps      Unit = "A"
+	Joules    Unit = "J"
+	Boolean   Unit = "bool"
 )
 
 type Sample struct {

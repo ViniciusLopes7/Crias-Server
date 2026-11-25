@@ -131,3 +131,41 @@ conversões, RPM zero, falhas, driver desconhecido, labels inseguros,
 permissões e limites de leitura/inventário. Testes novos aguardam CI.
 Sem ligar coletores ao scheduler nesta alteração. Inventário/cadências,
 energia, bateria, armazenamento, rede, integração UI e M2 pendentes.
+
+## C03.3b — Potência, energia, bateria e alimentação (candidato)
+
+C03.3a: CI 45690001853, 6d9e711, integralmente aprovado (15 jobs).
+Referências Linux:
+- https://docs.kernel.org/power/power_supply_class.html
+- https://docs.kernel.org/power/powercap/powercap.html
+- https://docs.kernel.org/next/power/powercap/powercap.html
+
+power_supply: inventário por tipo, presença, status, capacidade em %,
+energia Wh e carga Ah mantidas separadas, tensão V, corrente A e potência W.
+Saúde estimada a partir de full/design da mesma unidade; não limitar
+artificialmente a 100%. Se energia indisponível, tentar razão de carga,
+sem misturar unidades e sem esconder erro de permissão/valor inválido.
+Potência nativa com sinal preservado, status separado. Na ausência de
+power_now e com V/I válidos, estimar magnitude V*abs(I), não direção
+nem consumo total. Bateria explicitamente ausente não publica os demais
+dados. Fontes externas por dispositivo e online 0/1, sem inferir conexão
+quando não há leitura. Limites de carga somente leitura, invertidos
+invalidam o par. Nenhum controle de carga implementado.
+
+powercap: entradas planas de /sys/class/powercap, domínios identificados
+individualmente; contador energy_uj e range convertidos em J, power_uw
+em W quando disponível. Potência média = delta de energia / tempo real
+decorrido (não potência instantânea). Primeira leitura aguardando;
+regressão de contador, mudança de nome/range ou tempo não positivo
+invalidam o intervalo. Wrap e reset são ambíguos: descartar esse
+intervalo e retomar baseline, não presumir um wrap. Lacuna >12 s
+obsoleta (duas vezes a maior cadência de referência de energia, 6 s).
+Não acumular energia indefinidamente ou somar zonas pai/filho.
+Leitura de contador não é energia de toda a sessão nem do servidor.
+Potência total do host permanece indisponível sem fonte apropriada.
+Inventários não planos e outras fontes (hwmon power, thermal_zone)
+ainda exigem expansão validada. Mesmos limites de sysfs e sanitização.
+
+Três testes de fixtures para conversões, sinais, saúde, ausência,
+limites, falhas, delta, regressão e lacunas. Código ainda não ligado
+ao scheduler/UI; CI novo necessário. Nenhuma escrita em hardware.
