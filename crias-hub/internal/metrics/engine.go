@@ -11,8 +11,9 @@ import (
 const fastCadence = time.Second
 
 type Snapshot struct {
-	CPU    Sample
-	Memory Memory
+	CPU      Sample
+	Memory   Memory
+	Hardware HardwareSnapshot
 }
 
 // Engine is session-owned. One worker per independent collector; no
@@ -31,6 +32,16 @@ type Engine struct {
 }
 
 func NewEngine(parent context.Context, proc fs.FS) *Engine {
+	return newEngine(parent, proc, nil, nil)
+}
+
+// NewHostEngine adds the native hardware collectors. The space callback must
+// read a known local filesystem, never a path obtained from terminal input.
+func NewHostEngine(parent context.Context, proc, sys fs.FS, space func(time.Time) Capacity) *Engine {
+	return newEngine(parent, proc, sys, space)
+}
+
+func newEngine(parent context.Context, proc, sys fs.FS, space func(time.Time) Capacity) *Engine {
 	ctx, cancel := context.WithCancel(parent)
 	now := time.Now()
 	cpu := missing(Waiting, Percent, "/proc/stat", "host CPU (aggregate)", now)
@@ -49,7 +60,7 @@ func NewEngine(parent context.Context, proc fs.FS) *Engine {
 	go func() {
 		defer wg.Done()
 		var c CPUCollector
-		e.loop(ctx, func(at time.Time, interval time.Duration) {
+		e.loop(ctx, fastCadence, func(at time.Time, interval time.Duration) {
 			s := c.Read(proc, at)
 			if ctx.Err() != nil {
 				return
@@ -75,6 +86,9 @@ func NewEngine(parent context.Context, proc fs.FS) *Engine {
 			e.notify()
 		})
 	}()
+	if sys != nil {
+		e.startHardware(ctx, &wg, proc, sys, space)
+	}
 	go func() {
 		wg.Wait()
 		close(e.done)
@@ -84,9 +98,9 @@ func NewEngine(parent context.Context, proc fs.FS) *Engine {
 
 // Each interval starts after the previous collection completes. Slow
 // reads never create a backlog. Profile changes take effect next cycle.
-func (e *Engine) loop(ctx context.Context, collect func(time.Time, time.Duration)) {
+func (e *Engine) loop(ctx context.Context, base time.Duration, collect func(time.Time, time.Duration)) {
 	for ctx.Err() == nil {
-		interval := Profile(e.profile.Load()).Interval(fastCadence)
+		interval := Profile(e.profile.Load()).Interval(base)
 		collect(time.Now(), interval)
 		if ctx.Err() != nil {
 			return
@@ -136,6 +150,7 @@ func (e *Engine) Snapshot(now time.Time) Snapshot {
 	e.mu.RLock()
 	s, cpuInterval, memInterval := e.latest, e.cpuInterval, e.memInterval
 	e.mu.RUnlock()
+	s.Hardware = s.Hardware.copyAt(now)
 	s.CPU = fresh(s.CPU, now, cpuInterval)
 	m := &s.Memory
 	for _, v := range []*Sample{&m.Total, &m.Available, &m.Used, &m.Usage, &m.SwapTotal, &m.SwapUsed} {

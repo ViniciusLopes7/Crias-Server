@@ -190,3 +190,25 @@ Thermal zones em °C, sem agregar hwmon nem presumir sensor CPU.
 Quatro testes escritos, CI pendente. Nenhum coletor conectado ao engine,
 nenhuma escrita administrativa ou nova dependência. Faltam inventário
 completo/estável, cadências, UI, alertas fundamentados e homologação M2.
+
+## C03.4a — Integração ao Engine (candidato)
+
+CI 45694629526 (2634a3b) integralmente aprovado: 15 jobs, QEMU incluso.
+NewHostEngine preserva NewEngine CPU/RAM para fixtures e habilita oito
+grupos adicionais: clocks 1 s; hwmon, thermal, powercap, rede e disco
+2 s; bateria 10 s; espaço 30 s quando callback fornecido. Perfis aplicam
+multiplicadores já aprovados, uma leitura por worker, timer após leitura,
+cancelamento de sessão, canal coalescido. Máximo dez workers de coleta
+e um de encerramento. Sem subprocessos ou nova dependência.
+Snapshot copia slices antes de devolver ao consumidor; grupos têm
+State, At e Interval, com freshness em duas cadências. Estado de grupo
+obsoleto impede interpretar valores antigos como atuais; estados de
+amostras continuam separados. Histórico ainda restrito a CPU/RAM.
+Inventário ainda é redescoberto pelos leitores em cada coleta; separar
+cache/inventário e adaptação por visibilidade antes da homologação.
+Espaço usa callback injetável de filesystem conhecido, nunca entrada
+do usuário. Stop não interrompe syscall bloqueada; preservar isolamento.
+Testes escritos de oito grupos, cadências, cópia de snapshots, freshness,
+permissões e bloqueio de espaço. Validação CI pendente. A UI ainda não
+instancia NewHostEngine, portanto não há coleta real ao abrir o Hub.
+Serviços, alertas, seleção de sensores, UI e M2 continuam pendentes.
