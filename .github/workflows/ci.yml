@@ -359,6 +359,29 @@ jobs:
         # Upload do coverage.out como artifact no próximo step.
         run: go test -v -race -timeout 120s -coverprofile=coverage.out -covermode=atomic ./...
 
+      - name: Validate experimental C01 Hub
+        working-directory: crias-hub
+        run: |
+          go mod tidy
+          echo 'C01_GO_MOD_BEGIN'
+          cat go.mod
+          echo 'C01_GO_MOD_END'
+          echo 'C01_GO_SUM_BEGIN'
+          cat go.sum
+          echo 'C01_GO_SUM_END'
+          go mod verify
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          go test -race -timeout 120s ./...
+          CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/crias-tui-next" ./cmd/crias-tui-next
+          "$RUNNER_TEMP/crias-tui-next" --help
+          "$RUNNER_TEMP/crias-tui-next" --version
+          if "$RUNNER_TEMP/crias-tui-next" </dev/null >"$RUNNER_TEMP/hub-no-tty.log" 2>&1; then
+            echo 'FAIL: prototype accepted non-TTY' >&2
+            exit 1
+          fi
+          stat -c 'C01 binary bytes: %s' "$RUNNER_TEMP/crias-tui-next"
+
       - name: Show coverage summary
         run: go tool cover -func=coverage.out | tail -1
 
