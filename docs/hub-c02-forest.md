@@ -143,3 +143,21 @@ Foco atual usa F6 para alternar região, Tab/setas para abas; busca restrita
 Gates Arch/SSH físico, equivalência administrativa, carga de jogo,
 estabilidade prolongada e homologação permanecem obrigatórios. M2 ainda
 depende de C03. Não publicar ou alterar ponto de entrada.
+
+## C02.6 — Encerramento experimental
+
+Run [45683390200](https://github.com/ViniciusLopes7/Crias-Server/actions/runs/45683390200),
+32263c6: 15 jobs aprovados, QEMU incluso, release ignorada. Hub
+139449503792: 13 grupos PTY, F2/F6 e retorno de foco, race/vet e scanner
+sem alertas. Dados brutos e estatísticas conferidas em
+[evidence/hub-c02/pty-final-32263c6.json](evidence/hub-c02/pty-final-32263c6.json).
+30 startups e 60 transições; startup mediano 19.003 ms, navegação p95
+17.121 ms, RSS principal mediana 5760 KiB, binário 5719350 bytes.
+
+C02 experimental concluído em 32263c6. A UI mantém navegação por abas e
+F6 para foco, busca somente por áreas e modo compacto. Sem telemetria
+real, operações administrativas, integração na main ou distribuição.
+PTY local não comprova SSH, Arch Go no guest ou renderização física;
+comparações de carga e gates físicos C00/C04/C10/C11 preservados.
+M2 depende da implementação e validação de C03. CI do registro
+posterior deve ser identificado separadamente por SHA.

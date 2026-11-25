@@ -10,7 +10,7 @@ Planejamento aprovado em dez etapas na [issue #22](https://github.com/ViniciusLo
 |---|---|---|
 | A — Fundação | C00 | Auditoria, contratos, baseline e documentação. **Encerrado condicionalmente**; gates físicos/SSH antes de M3/C04 e carga/homologação em C10/C11. |
 | A | C01 | PoC Go, Bubble Tea/Lip Gloss; eventos, PTY e restauração, build e benchmarks. **M1 experimental validado** em 9f44ca2; Arch/SSH real e homologação pendentes. |
-| B — Interface e paridade | C02 | Crias Forest, layout híbrido, seis abas, foco, busca, header/rodapé e responsividade. **Em desenvolvimento**, [fundação visual](docs/hub-c02-forest.md). |
+| B — Interface e paridade | C02 | Crias Forest, layout híbrido, seis abas, foco, busca, header/rodapé e responsividade. **Concluído experimentalmente** em 32263c6, [evidências](docs/hub-c02-forest.md). |
 | B | C03 | Coletores, dashboard, histórico limitado, perfis e alertas verificáveis. |
 | B | C04 | Paridade de serviços, console/logs, heap, arquivos, Voice Chat, Chunky, backups, atualização e diagnóstico. |
 | C — Expansão | C05 | Jogos: console integrado, jogadores, telemetria, Chunky, formulários, mods/MRPack e atualização controlada. |
@@ -21,7 +21,7 @@ Planejamento aprovado em dez etapas na [issue #22](https://github.com/ViniciusLo
 | E — Consolidação | C10 | Profiling, benchmarks, testes prolongados, auditoria, QEMU, jogos e hardware reais. |
 | E | C11 | Distribuição, migração real, rollback, fallback Bash, documentação e release autorizada. |
 
-C01 validado em caráter experimental somente leitura no PR #46, sem merge; C02 autorizado a iniciar após M1, demais ciclos planejados. Ver decisão de saída no documento C00. Dependências principais: C00 → C01 → C02 → C03 → C04; C05/C06/C08 após C04; C07 após C03. Contratos de segurança desde C01 e proteções implementadas antes de cada ação de escrita sensível, ainda que o C09 consolide mecanismos compartilhados. C10 depende do escopo entregue em C04–C09 e C11 depende de C10.
+C01 validado em caráter experimental somente leitura no PR #46, sem merge; C02 validado experimentalmente no PR #47; C03 pode iniciar, demais ciclos planejados. Ver decisão de saída no documento C00. Dependências principais: C00 → C01 → C02 → C03 → C04; C05/C06/C08 após C04; C07 após C03. Contratos de segurança desde C01 e proteções implementadas antes de cada ação de escrita sensível, ainda que o C09 consolide mecanismos compartilhados. C10 depende do escopo entregue em C04–C09 e C11 depende de C10.
 
 **Marcos verificáveis:** M1/C01 protótipo; M2/C03 interface e métricas reais; M3/C04 paridade experimental; M4/C07 expansão condicionada à segurança; M5/C09 resiliência; M6/C11 entrega padrão. A TUI experimental pode coexistir com Bash; nomes candidatos `crias-tui-next` e `--legacy` serão validados antes da distribuição. `--doctor` deve permanecer independente. Sem reinstalar jogos/host.
 
