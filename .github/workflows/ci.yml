@@ -362,18 +362,14 @@ jobs:
       - name: Validate experimental C01 Hub
         working-directory: crias-hub
         run: |
-          go mod tidy
-          echo 'C01_GO_MOD_BEGIN'
-          cat go.mod
-          echo 'C01_GO_MOD_END'
-          echo 'C01_GO_SUM_BEGIN'
-          cat go.sum
-          echo 'C01_GO_SUM_END'
+          go mod tidy -diff
+          go mod download
           go mod verify
           test -z "$(gofmt -l .)"
-          go vet ./...
-          go test -race -timeout 120s ./...
-          CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/crias-tui-next" ./cmd/crias-tui-next
+          go vet -mod=readonly ./...
+          go test -mod=readonly -race -timeout 120s ./...
+          CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$RUNNER_TEMP/crias-tui-next" ./cmd/crias-tui-next
+          git diff --exit-code -- go.mod go.sum
           "$RUNNER_TEMP/crias-tui-next" --help
           "$RUNNER_TEMP/crias-tui-next" --version
           if "$RUNNER_TEMP/crias-tui-next" </dev/null >"$RUNNER_TEMP/hub-no-tty.log" 2>&1; then
