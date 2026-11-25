@@ -41,7 +41,7 @@ type State struct {
 	Selection     int
 }
 
-func New() State               { return State{Width: 80, Height: 24} }
+func New() State                { return State{Width: 80, Height: 24} }
 func (s State) Section() string { return sections[s.Tab] }
 
 func (s State) ContextVisible() bool {
