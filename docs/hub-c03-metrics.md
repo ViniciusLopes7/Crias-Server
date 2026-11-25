@@ -212,3 +212,14 @@ Testes escritos de oito grupos, cadências, cópia de snapshots, freshness,
 permissões e bloqueio de espaço. Validação CI pendente. A UI ainda não
 instancia NewHostEngine, portanto não há coleta real ao abrir o Hub.
 Serviços, alertas, seleção de sensores, UI e M2 continuam pendentes.
+
+## C03.4a.1 — Correção de formatação
+
+Run 45700166928, commit 49ee953, job Hub 139507902463: o gate gofmt
+identificou exclusivamente internal/metrics/hardware_test.go, expressão
+Add(7*time.Second). Ajuste para Add(7 * time.Second), exatamente conforme
+o diff do CI. Vet, race, build, PTY e scanner não chegaram a executar
+neste job. Nenhuma alteração funcional, nem flexibilização do gate.
+Correção preparada separadamente para preservar o QEMU em andamento;
+integração por fast-forward somente após o run anterior terminar.
+C03.4a ainda aguarda validação. Não ligar Engine à UI antes do gate.

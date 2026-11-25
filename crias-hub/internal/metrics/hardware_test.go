@@ -59,7 +59,7 @@ func TestHostEngineHardwareAndSnapshotIsolation(t *testing.T) {
 		next.Supplies.Data.External[0].Online.Value != 1 {
 		t.Fatal("snapshot aliases engine storage")
 	}
-	stale := e.Snapshot(time.Now().Add(7*time.Second)).Hardware
+	stale := e.Snapshot(time.Now().Add(7 * time.Second)).Hardware
 	if stale.Sensors.State != Stale || stale.Network.State != Stale || stale.Supplies.State != Available || stale.Space.State != Available {
 		t.Fatal("incorrect group freshness")
 	}
