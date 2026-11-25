@@ -223,3 +223,15 @@ neste job. Nenhuma alteração funcional, nem flexibilização do gate.
 Correção preparada separadamente para preservar o QEMU em andamento;
 integração por fast-forward somente após o run anterior terminar.
 C03.4a ainda aguarda validação. Não ligar Engine à UI antes do gate.
+
+## C03.4a.2 — Correção de assinatura do agendador
+
+Run 45701665949 (2e3a27e): 14 jobs aprovados, inclusive QEMU;
+Hub 139513070584 passou por gofmt, mas vet identificou chamada de loop
+no worker de RAM sem o parâmetro base time.Duration. Corrigir para
+fastCadence (1 s no perfil Balanceado), igual ao worker de CPU.
+Revisão das três chamadas e.loop em engine.go/hardware.go: CPU e RAM
+passam fastCadence, grupos adicionais passam sua cadência base.
+Não alterar a assinatura nem desativar vet. Race/build/PTy/scanner
+não executados nesse run, novo CI obrigatório. Não houve validação
+local neste incremento. Integração visual permanece bloqueada.

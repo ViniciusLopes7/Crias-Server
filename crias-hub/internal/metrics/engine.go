@@ -74,7 +74,7 @@ func newEngine(parent context.Context, proc, sys fs.FS, space func(time.Time) Ca
 	}()
 	go func() {
 		defer wg.Done()
-		e.loop(ctx, func(at time.Time, interval time.Duration) {
+		e.loop(ctx, fastCadence, func(at time.Time, interval time.Duration) {
 			m := ReadMemory(proc, at)
 			if ctx.Err() != nil {
 				return
