@@ -424,6 +424,25 @@ jobs:
           stat -c 'C01 binary bytes: %s' "$RUNNER_TEMP/crias-tui-next"
           python3 ../tests/hub-c01-pty-test.py "$RUNNER_TEMP/crias-tui-next" --samples 30 --idle-seconds 5
 
+      - name: C01 assurance — vulnerability scan and independent-cache rebuild
+        working-directory: crias-hub
+        run: |
+          mkdir -p "$RUNNER_TEMP/c01-tools" "$RUNNER_TEMP/c01-rebuild-cache"
+          GOBIN="$RUNNER_TEMP/c01-tools" go install golang.org/x/vuln/cmd/govulncheck@v1.10.0
+          GOFLAGS=-mod=readonly "$RUNNER_TEMP/c01-tools/govulncheck" ./...
+          CGO_ENABLED=0 GOCACHE="$RUNNER_TEMP/c01-rebuild-cache" go build -mod=readonly -trimpath -o "$RUNNER_TEMP/crias-tui-next-rebuilt" ./cmd/crias-tui-next
+          cmp "$RUNNER_TEMP/crias-tui-next" "$RUNNER_TEMP/crias-tui-next-rebuilt"
+          sha256sum "$RUNNER_TEMP/crias-tui-next" "$RUNNER_TEMP/crias-tui-next-rebuilt"
+          go version -m "$RUNNER_TEMP/crias-tui-next"
+          git diff --exit-code -- go.mod go.sum
+          echo 'PASS: C01 identical binaries from separate build caches'
+
+      - name: C01 presentation-only comparison on the same runner
+        run: |
+          GOBIN="$RUNNER_TEMP/c01-tools" go install charm.land/gum/v2@v2.0.2
+          python3 tools/hub-gum-baseline.py --mode fixture --stack minecraft --gum-dir "$RUNNER_TEMP/c01-tools" --no-color --samples 30 --idle-seconds 5 |
+            python3 -c 'import json, sys; print("HUB_C01_GUM_JSON=" + json.dumps(json.load(sys.stdin), separators=(",", ":")))'
+
   test-python:
     name: Test Python
     needs: scope

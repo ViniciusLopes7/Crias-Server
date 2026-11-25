@@ -26,7 +26,7 @@ Os jobs omitidos não criam artefatos; retenções de builds executados
 permanecem iguais. Nenhum teste essencial do núcleo é desativado.
 
 Testar localmente: python3 tests/ci-scope-test.py.
-O PR que altera o próprio workflow executa ambos por segurança. A economia
+O PR que altera o próprio workflow executa ambos por segurança. O job de classificação e o novo job independente Hub foram aprovados no run 45669875941; o log confirmou agent=True, bot=True. A integração completa deve ser verificada separadamente. A economia
 real será verificada em um PR subsequente sem mudanças de bot/agente/CI.
 Se checks obrigatórios de branch protection dependerem de nomes específicos,
 manter os nomes existentes e avaliar o novo check Test Hub Go antes da

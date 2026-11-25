@@ -117,10 +117,13 @@ def session_snapshot(sid: int) -> dict:
     return rows
 
 
-def sample(hub: Path, mode: str, stack: str, timeout: float, idle: float) -> dict:
+def sample(hub: Path, mode: str, stack: str, timeout: float, idle: float,
+           trusted_path: str = "/usr/bin:/bin", no_color: bool = False) -> dict:
     # pty.fork creates a controlling TTY; openpty alone is insufficient for
     # Gum versions which open /dev/tty. Child sets size before exec.
-    env = {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "TERM": "xterm-256color"}
+    env = {"PATH": trusted_path, "LANG": "C.UTF-8", "TERM": "xterm-256color"}
+    if no_color:
+        env["NO_COLOR"] = "1"
     started = time.monotonic_ns()
     pid, fd = pty.fork()
     if pid == 0:
@@ -202,6 +205,9 @@ def main() -> None:
     parser.add_argument("--timeout", type=float, default=15)
     parser.add_argument("--idle-seconds", type=float, default=0,
                         help="observe first sample only; 0 disables, maximum 600")
+    parser.add_argument("--gum-dir", type=Path,
+                        help="explicit trusted directory containing executable gum; no installation")
+    parser.add_argument("--no-color", action="store_true", help="match NO_COLOR test environment")
     args = parser.parse_args()
     if os.geteuid() == 0:
         parser.error("run as a non-root test/admin account")
@@ -209,7 +215,13 @@ def main() -> None:
             0 < args.timeout <= 60 and math.isfinite(args.idle_seconds) and
             0 <= args.idle_seconds <= 600):
         parser.error("invalid samples, timeout or idle duration")
-    gum = shutil.which("gum", path="/usr/bin:/bin")
+    trusted_path = "/usr/bin:/bin"
+    if args.gum_dir is not None:
+        directory = args.gum_dir.resolve(strict=True)
+        if ":" in str(directory) or not (directory / "gum").is_file() or not os.access(directory / "gum", os.X_OK):
+            parser.error("--gum-dir must contain a trusted executable gum")
+        trusted_path = str(directory) + ":" + trusted_path
+    gum = shutil.which("gum", path=trusted_path)
     if gum is None:
         parser.error("healthy Gum must already be installed; no auto-install")
     hub = args.hub.resolve(strict=True)
@@ -218,19 +230,21 @@ def main() -> None:
     try:
         version_result = subprocess.run([gum, "--version"], check=True, capture_output=True,
                                  text=True, timeout=5,
-                                 env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"})
+                                 env={"PATH": trusted_path, "LANG": "C.UTF-8"})
         version = (version_result.stdout or version_result.stderr).strip()
         if not version:
             raise RuntimeError("Gum version not identifiable")
         rows = [sample(hub, args.mode, args.stack, args.timeout,
-                       args.idle_seconds if i == 0 else 0) for i in range(args.samples)]
+                       args.idle_seconds if i == 0 else 0, trusted_path, args.no_color)
+                for i in range(args.samples)]
     except (OSError, RuntimeError, EOFError, TimeoutError, subprocess.SubprocessError) as exc:
         parser.exit(1, f"Gum benchmark failed: {exc}\n")
     print(json.dumps({
         "schema": 1, "mode": args.mode,
         "stack": args.stack if args.mode == "fixture" else "auto-detected",
         "hub_sha256": hashlib.sha256(hub.read_bytes()).hexdigest(),
-        "gum_version": version, "kernel": os.uname().release,
+        "gum_version": version, "gum_sha256": hashlib.sha256(Path(gum).read_bytes()).hexdigest(),
+        "no_color": args.no_color, "kernel": os.uname().release,
         "architecture": os.uname().machine, "terminal": "controlling PTY 120x40, xterm-256color",
         "limitations": "Frame labels, not pixel-render completion; local PTY only, no SSH/game load. RSS sum counts shared pages multiple times. Idle CPU is available only with stable session membership and is observational. PTY bytes are not network traffic.",
         "startup_ms": stats([s["startup_ms"] for s in rows]),

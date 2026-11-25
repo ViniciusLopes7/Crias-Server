@@ -112,6 +112,39 @@ Ver [política e testes](ci-scope.md). A mudança de workflow dispara ambos
 neste PR; economia ainda não comprovada por run independente. Sem reduzir
 gates do release ou alterar branch protection.
 
+## C01.3 — Garantias adicionais
+
+O job independente Test Hub Go passou no run 45669875941, commit 2bce98d,
+incluindo lock readonly, build e contraprovas PTY. O classificador de CI
+passou seus três grupos de testes (subcasos e histórico Git real) e
+selecionou ambos os componentes porque o PR modifica o workflow.
+Não afirmar economia real até um run sem essa alteração acumulada.
+
+Próximo candidato: verificações adicionais no mesmo job Hub, sem criar
+workflow ou artefato extra:
+- govulncheck v1.10.0, análise de código contra base pública Go, com módulos
+  readonly. Uma falha bloqueia o gate; não confundir ausência de alertas
+  com ausência de vulnerabilidades desconhecidas.
+- Rebuild com cache Go independente, mesmo commit, toolchain e ambiente,
+  comparação byte a byte e SHA-256. Isso não prova reprodutibilidade
+  entre máquinas/toolchains.
+- Gum v2.0.2 instalado por go install versionado somente no diretório
+  temporário do runner; harness recebe diretório explícito e NO_COLOR.
+  30 amostras com descoberta simulada e duas transições de navegação,
+  no mesmo runner do Go, PTY 120x40 xterm-256color. Comparação limitada à
+  apresentação: Bash inicia submenu e Go troca aba; RSS soma de processos
+  vs RSS principal, sem PSS ou coleta de host. Nenhum ganho em produção
+  pode ser inferido. Repetição física/equivalência integral continua
+  obrigatória nos gates posteriores.
+- Após consolidar evidências M1, reavaliar frequência de rebuild frio e
+  benchmark Gum para não repetir coleta cara sem mudança relevante;
+  manter testes funcionais e segurança como gates.
+
+Versões das ferramentas consultadas em pkg.go.dev (25/11/2026):
+https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck e
+https://pkg.go.dev/charm.land/gum/v2/version. Instalação e execução ainda
+não verificadas neste snapshot.
+
 ## Gate M1
 
 - [x] Resolver e versionar grafo de dependências/lock (66cc984).
