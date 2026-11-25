@@ -377,6 +377,7 @@ jobs:
             exit 1
           fi
           stat -c 'C01 binary bytes: %s' "$RUNNER_TEMP/crias-tui-next"
+          python3 ../tests/hub-c01-pty-test.py "$RUNNER_TEMP/crias-tui-next" --samples 30 --idle-seconds 5
 
       - name: Show coverage summary
         run: go tool cover -func=coverage.out | tail -1
