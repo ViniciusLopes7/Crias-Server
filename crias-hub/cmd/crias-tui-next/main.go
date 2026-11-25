@@ -8,18 +8,18 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/ViniciusLopes7/Crias-Server/crias-hub/internal/app"
+	"github.com/ViniciusLopes7/Crias-Server/crias-hub/internal/ui"
 	"golang.org/x/term"
 )
 
 type model struct {
 	state app.State
 	color bool
+	ascii bool
 }
 
 func (m model) Init() tea.Cmd { return nil }
@@ -38,35 +38,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// The C01 layout deliberately uses ASCII, bounded rows and no timers. C02
-// will own the responsive design system; no synthetic host metrics here.
+// View renders state only; no host reads or effects in the render loop.
 func (m model) View() tea.View {
-	s := m.state
-	lines := []string{"CRIAS HUB | C01", "Experimental - somente leitura", "", "Area: " + s.Section()}
-	if s.Detail {
-		lines = append(lines, "Nenhuma operacao administrativa disponivel.")
-	}
-	lines = append(lines, "", "1-6 / Left Right / Tab: areas", "Enter: detalhes | Esc: voltar | Q: sair")
-	if s.Width < 40 || s.Height < 10 {
-		lines = []string{"CRIAS HUB", s.Section(), "Q: sair"}
-	}
-	width := max(0, s.Width-1)
-	height := min(len(lines), max(0, s.Height))
-	lines = lines[:height]
-	for i, line := range lines {
-		if len(line) > width {
-			lines[i] = line[:width]
-		}
-	}
-	if m.color && len(lines) > 0 {
-		lines[0] = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("2")).Render(lines[0])
-	}
-	v := tea.NewView(strings.Join(lines, "\n"))
+	v := tea.NewView(ui.Render(m.state, ui.Options{Color: m.color, ASCII: m.ascii}))
 	v.AltScreen = true
 	return v
 }
 
-const help = "crias-tui-next: prototipo C01 somente leitura\nUso: crias-tui-next [--help | --version]\nSem TTY: use crias-tui --doctor (legado)."
+const help = "crias-tui-next: prototipo C02 somente leitura\nUso: crias-tui-next [--help | --version]\nSem TTY: use crias-tui --doctor (legado)."
 
 func run(args []string, stdin, stdout *os.File, stderr io.Writer) int {
 	if len(args) == 1 {
@@ -75,7 +54,7 @@ func run(args []string, stdin, stdout *os.File, stderr io.Writer) int {
 			fmt.Fprintln(stdout, help)
 			return 0
 		case "--version":
-			fmt.Fprintln(stdout, "crias-tui-next C01 experimental")
+			fmt.Fprintln(stdout, "crias-tui-next C02 experimental")
 			return 0
 		}
 	}
@@ -89,15 +68,16 @@ func run(args []string, stdin, stdout *os.File, stderr io.Writer) int {
 		return 2
 	}
 	if os.Geteuid() == 0 {
-		fmt.Fprintln(stderr, "Prototipo C01: execute sem root.")
+		fmt.Fprintln(stderr, "Prototipo C02: execute sem root.")
 		return 2
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGHUP)
 	defer stop()
 	_, noColor := os.LookupEnv("NO_COLOR")
-	p := tea.NewProgram(model{state: app.New(), color: !noColor}, tea.WithContext(ctx), tea.WithInput(stdin), tea.WithOutput(stdout))
+	ascii := os.Getenv("CRIAS_HUB_ASCII") == "1"
+	p := tea.NewProgram(model{state: app.New(), color: !noColor, ascii: ascii}, tea.WithContext(ctx), tea.WithInput(stdin), tea.WithOutput(stdout))
 	if _, err := p.Run(); err != nil {
-		fmt.Fprintln(stderr, "C01:", err)
+		fmt.Fprintln(stderr, "C02:", err)
 		return 1
 	}
 	return 0

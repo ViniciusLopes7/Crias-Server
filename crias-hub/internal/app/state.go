@@ -1,7 +1,10 @@
-// Package app contains the deterministic state of the read-only C01 prototype.
+// Package app contains the deterministic state of the read-only Hub prototype.
 package app
 
-var sections = [...]string{"Visao geral", "Servidores", "Hardware", "Backups", "Sistema", "Configuracoes"}
+var sections = [...]string{"Visão geral", "Servidores", "Hardware", "Backups", "Sistema", "Configurações"}
+
+// Sections returns a copy of the canonical navigation labels.
+func Sections() [6]string { return sections }
 
 type State struct {
 	Tab    int

@@ -10,7 +10,7 @@ Planejamento aprovado em dez etapas na [issue #22](https://github.com/ViniciusLo
 |---|---|---|
 | A — Fundação | C00 | Auditoria, contratos, baseline e documentação. **Encerrado condicionalmente**; gates físicos/SSH antes de M3/C04 e carga/homologação em C10/C11. |
 | A | C01 | PoC Go, Bubble Tea/Lip Gloss; eventos, PTY e restauração, build e benchmarks. **M1 experimental validado** em 9f44ca2; Arch/SSH real e homologação pendentes. |
-| B — Interface e paridade | C02 | Crias Forest, layout híbrido, seis abas, foco, busca, header/rodapé e responsividade. |
+| B — Interface e paridade | C02 | Crias Forest, layout híbrido, seis abas, foco, busca, header/rodapé e responsividade. **Em desenvolvimento**, [fundação visual](docs/hub-c02-forest.md). |
 | B | C03 | Coletores, dashboard, histórico limitado, perfis e alertas verificáveis. |
 | B | C04 | Paridade de serviços, console/logs, heap, arquivos, Voice Chat, Chunky, backups, atualização e diagnóstico. |
 | C — Expansão | C05 | Jogos: console integrado, jogadores, telemetria, Chunky, formulários, mods/MRPack e atualização controlada. |

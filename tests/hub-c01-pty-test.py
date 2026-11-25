@@ -44,7 +44,7 @@ class Session:
                     os.close(self.slave)
                 os.execve(str(binary), [str(binary)], {
                     "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8",
-                    "TERM": term, "NO_COLOR": "1",
+                    "TERM": term, "NO_COLOR": "1", "CRIAS_HUB_ASCII": "1",
                 })
             except BaseException:
                 os._exit(127)
@@ -222,12 +222,12 @@ def benchmark(binary: Path, count: int, idle_seconds: float) -> dict:
             s.finish((0,))
             rows.append({"startup_ms": startup, "navigation_ms": navigation,
                          "rss_main_kib": rss, "pty_bytes_observed": len(s.output), "idle": idle})
-    return {"schema": 1, "mode": "c01-presentation-only",
+    return {"schema": 1, "mode": "hub-presentation-only",
             "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
             "binary_bytes": binary.stat().st_size,
             "kernel": os.uname().release, "architecture": os.uname().machine,
             "terminal": "controlling PTY 120x40 xterm-256color NO_COLOR",
-            "limitations": "No host discovery, game load or SSH; label observation not full render. Go tab switches differ from Bash submenu transitions. RSS is main process, not session PSS. Short idle sample, observational only.",
+            "limitations": "No host discovery, game load or SSH; label observation not full render. Go tab switches differ from Bash submenu transitions. ASCII/no-color test mode. RSS is main process, not session PSS. Short idle sample, observational only.",
             "startup_ms": summary([r["startup_ms"] for r in rows]),
             "navigation_ms": summary([v for r in rows for v in r["navigation_ms"]]),
             "rss_main_kib": summary([r["rss_main_kib"] for r in rows]),
