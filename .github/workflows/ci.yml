@@ -214,6 +214,7 @@ jobs:
           bash tests/hub-gum-test.sh
           bash tests/hub-ssh-console-status-test.sh
           bash tests/hub-service-menu-test.sh
+          bash tests/hub-backend-contract-test.sh
           bash tests/hub-memory-menu-test.sh
           bash tests/chunky-progress-watch-test.sh
           bash tests/minecraft-heap-control-test.sh
