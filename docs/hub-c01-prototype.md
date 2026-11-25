@@ -211,12 +211,53 @@ gates de release nem elimina a obrigação de repetir as medições no C10.
 A execução deste ajuste ainda precisa ser confirmada. Antes de M1,
 revisar os IDs/fixes dos alertas não alcançados; C02 não iniciado.
 
+## C01.7 — Revisão individual e correção da toolchain
+
+Job Hub 139417454987, run 45674263850, commit 6fca9c6: sucesso.
+O relatório detalhado confirmou zero símbolos vulneráveis alcançados.
+Os 15 alertas distintos são da biblioteca padrão Go 1.27.1 (nenhum
+alerta de módulo externo neste relatório). O único alerta de pacote é
+GO-2026-6604, específico de Windows, fora do alvo Linux do protótipo.
+Os demais 14 são de módulos sem caminho de chamada identificado.
+
+| ID | Escopo | Primeira versão corretiva na série 1.27 |
+|---|---|---|
+| [GO-2026-6604](https://pkg.go.dev/vuln/GO-2026-6604) | os (windows) | 1.27.2 |
+| [GO-2026-6859](https://pkg.go.dev/vuln/GO-2026-6859) | stdlib | 1.27.4 |
+| [GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809) | stdlib | 1.27.3 |
+| [GO-2026-6617](https://pkg.go.dev/vuln/GO-2026-6617) | stdlib | 1.27.2 |
+| [GO-2026-6613](https://pkg.go.dev/vuln/GO-2026-6613) | stdlib | 1.27.2 |
+| [GO-2026-6612](https://pkg.go.dev/vuln/GO-2026-6612) | stdlib | 1.27.2 |
+| [GO-2026-6611](https://pkg.go.dev/vuln/GO-2026-6611) | stdlib | 1.27.2 |
+| [GO-2026-6610](https://pkg.go.dev/vuln/GO-2026-6610) | stdlib | 1.27.2 |
+| [GO-2026-6609](https://pkg.go.dev/vuln/GO-2026-6609) | stdlib | 1.27.2 |
+| [GO-2026-6608](https://pkg.go.dev/vuln/GO-2026-6608) | stdlib | 1.27.2 |
+| [GO-2026-6607](https://pkg.go.dev/vuln/GO-2026-6607) | stdlib | 1.27.2 |
+| [GO-2026-6605](https://pkg.go.dev/vuln/GO-2026-6605) | stdlib | 1.27.2 |
+| [GO-2026-6603](https://pkg.go.dev/vuln/GO-2026-6603) | stdlib | 1.27.2 |
+| [GO-2026-6600](https://pkg.go.dev/vuln/GO-2026-6600) | stdlib | 1.27.2 |
+| [GO-2026-6599](https://pkg.go.dev/vuln/GO-2026-6599) | stdlib | 1.27.2 |
+
+A correção mais recente exigida é Go 1.27.4, publicada em 10/11/2026
+([histórico oficial](https://go.dev/doc/devel/release#go1.27.4),
+[versão vigente](https://go.dev/VERSION), consulta 25/11/2026).
+Como o pin GO_VERSION é compartilhado, atualizar para 1.27.4 no CI
+também protege futuras compilações do agente; não implica auditoria
+do agente nem atualização dos binários instalados. Não alterar go.mod,
+go.sum ou versões Bubble Tea/Lip Gloss sem necessidade. Reexecutar
+scanner detalhado e CI completo; repetir rebuild frio no gate de release.
+Dados originais em [evidence/hub-c01/vulnerability-6fca9c6.json](evidence/hub-c01/vulnerability-6fca9c6.json).
+Preparado em branch temporária para não cancelar QEMU de 6fca9c6;
+integração após conclusão. A correção ainda não está comprovada por novo
+scan. Nenhuma supressão de alerta. M1 aberto até confirmação do candidato.
+
 ## Gate M1
 
 - [x] Resolver e versionar grafo de dependências/lock (66cc984).
 - [x] Revalidar lock readonly (6d07067).
 - [x] Varredura govulncheck no protótipo (zero alcançáveis, 9999f9c).
-- [ ] Obter IDs e revisar alertas não alcançáveis antes de ampliar funcionalidades.
+- [x] Identificar e revisar os 15 alertas não alcançáveis (6fca9c6).
+- [ ] Validar Go 1.27.4 e repetir govulncheck antes de ampliar funcionalidades.
 - [x] Primeiro build, gofmt, vet e race; testes de estado e limites (ecff721).
 - [x] Revalidar build com lock fixado (6d07067).
 - [x] Reprodutibilidade byte a byte com caches independentes (9999f9c, mesmo ambiente).
