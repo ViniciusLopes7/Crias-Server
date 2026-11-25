@@ -169,3 +169,24 @@ ainda exigem expansão validada. Mesmos limites de sysfs e sanitização.
 Três testes de fixtures para conversões, sinais, saúde, ausência,
 limites, falhas, delta, regressão e lacunas. Código ainda não ligado
 ao scheduler/UI; CI novo necessário. Nenhuma escrita em hardware.
+
+## C03.3c — Rede, armazenamento e thermal_zone (candidato)
+
+CI 45691302343 (6f52f33): 15 jobs aprovados, metrics/race e scanner sem alertas.
+Fontes: https://docs.kernel.org/networking/statistics.html ,
+https://docs.kernel.org/admin-guide/iostats.html ,
+https://docs.kernel.org/6.17/block/stat.html ,
+https://docs.kernel.org/driver-api/thermal/sysfs-api.html .
+Rede por interface /proc/net/dev (namespace atual), disco /proc/diskstats
+por major:minor/nome, setores de 512 bytes. Contadores uint64, taxas B/s
+por delta/tempo real, primeira leitura aguardando, regressão inválida,
+lacuna >12 s obsoleta, falha limpa baseline. Não somar túneis, partições,
+RAID ou camadas; nome/ID reutilizado não comprova continuidade. Instâncias
+separadas do coletor por fonte; limite 512 entradas e 1 MiB por proc.
+Espaço statfs de filesystem conhecido, blocos usados e disponíveis ao
+usuário, percentual usado/(usado+disponível); sem varredura de mounts.
+Inicialmente / na integração; statfs pode bloquear em kernel.
+Thermal zones em °C, sem agregar hwmon nem presumir sensor CPU.
+Quatro testes escritos, CI pendente. Nenhum coletor conectado ao engine,
+nenhuma escrita administrativa ou nova dependência. Faltam inventário
+completo/estável, cadências, UI, alertas fundamentados e homologação M2.

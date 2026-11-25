@@ -33,6 +33,7 @@ const (
 	Amps      Unit = "A"
 	Joules    Unit = "J"
 	Boolean   Unit = "bool"
+	BytesRate Unit = "B/s"
 )
 
 type Sample struct {
