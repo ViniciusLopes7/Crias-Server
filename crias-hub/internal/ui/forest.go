@@ -41,10 +41,10 @@ var transliterate = strings.NewReplacer(
 	"í", "i", "ó", "o", "ô", "o", "õ", "o", "ú", "u", "ç", "c",
 	"Á", "A", "À", "A", "Â", "A", "Ã", "A", "É", "E", "Ê", "E",
 	"Í", "I", "Ó", "O", "Ô", "O", "Õ", "O", "Ú", "U", "Ç", "C",
-	"—", "-", "·", "|", "←", "<", "→", ">",
+	"—", "-", "·", "|", "←", "<", "→", ">", "↑", "^", "↓", "v",
 )
 
-// fit is used only for built-in, trusted labels and descriptions. It measures
+// fit is used for built-in labels and bounded validated search input. It measures
 // display columns before adding ANSI styling, never slices UTF-8 by bytes.
 func fit(text string, width int) string {
 	if width <= 0 {
@@ -55,7 +55,7 @@ func fit(text string, width int) string {
 	}
 	var b strings.Builder
 	for _, r := range text {
-		// Current labels contain single-column Portuguese letters and ASCII.
+		// Current labels and accepted query contain Portuguese letters and ASCII.
 		// Dynamic/untrusted strings need grapheme-aware handling in C03+.
 		if lipgloss.Width(b.String()+string(r)) > width {
 			break
@@ -122,6 +122,54 @@ var summaries = [...]string{
 	"Interface, monitoramento e preferências",
 }
 
+func focusLabel(f app.Focus) string {
+	switch f {
+	case app.FocusContent:
+		return "Conteúdo"
+	case app.FocusContext:
+		return "Contexto"
+	default:
+		return "Abas"
+	}
+}
+
+// Overlays replace the body on small terminals instead of drawing outside
+// the viewport. Keep the selected result in view as height shrinks.
+func overlay(s app.State, height int) ([]line, string) {
+	if s.Overlay == app.OverlayHelp {
+		return []line{
+			{"Ajuda · navegação", heading},
+			{"1-6 / setas / Tab: áreas", normal},
+			{"F6: foco | F2: lateral", normal},
+			{"/: buscar | Enter: detalhes", normal},
+			{"Esc: voltar | Q: sair", normal},
+			{"Ctrl+C: sair com restauração", muted},
+			{"Somente navegação; sem ações administrativas.", muted},
+		}, "Esc: fechar ajuda"
+	}
+	rows := []line{{"Busca · somente navegação", heading}, {"Consulta: " + s.Query, normal}}
+	results := s.SearchResults()
+	if len(results) == 0 {
+		rows = append(rows, line{"Nenhum resultado", muted})
+	} else {
+		available := max(1, height-4)
+		start := max(0, s.Selection-available+1)
+		for i := start; i < min(len(results), start+available); i++ {
+			tab := results[i]
+			label := fmt.Sprintf("%d %s", tab+1, app.Sections()[tab])
+			r := normal
+			if i == s.Selection {
+				label = "> " + label
+				r = heading
+			} else {
+				label = "  " + label
+			}
+			rows = append(rows, line{label, r})
+		}
+	}
+	return rows, "↑ ↓ / Tab | Enter | Esc: fechar"
+}
+
 // Render keeps a one-column safety margin against terminal auto-wrap. A
 // compact footer stays visible when height permits; no synthetic host data.
 func Render(s app.State, opt Options) string {
@@ -131,14 +179,20 @@ func Render(s app.State, opt Options) string {
 	}
 	lines := []line{{"CRIAS HUB | C02", heading}}
 	compact := width < 59 || height < 20
-	wide := width >= 99 && height >= 30
+	wide := s.ContextVisible()
+	footer := "1-6 / ← → / Tab | F6: foco | F2: lateral | /: busca | ?: ajuda | Q: sair"
+	if s.Overlay != app.OverlayNone {
+		rows, hint := overlay(s, height)
+		lines = append(lines, rows...)
+		return finish(lines, hint, width, height, opt)
+	}
 	if compact {
 		lines = append(lines, line{"Área: " + s.Section(), normal})
 		if s.Detail {
 			lines = append(lines, line{"Nenhuma operação administrativa disponível.", muted})
 		}
 	} else {
-		lines = append(lines, line{"Experimental · somente leitura", muted})
+		lines = append(lines, line{"Experimental · somente leitura | Foco: " + focusLabel(s.Focus), muted})
 		lines = append(lines, line{"Host e métricas: indisponíveis (C03)", muted})
 		lines = append(lines, tabs(s.Tab, width)...)
 		lines = append(lines, line{strings.Repeat("-", min(width, 100)), muted})
@@ -160,10 +214,13 @@ func Render(s app.State, opt Options) string {
 			lines = append(lines, line{"Nenhuma operação administrativa disponível.", muted})
 		}
 	}
-	footer := "1-6 / ← → / Tab: áreas | Enter: detalhes | Esc: voltar | Q: sair"
 	if compact || lipgloss.Width(footer) > width {
-		footer = "1-6 / Tab | Enter | Esc | Q: sair"
+		footer = "1-6 / Tab | / | ? | Q: sair"
 	}
+	return finish(lines, footer, width, height, opt)
+}
+
+func finish(lines []line, footer string, width, height int, opt Options) string {
 	if height > 1 {
 		lines = lines[:min(len(lines), height-1)]
 		lines = append(lines, line{footer, muted})

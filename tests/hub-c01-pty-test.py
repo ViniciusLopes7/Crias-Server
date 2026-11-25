@@ -157,6 +157,22 @@ def lifecycle(binary: Path) -> None:
         os.write(s.master, b"q")
         s.finish((0,))
     print("PASS: navigation, detail, Esc, resize, Q and terminal restoration")
+    with Session(binary) as s:
+        s.ready()
+        s.key(b"/", b"Busca")
+        s.key(b"ram", b"Consulta: ram")
+        s.key(b"\r", b"Hardware")
+        s.key(b"?", b"Ajuda")
+        os.write(s.master, b"q6")
+        time.sleep(0.15)
+        if s.poll() is not None:
+            raise RuntimeError("global shortcuts leaked into help")
+        os.write(s.master, b"\x1b")
+        time.sleep(0.15)
+        s.key(b"4", b"Backups")
+        os.write(s.master, b"q")
+        s.finish((0,))
+    print("PASS: search navigation, help isolation and terminal restoration")
     for key, label in [(b"\x1b", "Esc"), (b"\x03", "Ctrl+C")]:
         with Session(binary) as s:
             s.ready()

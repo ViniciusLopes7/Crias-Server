@@ -53,3 +53,31 @@ distribuído; rollback é descartar binário experimental.
 - C02.5: auditoria de layout, latência/RSS e regressões, evidências, CI.
 Gates físicos/SSH, métricas reais e segurança dos ciclos seguintes
 continuam intactos. M2 depende de C03.
+
+## C02.3 — Navegação contextual (candidato)
+
+O job Hub 139437063138 do run 45679818006 aprovou o primeiro layout:
+384 combinações, race/vet, PTY e scanner sem alertas. 30 startups e 60
+transições, startup mediano 22.816 ms, p95 de navegação 17.143 ms,
+RSS principal 5888 KiB, binário 5692436 bytes. QEMU/build agente ainda
+pendentes na consulta; não declarar CI integral.
+
+O novo estado mantém foco explícito (abas, conteúdo, contexto), F6
+cicla regiões disponíveis, F2 oculta/mostra a lateral; resize e ocultação
+retiram foco de regiões invisíveis. Tab/setas continuam a navegação do
+C01. Enter em contexto passivo não executa nada. Esc prioriza overlay,
+detalhe e foco antes de sair. Ctrl+C sempre permite restaurar terminal.
+
+Busca / navega somente para uma das seis áreas. Pesquisa por rótulos e
+aliases de conteúdo (ex.: RAM, Minecraft, Doctor), insensível a caixa e
+acentos portugueses. Query limitada a 48 runes, aceita ASCII imprimível
+e letras portuguesas; rejeita sequências de controle e colagens
+multicaractere. Enter sem resultado não altera estado. Q, números e
+atalhos globais ficam suspensos dentro da busca; ? abre ajuda modal,
+Esc fecha e restaura foco. Não há execução de comandos, serviços ou
+consultas de host. Renderização de texto dinâmico arbitrário permanece
+fora de escopo. Atalhos F2/F6 e PTY real ainda precisam ser comprovados.
+
+Testes unitários novos: busca, limites, seleção circular, isolamento,
+foco, resize e lateral; teste PTY busca e ajuda. Preparação em branch
+temporária para preservar CI anterior. Nenhuma mudança de workflow.
