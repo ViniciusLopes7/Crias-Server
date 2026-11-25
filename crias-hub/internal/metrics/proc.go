@@ -38,8 +38,9 @@ func readState(err error) Availability {
 }
 
 type cpuCounters struct {
-	total uint64
-	idle  uint64
+	fields [8]uint64
+	total  uint64
+	idle   uint64
 }
 
 func parseCPU(text string) (cpuCounters, bool) {
@@ -59,6 +60,7 @@ func parseCPU(text string) (cpuCounters, bool) {
 			if err != nil || math.MaxUint64-c.total < n {
 				return cpuCounters{}, false
 			}
+			c.fields[i] = n
 			c.total += n
 			if i == 3 || i == 4 {
 				c.idle += n
@@ -92,6 +94,11 @@ func (c *CPUCollector) Read(proc fs.FS, at time.Time) Sample {
 	c.previous, c.have = next, true
 	if !have {
 		return missing(Waiting, Percent, source, scope, at)
+	}
+	for i, n := range next.fields {
+		if n < previous.fields[i] {
+			return missing(Invalid, Percent, source, scope, at)
+		}
 	}
 	if next.total < previous.total || next.idle < previous.idle {
 		return missing(Invalid, Percent, source, scope, at)

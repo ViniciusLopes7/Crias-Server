@@ -82,7 +82,17 @@ func TestMemory(t *testing.T) {
 }
 
 func TestProfiles(t *testing.T) {
-	if Economy.Interval(time.Second) != 3*time.Second || Balanced.Interval(time.Second) != time.Second || Detailed.Interval(time.Second) != time.Second/2 {
+	if Profile(0) != Balanced || Economy.Interval(time.Second) != 3*time.Second || Balanced.Interval(time.Second) != time.Second || Detailed.Interval(time.Second) != time.Second/2 {
 		t.Fatal("incorrect profile cadence")
+	}
+}
+
+func TestCPUIndividualCounterRegression(t *testing.T) {
+	var c CPUCollector
+	at := time.Unix(100, 0)
+	c.Read(fixture("stat", "cpu 100 0 50 100 10 0 0 0\n"), at)
+	got := c.Read(fixture("stat", "cpu 200 0 40 150 10 0 0 0\n"), at)
+	if got.State != Invalid {
+		t.Fatal("regression masked by aggregate", got)
 	}
 }

@@ -47,8 +47,8 @@ func (s Sample) Valid() bool {
 type Profile uint8
 
 const (
-	Economy Profile = iota
-	Balanced
+	Balanced Profile = iota
+	Economy
 	Detailed
 )
 

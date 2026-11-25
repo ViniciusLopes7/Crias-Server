@@ -12,7 +12,7 @@ timestamp, disponibilidade). Estados distinguem disponível, aguardando,
 indisponível, permissão, inválido, obsoleto e estimado. Valor zero não
 equivale a observação válida. Dados não disponíveis não serão exibidos
 como zero. Perfis de monitoramento são independentes de política
-energética: econômico 3x, balanceado 1x, detalhado 0,5x. Intervalos de
+energética: econômico 3x, balanceado 1x (inclusive zero value), detalhado 0,5x. Intervalos de
 referência positivos definidos no roadmap; scheduler ainda não existe.
 
 Leitura via fs.FS injetável, nomes fixos relativos à raiz proc; limite de
@@ -23,7 +23,7 @@ cancelamento/coleta assíncrona deverá ser implementado no scheduler.
 
 - CPU agregada: /proc/stat, delta de ticks, idle+iowait, guest excluído
   para não contar duas vezes; primeira amostra/intervalo sem ticks =
-  aguardando. Regressão/inconsistência de contadores = inválido e nova
+  aguardando. Regressão de qualquer contador/inconsistência = inválido e nova
   referência; falha de leitura invalida baseline, sem atravessar lacuna.
   Escopo CPU host agregado, não CPU de processo/cgroup.
 - Memória: /proc/meminfo, kB do kernel convertido em bytes, uso =
