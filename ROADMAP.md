@@ -2,6 +2,35 @@
 
 > Visão consolidada do produto e das lacunas de validação. Registros de fases antigas permanecem como referência histórica; o estado atual deve ser conferido na branch `main` e nas execuções recentes do CI.
 
+## Roadmap vigente — nova geração do Hub (25/11/2026)
+
+Planejamento aprovado em dez etapas na [issue #22](https://github.com/ViniciusLopes7/Crias-Server/issues/22). Consulte o [ADR Go](docs/decisions/hub-go.md) e a [auditoria C00](docs/hub-c00-baseline.md). O Hub Bash/Gum continua sendo a implementação distribuída até a troca validada; o instalador Bash permanece. As referências antigas abaixo são históricas, não decisões vigentes para a nova interface. A GUI web não faz parte deste roadmap.
+
+| Fase | Ciclo | Entrega e gate |
+|---|---|---|
+| A — Fundação | C00 | Auditoria, contratos, baseline e documentação; confirmar CI/releases e medir antes de avançar. **Em andamento**. |
+| A | C01 | PoC Go, Bubble Tea/Lip Gloss candidatos; eventos, PTY/SSH e restauração de terminal, build e benchmarks. |
+| B — Interface e paridade | C02 | Crias Forest, layout híbrido, seis abas, foco, busca, header/rodapé e responsividade. |
+| B | C03 | Coletores, dashboard, histórico limitado, perfis e alertas verificáveis. |
+| B | C04 | Paridade de serviços, console/logs, heap, arquivos, Voice Chat, Chunky, backups, atualização e diagnóstico. |
+| C — Expansão | C05 | Jogos: console integrado, jogadores, telemetria, Chunky, formulários, mods/MRPack e atualização controlada. |
+| C | C06 | Sistema: serviços, SSH/Tailscale, Doctor, logs, disco e energia. |
+| C | C07 | Hardware: CPU, perfis, bateria, refrigeração e potência conforme compatibilidade e validação. |
+| D — Resiliência | C08 | Backups, retenção, validação em quatro níveis, preparação de restore, destinos opcionais. |
+| D | C09 | Journal, locks, tarefas, auditoria, recuperação e save-on independente; concluir proteções críticas. |
+| E — Consolidação | C10 | Profiling, benchmarks, testes prolongados, auditoria, QEMU, jogos e hardware reais. |
+| E | C11 | Distribuição, migração real, rollback, fallback Bash, documentação e release autorizada. |
+
+Todos os ciclos após C00 estão planejados, não executados. Dependências principais: C00 → C01 → C02 → C03 → C04; C05/C06/C08 após C04; C07 após C03. Contratos de segurança desde C01 e proteções implementadas antes de cada ação de escrita sensível, ainda que o C09 consolide mecanismos compartilhados. C10 depende do escopo entregue em C04–C09 e C11 depende de C10.
+
+**Marcos verificáveis:** M1/C01 protótipo; M2/C03 interface e métricas reais; M3/C04 paridade experimental; M4/C07 expansão condicionada à segurança; M5/C09 resiliência; M6/C11 entrega padrão. A TUI experimental pode coexistir com Bash; nomes candidatos `crias-tui-next` e `--legacy` serão validados antes da distribuição. `--doctor` deve permanecer independente. Sem reinstalar jogos/host.
+
+Escopo essencial: interface, monitoramento, paridade, console, heap, Chunky, Voice Chat, atualização/Doctor, backups/restore e controles de hardware suportados. Extensões condicionais/futuras: editor nativo, múltiplas instâncias, novos jogos, automação energética, GPU avançada, curvas não homologadas, integrações especiais e temas. Requisitos P1/P2 permanecem rastreados no épico; adiar com justificativa explícita, não eliminar silenciosamente.
+
+Governança: política de engenharia vigente, commits atômicos, PRs coerentes, CI e evidências por SHA, main estável, merge/release conforme autorização. Segurança, testes, desempenho e documentação são transversais. Não declarar marco concluído por checklist sem evidência.
+
+---
+
 ## Estado atual e histórico de implantação (releases de novembro de 2026)
 
 > A tabela abaixo mantém marcos históricos das versões 1.2.x/1.3.0 para rastreabilidade. O mecanismo vigente de publicação usa tags datadas (por exemplo, `v2026.11.22-9496a5f`), não a indicação de versão deste cabeçalho.
