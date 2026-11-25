@@ -148,6 +148,23 @@ Não confundir releases fixadas com a release mais recente do repositório ou a 
 
 A caracterização inicial e a validação do harness estão comprovadas pelo CI de 7433663. A suíte adicional, o CI do candidato e as amostras observacionais ainda precisam ser confirmados. Para completar a baseline, é necessário executar o roteiro em ambiente Arch controlado com Gum saudável e acesso ao host/jogos de teste autorizado; registrar resultados do modo normal, ociosidade, tráfego, processos filhos e impacto nos jogos. Sem alterar produção ou declarar comparação equivalente a partir de fixture. Preservar gate C00.
 
+## C00.4 — Primeira baseline observacional registrada
+
+O [run 45623870933](https://github.com/ViniciusLopes7/Crias-Server/actions/runs/45623870933), commit `38667bbab01b1fffaab33fb7fb41a7375ed1a7c3`, terminou com sucesso (13 jobs aprovados; release ignorada). Test Shell (139238997089) confirmou smoke PTY, 52 cenários de rotas e 39 de contratos de backend. QEMU e migração real também aprovados. Evidência de PR, não de CI pós-merge.
+
+Dados brutos preservados em [evidence/hub-c00/numeric-fixture-38667bb.json](evidence/hub-c00/numeric-fixture-38667bb.json), extraídos das duas linhas HUB_BASELINE_JSON; contagens, mediana, p95 nearest rank e máximos recalculados a partir das amostras e conferidos. Ambiente: runner ubuntu-22.04, kernel 6.8.0-1070-azure, x86_64, TERM=dumb, fixture, Gum desativado. SHA-256 do script: `0fce6d3e1943e30fee8bda5da19b6240c5bba4e3106737579502777bffb74367`.
+
+| Métrica | Minecraft | Terraria |
+|---|---:|---:|
+| Inicialização mediana (ms) | 5.368447 | 5.392701 |
+| Inicialização p95 (ms) | 5.714294 | 5.602701 |
+| Navegação mediana (ms) | 0.910744 | 0.853408 |
+| Navegação p95 (ms) | 0.961666 | 0.932397 |
+| RSS pontual mediana (KiB) | 3848 | 3844 |
+| CPU total mediana por amostra (ms) | 7.827 | 7.777 |
+
+30 execuções e 60 transições por stack. Não há medições de Gum, SSH, ociosidade, árvore de processos, impacto em jogos ou hardware físico. Não usar estes valores como gate temporal nem como comparação direta com dashboard Go completo. O host Arch e a release vigente/instalada seguem sem confirmação. C00 permanece aberto até validar ou isolar os bloqueadores conforme as decisões aprovadas.
+
 ## Gate C00
 
 - [x] Referência de código fixada e leitura inicial de main/PRs.
@@ -156,8 +173,8 @@ A caracterização inicial e a validação do harness estão comprovadas pelo CI
 - [ ] Confirmar CI e releases atuais, condições de instalação e dependências.
 - [x] Caracterização inicial de contratos e 52 novos cenários de rotas, executados no CI do commit a19573e.
 - [x] Validar harness PTY e JSON em CI (7433663, Test Shell).
-- [ ] Confirmar execução dos casos negativos de backend e CI do candidato final.
-- [ ] Registrar dados observacionais de 30 amostras por stack e limitações.
+- [x] Casos negativos de backend e CI de 38667bb aprovados (39 cenários adicionais; 13 jobs).
+- [x] Dados observacionais de 30 amostras por stack preservados com origem e limitações.
 - [ ] Capturar baseline de execução com dados reais e arquivar evidências.
 - [ ] Resolver ou isolar bloqueadores e validar C00 antes de C01.
 
