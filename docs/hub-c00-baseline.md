@@ -129,6 +129,25 @@ python3 tools/hub-baseline.py --mode host --samples 30 > baseline-host-numeric.j
 
 Usar exclusivamente script Bash confiável da referência acima; opção --hub aponta para checkout fixado, não para código desconhecido. O harness desativa Gum e a recuperação automática de pacote, bloqueia sudo/pacman e percorre somente menu Servidor → voltar → sair. Não rodar como root. Em modo host, apenas descoberta/status do host são reais. Em fixture, também são simulados. O resultado JSON inclui hash SHA-256 do Hub, kernel, arquitetura, amostras cruas, mediana/p95 de startup e duas transições, RSS pontual do processo Bash (não pico/PSS/árvore) e CPU time da amostra completa (não CPU ociosa). Timeout, saída inesperada e falhas invalidam a medição; saída não contém logs ou segredos do host. Executar em ambiente controlado e registrar condições externas. Não comparar o fallback numérico com Gum ou Go full screen como trabalho equivalente. Falta baseline de Gum real, ociosidade, tráfego SSH, carga dos jogos, PSS/CPU agregada e estabilidade longa; gate C00 permanece aberto.
 
+## C00.3 — Contraprovas de backend e evidências de execução
+
+- [Run 45623184068](https://github.com/ViniciusLopes7/Crias-Server/actions/runs/45623184068), commit 7433663fc76d57b37dfe2184335a590038448991: Test Shell (job 139236590543) concluído com sucesso. Log confirma smoke PTY em ambas stacks, JSON e argumento inválido, além dos 52 casos de menu. QEMU ainda em execução no snapshot consultado; não declarar workflow completo.
+- No mesmo run, job 139236590393 de migração real concluído com sucesso. Logs confirmam download e SHA-256 dos ZIPs oficiais imutáveis, fluxo bootstrap --update-tools e updater candidato sobre release antiga, preservação de configuração, mundos, mods e ferramentas. Referências efetivamente verificadas:
+
+| Release | SHA-256 de crias-server-slim.zip |
+|---|---|
+| v2026.11.22-8877a39 | 06de2666d20739d69af7882da9943b39aa8694b3dd15740b64e6acc251ea3020 |
+| v2026.11.22-9496a5f | 8f945aebd3537850eb04012908f2c2ae4f51450d8a3924ad5383e39278119867 |
+
+Não confundir releases fixadas com a release mais recente do repositório ou a instalada no notebook; ambas continuam sem verificação direta.
+
+- Commit 9b292b51c4bcd8efdbdec12c688228e4c82c9d59: testes adicionais de contratos reais de manager-common.sh, com systemctl simulado e fronteira de escrita interceptada. Casos de serviço ausente/estado desconhecido, recursos inválidos vs zero, falha de start/stop/restart e ausência de retry, backup ausente, tuning ausente, argumentos inválidos e funções opcionais indisponíveis. A caracterização não legitima limitações legadas; status e hardware-report podem retornar zero sem indicar prontidão/dados válidos. Testes integrados atomicamente ao CI e run-all; execução ainda pendente neste snapshot.
+- Commit b362dd6abeea619fb46d943ecabc3aba7bb68566: etapa observacional no job Test Shell existente, 30 amostras por stack com fixtures, relatório completo em linhas HUB_BASELINE_JSON. Falhas de execução/JSON são erros; tempos não são gates. Sem serviço permanente, sem novos workflows ou artefatos adicionais. Extrair e guardar relatórios sanitizados por SHA quando executados; ainda não há resultados numéricos confirmados. Essas amostras não substituem a baseline física nem a medição Gum/SSH.
+
+### Critérios remanescentes
+
+A caracterização inicial e a validação do harness estão comprovadas pelo CI de 7433663. A suíte adicional, o CI do candidato e as amostras observacionais ainda precisam ser confirmados. Para completar a baseline, é necessário executar o roteiro em ambiente Arch controlado com Gum saudável e acesso ao host/jogos de teste autorizado; registrar resultados do modo normal, ociosidade, tráfego, processos filhos e impacto nos jogos. Sem alterar produção ou declarar comparação equivalente a partir de fixture. Preservar gate C00.
+
 ## Gate C00
 
 - [x] Referência de código fixada e leitura inicial de main/PRs.
@@ -136,7 +155,9 @@ Usar exclusivamente script Bash confiável da referência acima; opção --hub a
 - [x] Decisões permanentes e roadmap propostos em branch C00.
 - [ ] Confirmar CI e releases atuais, condições de instalação e dependências.
 - [x] Caracterização inicial de contratos e 52 novos cenários de rotas, executados no CI do commit a19573e.
-- [ ] Completar casos negativos de backend, conferir CI do candidato final e validar harness.
+- [x] Validar harness PTY e JSON em CI (7433663, Test Shell).
+- [ ] Confirmar execução dos casos negativos de backend e CI do candidato final.
+- [ ] Registrar dados observacionais de 30 amostras por stack e limitações.
 - [ ] Capturar baseline de execução com dados reais e arquivar evidências.
 - [ ] Resolver ou isolar bloqueadores e validar C00 antes de C01.
 
