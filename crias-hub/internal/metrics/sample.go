@@ -23,6 +23,9 @@ type Unit string
 const (
 	Percent Unit = "%"
 	Bytes   Unit = "B"
+	MHz     Unit = "MHz"
+	Celsius Unit = "°C"
+	RPM     Unit = "rpm"
 )
 
 type Sample struct {

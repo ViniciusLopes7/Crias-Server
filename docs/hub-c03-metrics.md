@@ -92,3 +92,42 @@ externas: GO111MODULE=off go test -race -count=10 -timeout=60s -v,
 Go 1.27.4 nem ao módulo completo. Diagnóstico de gofmt no job Hub
 passa a mostrar arquivos/diff antes de falhar, sem relaxar o gate.
 Novo CI obrigatório antes de C03.3. Nenhuma mudança funcional.
+
+## C03.3a — Frequência, temperatura e RPM (candidato)
+
+CI 45688525883, 8852bd9, 15 jobs aprovados; Hub 139467462725
+confirmou pacote metrics com race, PTY e govulncheck sem alertas.
+Fundação C03.1/2 validada no CI. Engine ainda não usado pelo executável.
+
+Fontes de referência:
+- https://docs.kernel.org/admin-guide/pm/cpufreq.html
+- https://docs.kernel.org/hwmon/sysfs-interface.html
+- https://docs.kernel.org/hwmon/dell-smm-hwmon.html
+- https://docs.kernel.org/gpu/amdgpu/thermal.html
+
+Leitores sysfs via fs.FS, raiz futura os.DirFS("/sys"), somente caminhos
+de inventário com prefixos e índices numéricos. Leitura limitada a 4096
+bytes por atributo, 512 entradas por diretório e 512 sensores por leitura.
+Diretórios sysfs podem ser links do kernel; não exigir IsDir.
+Ausência/permissão/valor inválido explícitos. Inventário limitado não
+é inventário completo se exceder limite. Labels ASCII imprimíveis,
+fallback ao identificador; não passar escapes ao terminal.
+
+CPUFreq por policy, em MHz. Observação cpuinfo_cur_freq, valor do driver
+scaling_cur_freq marcado Estimated (não substitui hardware), limites
+configurados min/max e governor separados. Rejeitar limites invertidos.
+Limites numéricos de sanidade não são parâmetros de tuning.
+Hwmon: temperaturas apenas para drivers com unidade conhecida
+(coretemp, k10temp, acpitz, amdgpu, nvme, dell_smm), sem inferir temperatura
+CPU a partir de Tctl ou GPU e sem somar sensores. Outros drivers não
+interpretados até verificar unidade (alguns temp inputs são tensão).
+RPM zero é válido; fault indicado invalida observação. Sem controle,
+PWM ou escrita. Identificadores hwmonX são da sessão, não persistentes.
+Temperatura genérica thermal_zone, mais drivers, histerese e seleção do
+sensor relevante no header ainda pendentes. Sem alertas térmicos arbitrários.
+
+Fixtures cobrem fontes de clock, ausência, limites invertidos,
+conversões, RPM zero, falhas, driver desconhecido, labels inseguros,
+permissões e limites de leitura/inventário. Testes novos aguardam CI.
+Sem ligar coletores ao scheduler nesta alteração. Inventário/cadências,
+energia, bateria, armazenamento, rede, integração UI e M2 pendentes.
