@@ -1,4 +1,4 @@
-// crias-tui-next is an opt-in, presentation-only prototype. It does not
+// crias-tui-next is an opt-in, read-only prototype. It does not
 // invoke managers, sudo, systemctl, package tools or configuration writes.
 package main
 
@@ -10,24 +10,58 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/ViniciusLopes7/Crias-Server/crias-hub/internal/app"
+	"github.com/ViniciusLopes7/Crias-Server/crias-hub/internal/metrics"
 	"github.com/ViniciusLopes7/Crias-Server/crias-hub/internal/ui"
 	"golang.org/x/term"
 )
 
 type model struct {
-	state app.State
-	color bool
-	ascii bool
-	basic bool
+	state    app.State
+	color    bool
+	ascii    bool
+	basic    bool
+	engine   *metrics.Engine
+	ctx      context.Context
+	snapshot *metrics.Snapshot
 }
 
-func (m model) Init() tea.Cmd { return nil }
+type metricsUpdate struct{}
+
+func (m model) waitMetrics() tea.Cmd {
+	if m.engine == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		// A bounded freshness wakeup also covers the case where every
+		// collector is blocked. Only one wait is scheduled at a time.
+		timer := time.NewTimer(2 * time.Second)
+		defer timer.Stop()
+		select {
+		case <-m.ctx.Done():
+			return nil
+		case <-m.engine.Done():
+			return nil
+		case <-m.engine.Changed():
+		case <-timer.C:
+		}
+		return metricsUpdate{}
+	}
+}
+
+func (m model) Init() tea.Cmd { return m.waitMetrics() }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch v := msg.(type) {
+	case metricsUpdate:
+		if m.engine != nil {
+			s := m.engine.Snapshot(time.Now())
+			m.snapshot = &s
+			return m, m.waitMetrics()
+		}
 	case tea.WindowSizeMsg:
 		m.state = m.state.Resize(v.Width, v.Height)
 	case tea.KeyPressMsg:
@@ -42,7 +76,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders state only; no host reads or effects in the render loop.
 func (m model) View() tea.View {
-	v := tea.NewView(ui.Render(m.state, ui.Options{Color: m.color, ASCII: m.ascii, Palette16: m.basic}))
+	v := tea.NewView(ui.Render(m.state, ui.Options{Color: m.color, ASCII: m.ascii, Palette16: m.basic, Telemetry: m.snapshot}))
 	v.AltScreen = true
 	return v
 }
@@ -59,7 +93,7 @@ func terminalOptions(getenv func(string) string, lookup func(string) (string, bo
 	return ui.Options{Color: !noColor && !monochrome, ASCII: ascii || monochrome, Palette16: limited}
 }
 
-const help = "crias-tui-next: prototipo C02 somente leitura\nUso: crias-tui-next [--help | --version]\nSem TTY: use crias-tui --doctor (legado)."
+const help = "crias-tui-next: prototipo C03 somente leitura\nUso: crias-tui-next [--help | --version | --telemetry]\nSem TTY: use crias-tui --doctor (legado)."
 
 func run(args []string, stdin, stdout *os.File, stderr io.Writer) int {
 	if len(args) == 1 {
@@ -68,11 +102,12 @@ func run(args []string, stdin, stdout *os.File, stderr io.Writer) int {
 			fmt.Fprintln(stdout, help)
 			return 0
 		case "--version":
-			fmt.Fprintln(stdout, "crias-tui-next C02 experimental")
+			fmt.Fprintln(stdout, "crias-tui-next C03 experimental")
 			return 0
 		}
 	}
-	if len(args) != 0 {
+	telemetry := len(args) == 1 && args[0] == "--telemetry"
+	if len(args) != 0 && !telemetry {
 		fmt.Fprintln(stderr, help)
 		return 2
 	}
@@ -82,15 +117,24 @@ func run(args []string, stdin, stdout *os.File, stderr io.Writer) int {
 		return 2
 	}
 	if os.Geteuid() == 0 {
-		fmt.Fprintln(stderr, "Prototipo C02: execute sem root.")
+		fmt.Fprintln(stderr, "Prototipo C03: execute sem root.")
 		return 2
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGHUP)
 	defer stop()
 	options := terminalOptions(os.Getenv, os.LookupEnv)
-	p := tea.NewProgram(model{state: app.New(), color: options.Color, ascii: options.ASCII, basic: options.Palette16}, tea.WithContext(ctx), tea.WithInput(stdin), tea.WithOutput(stdout))
+	m := model{state: app.New(), color: options.Color, ascii: options.ASCII, basic: options.Palette16, ctx: ctx}
+	if telemetry {
+		m.engine = metrics.NewHostEngine(ctx, os.DirFS("/proc"), os.DirFS("/sys"), func(at time.Time) metrics.Capacity {
+			return metrics.Space("/", at)
+		})
+		defer m.engine.Stop()
+		s := m.engine.Snapshot(time.Now())
+		m.snapshot = &s
+	}
+	p := tea.NewProgram(m, tea.WithContext(ctx), tea.WithInput(stdin), tea.WithOutput(stdout))
 	if _, err := p.Run(); err != nil {
-		fmt.Fprintln(stderr, "C02:", err)
+		fmt.Fprintln(stderr, "C03:", err)
 		return 1
 	}
 	return 0

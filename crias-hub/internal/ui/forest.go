@@ -7,6 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/ViniciusLopes7/Crias-Server/crias-hub/internal/app"
+	"github.com/ViniciusLopes7/Crias-Server/crias-hub/internal/metrics"
 )
 
 const (
@@ -21,6 +22,7 @@ type Options struct {
 	Color     bool
 	ASCII     bool
 	Palette16 bool
+	Telemetry *metrics.Snapshot
 }
 
 type role uint8
@@ -42,7 +44,7 @@ var transliterate = strings.NewReplacer(
 	"í", "i", "ó", "o", "ô", "o", "õ", "o", "ú", "u", "ç", "c",
 	"Á", "A", "À", "A", "Â", "A", "Ã", "A", "É", "E", "Ê", "E",
 	"Í", "I", "Ó", "O", "Ô", "O", "Õ", "O", "Ú", "U", "Ç", "C",
-	"—", "-", "·", "|", "←", "<", "→", ">", "↑", "^", "↓", "v",
+	"°", " graus ", "—", "-", "·", "|", "←", "<", "→", ">", "↑", "^", "↓", "v",
 )
 
 // fit is used for built-in labels and bounded validated search input. It measures
@@ -187,7 +189,11 @@ func Render(s app.State, opt Options) string {
 	if width == 0 || height == 0 {
 		return ""
 	}
-	lines := []line{{"CRIAS HUB | C02", heading}}
+	version := "C02"
+	if opt.Telemetry != nil {
+		version = "C03"
+	}
+	lines := []line{{"CRIAS HUB | " + version, heading}}
 	compact := width < 59 || height < 20
 	wide := s.ContextVisible()
 	footer := "1-6 / ← → / Tab | F6: foco | F2: lateral | /: busca | ?: ajuda | Q: sair"
@@ -208,16 +214,28 @@ func Render(s app.State, opt Options) string {
 		if height >= 5 {
 			lines = append(lines, line{"Foco: " + focusLabel(s.Focus), muted})
 		}
+		if opt.Telemetry != nil && height >= 6 {
+			lines = append(lines, line{hostSummary(*opt.Telemetry), normal})
+		}
 		if s.Detail {
 			lines = append(lines, line{"Nenhuma operação administrativa disponível.", muted})
 		}
 	} else {
 		lines = append(lines, line{"Experimental · somente leitura | Foco: " + focusLabel(s.Focus), muted})
-		lines = append(lines, line{"Host e métricas: indisponíveis (C03)", muted})
+		if opt.Telemetry == nil {
+			lines = append(lines, line{"Host e métricas: indisponíveis (C03)", muted})
+		} else {
+			lines = append(lines, line{hostSummary(*opt.Telemetry), normal})
+		}
 		lines = append(lines, tabs(s.Tab, width)...)
 		lines = append(lines, line{strings.Repeat("-", min(width, 100)), muted})
 		lines = append(lines, line{"Área: " + s.Section(), heading})
-		if wide {
+		if opt.Telemetry != nil && (s.Tab == 0 || s.Tab == 2) {
+			lines = append(lines, telemetryRows(*opt.Telemetry, s.Tab == 2)...)
+			if wide {
+				lines = append(lines, line{"Contexto | Somente leitura", muted})
+			}
+		} else if wide {
 			left := width - 29
 			lines = append(lines,
 				line{pad(summaries[s.Tab], left) + " | Contexto", normal},

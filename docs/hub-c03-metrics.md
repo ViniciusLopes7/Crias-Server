@@ -235,3 +235,24 @@ passam fastCadence, grupos adicionais passam sua cadência base.
 Não alterar a assinatura nem desativar vet. Race/build/PTy/scanner
 não executados nesse run, novo CI obrigatório. Não houve validação
 local neste incremento. Integração visual permanece bloqueada.
+
+## C03.4b.1 — Primeira integração visual (candidato)
+
+Run 45703082662 (a1a7135): 15 jobs aprovados, incluindo Hub e QEMU.
+Novo modo experimental explícito crias-tui-next --telemetry inicia
+NewHostEngine com /proc, /sys e statfs de /. Sem argumento mantém
+C02 estático para comparabilidade dos benchmarks. Help/version e
+recusa de root/non-TTY precedem qualquer coleta. Nenhuma alteração
+no instalador, default distribuído ou comandos administrativos.
+Bubble Tea recebe notificações coalescidas via um Cmd por vez, com
+wake de freshness em 2 s caso todos os grupos bloqueiem; Snapshot
+fora da View, sem efeitos no render. Context/Stop no encerramento,
+sem bloquear restauração por syscall de sensor. Header CPU/RAM host,
+memória/swap/espaço na visão geral e inventário resumido em Hardware.
+Sem inventar zeros; estado de grupo precede dados de inventário.
+Detalhes dos sensores, serviços, perfis interativos, histórico visual,
+alertas, descoberta adaptativa e benchmarks de coleta real pendentes.
+Modo estático preserva 30 startups/60 transições anteriores. Novo PTY
+smoke opt-in verifica RAM em MiB, navegação e restauração, não precisão
+física ou carga. Teste de render com snapshots e falhas/ASCII/bounds.
+Testes escritos, CI novo obrigatório. M2 aberto.

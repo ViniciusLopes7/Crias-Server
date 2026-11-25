@@ -27,7 +27,8 @@ LEAVE_ALT = b"\x1b[?1049l"
 class Session:
     def __init__(self, binary: Path, term: str = "xterm-256color",
                  width: int = 120, height: int = 40,
-                 ascii_mode: bool = True, no_color: bool = True) -> None:
+                 ascii_mode: bool = True, no_color: bool = True,
+                 telemetry: bool = False) -> None:
         self.master, self.slave = pty.openpty()
         self.original = termios.tcgetattr(self.slave)
         self.output = b""
@@ -49,7 +50,8 @@ class Session:
                     env["CRIAS_HUB_ASCII"] = "1"
                 if no_color:
                     env["NO_COLOR"] = "1"
-                os.execve(str(binary), [str(binary)], env)
+                args = [str(binary)] + (["--telemetry"] if telemetry else [])
+                os.execve(str(binary), args, env)
             except BaseException:
                 os._exit(127)
 
@@ -229,6 +231,14 @@ def lifecycle(binary: Path) -> None:
         # exit can be checked after closing the master.
         s.finish((0, 1), restore=False)
     print("PASS: PTY hangup exits without orphaned session leader")
+    with Session(binary, telemetry=True) as s:
+        s.ready()
+        s.expect(b"RAM host:")
+        s.expect(b"MiB")
+        s.key(b"3", b"Hardware")
+        os.write(s.master, b"q")
+        s.finish((0,))
+    print("PASS: opt-in host telemetry, navigation and terminal restoration")
 
 
 def process_snapshot(pid: int) -> tuple[int, int]:
