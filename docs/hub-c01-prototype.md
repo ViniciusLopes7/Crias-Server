@@ -188,6 +188,29 @@ para prometer ganho em produção. Comparação completa permanece gate
 posterior; M1 restrito ao protótipo experimental, ainda aberto até
 consolidação do CI e avaliação de exposição das dependências.
 
+## C01.6 — CI integral e revisão detalhada
+
+O run 45672307862, commit 9999f9c, terminou integralmente com sucesso:
+15 jobs aprovados, incluindo Arch/QEMU (139410558766), release ignorada.
+Evidências de 1c652e1 preservadas; o estado da execução registrado no
+JSON corresponde ao instante da coleta e não é reescrito.
+
+O relatório padrão do govulncheck não exibiu IDs dos alertas não
+alcançáveis. Conforme a documentação de v1.10.0
+(https://pkg.go.dev/golang.org/x/vuln@v1.10.0/cmd/govulncheck),
+a opção -show verbose permite obter os detalhes mantendo a análise de
+alcance e o código de saída bloqueante. A varredura detalhada permanece
+em todo CI do Hub, sem supressão ou troca por JSON de saída não bloqueante.
+
+Para poupar a cota do Actions, as verificações de rebuild com cache
+independente e comparação Gum de apresentação, já executadas com sucesso
+em C01, passam a rodar em dispatch, tag de release e push main [release].
+Os testes funcionais, benchmark PTY Go, gofmt, vet, race, lock readonly,
+scanner e build continuam em toda execução. A alteração não reduz os
+gates de release nem elimina a obrigação de repetir as medições no C10.
+A execução deste ajuste ainda precisa ser confirmada. Antes de M1,
+revisar os IDs/fixes dos alertas não alcançados; C02 não iniciado.
+
 ## Gate M1
 
 - [x] Resolver e versionar grafo de dependências/lock (66cc984).

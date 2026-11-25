@@ -33,3 +33,5 @@ manter os nomes existentes e avaliar o novo check Test Hub Go antes da
 integração. Não alterar branch protection automaticamente.
 
 Refs #22. C01 permanece experimental; release/merge não autorizado.
+
+O run 45672307862 confirmou integração completa (15 jobs, incluindo QEMU); a mudança de workflow ainda exige bot/agente neste PR. Rebuild frio do Hub e comparação Gum, já comprovados no C01, ficam reservados a dispatch/releases; os testes PTY Go e a varredura detalhada de vulnerabilidades permanecem em toda execução do Hub. Validação desse ajuste pendente. A economia de seis jobs Discord só será demonstrável em um diff sem alteração de CI após sua integração; não criar PR extra nem publicar release para simular o cenário.

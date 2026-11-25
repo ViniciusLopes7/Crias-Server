@@ -424,12 +424,21 @@ jobs:
           stat -c 'C01 binary bytes: %s' "$RUNNER_TEMP/crias-tui-next"
           python3 ../tests/hub-c01-pty-test.py "$RUNNER_TEMP/crias-tui-next" --samples 30 --idle-seconds 5
 
-      - name: C01 assurance — vulnerability scan and independent-cache rebuild
+      - name: Hub vulnerability scan (detailed findings)
         working-directory: crias-hub
         run: |
-          mkdir -p "$RUNNER_TEMP/c01-tools" "$RUNNER_TEMP/c01-rebuild-cache"
+          mkdir -p "$RUNNER_TEMP/c01-tools"
           GOBIN="$RUNNER_TEMP/c01-tools" go install golang.org/x/vuln/cmd/govulncheck@v1.10.0
-          GOFLAGS=-mod=readonly "$RUNNER_TEMP/c01-tools/govulncheck" ./...
+          GOFLAGS=-mod=readonly "$RUNNER_TEMP/c01-tools/govulncheck" -show verbose ./...
+          git diff --exit-code -- go.mod go.sum
+
+      # Full assurance measurements already have C01 evidence. Repeat on
+      # manual validation or a release, not on every ordinary PR/push.
+      - name: Hub independent-cache rebuild
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release]'))
+        working-directory: crias-hub
+        run: |
+          mkdir -p "$RUNNER_TEMP/c01-rebuild-cache"
           CGO_ENABLED=0 GOCACHE="$RUNNER_TEMP/c01-rebuild-cache" go build -mod=readonly -trimpath -o "$RUNNER_TEMP/crias-tui-next-rebuilt" ./cmd/crias-tui-next
           cmp "$RUNNER_TEMP/crias-tui-next" "$RUNNER_TEMP/crias-tui-next-rebuilt"
           sha256sum "$RUNNER_TEMP/crias-tui-next" "$RUNNER_TEMP/crias-tui-next-rebuilt"
@@ -438,6 +447,7 @@ jobs:
           echo 'PASS: C01 identical binaries from separate build caches'
 
       - name: C01 presentation-only comparison on the same runner
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release]'))
         run: |
           GOBIN="$RUNNER_TEMP/c01-tools" go install charm.land/gum/v2@v2.0.2
           python3 tools/hub-gum-baseline.py --mode fixture --stack minecraft --gum-dir "$RUNNER_TEMP/c01-tools" --no-color --samples 30 --idle-seconds 5 |
