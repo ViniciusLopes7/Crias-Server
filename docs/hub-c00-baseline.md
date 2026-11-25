@@ -165,6 +165,21 @@ Dados brutos preservados em [evidence/hub-c00/numeric-fixture-38667bb.json](evid
 
 30 execuções e 60 transições por stack. Não há medições de Gum, SSH, ociosidade, árvore de processos, impacto em jogos ou hardware físico. Não usar estes valores como gate temporal nem como comparação direta com dashboard Go completo. O host Arch e a release vigente/instalada seguem sem confirmação. C00 permanece aberto até validar ou isolar os bloqueadores conforme as decisões aprovadas.
 
+## C00.5 — Baseline do Hub instalado em Arch/QEMU
+
+[Run 45625010193](https://github.com/ViniciusLopes7/Crias-Server/actions/runs/45625010193), commit `9c07cc4c2320f4c39594d5bafc7d86a5c824a2da`: 13 jobs aprovados; release ignorada. Job QEMU 139242994761 confirmou 30 amostras do Hub instalado, descoberta e consultas reais ao systemd, usuário ci sem root, fallback numérico. Dados brutos: [numeric-arch-9c07cc4.json](evidence/hub-c00/numeric-arch-9c07cc4.json). Estatísticas recalculadas e conferidas; mesmo hash do script da fixture Ubuntu.
+
+| Métrica | Arch/QEMU |
+|---|---:|
+| Inicialização mediana / p95 (ms) | 967.263 / 1001.703 |
+| Navegação mediana / p95 (ms) | 2.234 / 3.937 |
+| RSS pontual mediana (KiB) | 3914 |
+| CPU total mediana por amostra (ms) | 25.828 |
+
+Kernel 7.3.4-arch1-2, x86_64, VM de 2 vCPU e 2048 MiB configurada no runner; aceleração efetiva não identificada no relatório. Tempo de inicialização inclui descoberta real e demais custos da VM. A diferença frente à fixture Ubuntu não isola custo de systemd, virtualização ou I/O. Não é benchmark físico, Gum, SSH interativo ou carga de jogo.
+
+Próximo teste: [protocolo Gum e validação física](hub-c00-gum-protocol.md). O harness usa PTY controlador, Gum real, navegação sem escrita, RSS somada da sessão (não PSS), bytes PTY e observação curta de ociosidade. A instalação de Gum ocorre apenas na VM descartável. A execução deste candidato ainda não está comprovada; não contabilizar novas amostras até o CI terminar. O gate C00 continua aberto.
+
 ## Gate C00
 
 - [x] Referência de código fixada e leitura inicial de main/PRs.
