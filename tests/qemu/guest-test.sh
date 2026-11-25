@@ -22,7 +22,7 @@ mc_ci_preview() {
 }
 
 [ "$(ps -p 1 -o comm=)" = systemd ] || { echo 'systemd is not PID 1' >&2; exit 1; }
-pacman -Syu --noconfirm --needed bash coreutils gettext jq tar zstd zip unzip jdk21-openjdk
+pacman -Syu --noconfirm --needed bash coreutils gettext jq tar zstd zip unzip jdk21-openjdk python
 cd "$root"
 bash tests/crias-bootstrap-test.sh
 bash tests/backup-integrity-test.sh
@@ -258,6 +258,28 @@ if [ "$ready" != true ]; then
 fi
 systemctl stop terraria.service
 echo 'PASS: real Terraria stack installed and opened its game port'
+
+# C00: observational baseline against the installed legacy Hub, with real
+# Arch/systemd discovery as the unprivileged ci account. Both stacks are
+# stopped or use disposable fixtures; no game workload or Gum is measured.
+# The harness intercepts administrative calls, including automatic package
+# recovery. Report in guest.log (already retained by the QEMU workflow).
+echo '[QEMU] C00 baseline: installed numeric Hub, real systemd, unprivileged'
+test "$(id -u ci)" -ne 0
+runuser -u ci -- python3 "$root/tools/hub-baseline.py" \
+    --hub /usr/local/bin/crias-tui --mode host --samples 30 \
+    > /tmp/crias-qemu-hub-baseline.json
+python3 - /tmp/crias-qemu-hub-baseline.json <<'PY'
+import json
+import sys
+with open(sys.argv[1], encoding="utf-8") as stream:
+    report = json.load(stream)
+if report["mode"] != "host" or report["startup_ms"]["count"] != 30 or report["navigation_ms"]["count"] != 60:
+    raise SystemExit("unexpected C00 host benchmark report")
+print("HUB_BASELINE_ARCH_JSON=" + json.dumps(report, separators=(",", ":")))
+PY
+echo 'PASS: C00 installed Hub numeric PTY baseline (Arch VM; timings observational)'
+
 
 # Exercise the real Minecraft downloader and launcher up to the EULA prompt.
 # The test keeps eula=false and does not create or play a Minecraft world.
