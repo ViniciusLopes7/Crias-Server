@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Linux controlling-PTY checks and observational baseline for the C01 binary."""
+"""Linux controlling-PTY checks and observational baseline for the experimental Hub."""
 from __future__ import annotations
 
 import argparse
@@ -177,6 +177,16 @@ def lifecycle(binary: Path) -> None:
         os.write(s.master, b"q")
         s.finish((0,))
     print("PASS: search navigation, help isolation and terminal restoration")
+    with Session(binary) as s:
+        s.ready()
+        s.key(b"\x1b[17~", b"udo")  # F6 -> Conteudo
+        s.key(b"\x1b[17~", b"xto")  # F6 -> Contexto
+        s.key(b"\x1bOQ", b"udo")     # F2 -> hide context, focus Conteudo
+        s.key(b"/", b"Busca")
+        s.key(b"\x1b", b"udo")       # Esc -> restore prior focus
+        os.write(s.master, b"q")
+        s.finish((0,))
+    print("PASS: F6 focus, F2 context toggle and search focus restoration")
     for terminal, width, height, ascii_mode, no_color in [
         ("xterm-256color", 100, 30, False, False),
         ("xterm-256color", 80, 24, False, True),
@@ -281,7 +291,7 @@ def main() -> None:
         parser.error("invalid sample count or idle duration")
     binary = args.binary.resolve(strict=True)
     if not binary.is_file() or not os.access(binary, os.X_OK):
-        parser.error("trusted C01 executable required")
+        parser.error("trusted Hub executable required")
     lifecycle(binary)
     report = benchmark(binary, args.samples, args.idle_seconds)
     print("HUB_C01_PTY_JSON=" + json.dumps(report, separators=(",", ":"), allow_nan=False))

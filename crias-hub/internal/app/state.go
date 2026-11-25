@@ -44,6 +44,11 @@ type State struct {
 func New() State                { return State{Width: 80, Height: 24} }
 func (s State) Section() string { return sections[s.Tab] }
 
+// SearchUsable prevents selection of results that cannot be displayed.
+func (s State) SearchUsable() bool {
+	return s.Width >= 24 && s.Height >= 5
+}
+
 func (s State) ContextVisible() bool {
 	return !s.ContextHidden && s.Width >= 100 && s.Height >= 30
 }
@@ -98,6 +103,9 @@ func (s State) searchKey(key string) State {
 	case "esc":
 		return s.closeOverlay()
 	case "enter":
+		if !s.SearchUsable() {
+			return s
+		}
 		results := s.SearchResults()
 		if s.Selection >= 0 && s.Selection < len(results) {
 			return s.closeOverlay().selectTab(results[s.Selection])

@@ -1,0 +1,716 @@
+{
+  "schema": 1,
+  "evidence": [
+    {
+      "source": {
+        "repository": "ViniciusLopes7/Crias-Server",
+        "commit": "db9df03aea1a37671b02de6345bb4d0e9d09fb36",
+        "run_id": 45679818006,
+        "job_id": 139437063138,
+        "workflow_conclusion": "success"
+      },
+      "pty_passes": [
+        "PASS: navigation, detail, Esc, resize, Q and terminal restoration",
+        "PASS: Esc and terminal restoration",
+        "PASS: Ctrl+C and terminal restoration",
+        "PASS: SIGTERM and terminal restoration",
+        "PASS: SIGHUP and terminal restoration",
+        "PASS: TERM=dumb rejected without terminal mutation",
+        "PASS: PTY hangup exits without orphaned session leader"
+      ],
+      "scanner": "No vulnerabilities found.",
+      "report": {
+        "schema": 1,
+        "mode": "hub-presentation-only",
+        "binary_sha256": "a637b4006ce10824c7722f9f7b1552ac158de037183788df9bf5bfa8112fc70a",
+        "binary_bytes": 5692436,
+        "kernel": "6.8.0-1070-azure",
+        "architecture": "x86_64",
+        "terminal": "controlling PTY 120x40 xterm-256color NO_COLOR",
+        "limitations": "No host discovery, game load or SSH; label observation not full render. Go tab switches differ from Bash submenu transitions. ASCII/no-color test mode. RSS is main process, not session PSS. Short idle sample, observational only.",
+        "startup_ms": {
+          "count": 30,
+          "median": 22.816403,
+          "p95_nearest_rank": 23.029018,
+          "max": 23.104631
+        },
+        "navigation_ms": {
+          "count": 60,
+          "median": 16.2230555,
+          "p95_nearest_rank": 17.142999,
+          "max": 17.280376
+        },
+        "rss_main_kib": {
+          "count": 30,
+          "median": 5888,
+          "p95_nearest_rank": 6144,
+          "max": 6144
+        },
+        "samples": [
+          {
+            "startup_ms": 23.029018,
+            "navigation_ms": [
+              15.614609,
+              17.105534
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 834,
+            "idle": {
+              "seconds": 5.000185053999985,
+              "bytes": 0,
+              "cpu_percent_one_core": 0
+            }
+          },
+          {
+            "startup_ms": 22.970939,
+            "navigation_ms": [
+              15.819615,
+              17.079419
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.742961,
+            "navigation_ms": [
+              15.397553,
+              16.889675
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.87971,
+            "navigation_ms": [
+              15.804114,
+              17.030007
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.701249,
+            "navigation_ms": [
+              16.481992,
+              16.108614
+            ],
+            "rss_main_kib": 6144,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.80984,
+            "navigation_ms": [
+              15.612936,
+              16.935961
+            ],
+            "rss_main_kib": 6016,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.961959,
+            "navigation_ms": [
+              15.701898,
+              16.187151
+            ],
+            "rss_main_kib": 6144,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.788009,
+            "navigation_ms": [
+              15.339335,
+              17.13813
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.992549,
+            "navigation_ms": [
+              15.535632,
+              17.045918
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.732314,
+            "navigation_ms": [
+              15.590775,
+              16.938607
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.670248,
+            "navigation_ms": [
+              15.414315,
+              17.171312
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.456496,
+            "navigation_ms": [
+              15.691593,
+              17.076865
+            ],
+            "rss_main_kib": 6016,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.822966,
+            "navigation_ms": [
+              15.207098,
+              16.911566
+            ],
+            "rss_main_kib": 6016,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.8286,
+            "navigation_ms": [
+              15.718373,
+              16.960348
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.747747,
+            "navigation_ms": [
+              16.25896,
+              16.337451
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.640904,
+            "navigation_ms": [
+              15.886789,
+              16.977208
+            ],
+            "rss_main_kib": 6016,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.520475,
+            "navigation_ms": [
+              15.85544,
+              17.142999
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.699877,
+            "navigation_ms": [
+              15.750284,
+              17.190026
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.659636,
+            "navigation_ms": [
+              15.236002,
+              17.280376
+            ],
+            "rss_main_kib": 6144,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 23.104631,
+            "navigation_ms": [
+              15.216154,
+              17.075463
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.584395,
+            "navigation_ms": [
+              15.900176,
+              17.125406
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.898748,
+            "navigation_ms": [
+              15.422049,
+              17.11659
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.888206,
+            "navigation_ms": [
+              15.466964,
+              17.139142
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.90211,
+            "navigation_ms": [
+              15.248785,
+              17.071076
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.723638,
+            "navigation_ms": [
+              16.532766,
+              16.143951
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.893907,
+            "navigation_ms": [
+              15.848187,
+              17.080673
+            ],
+            "rss_main_kib": 6016,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.83873,
+            "navigation_ms": [
+              15.262862,
+              16.918569
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.983444,
+            "navigation_ms": [
+              15.409746,
+              17.000372
+            ],
+            "rss_main_kib": 6144,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 23.023935,
+            "navigation_ms": [
+              16.49083,
+              15.866401
+            ],
+            "rss_main_kib": 6144,
+            "pty_bytes_observed": 834,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.79437,
+            "navigation_ms": [
+              15.762206,
+              17.029185
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 834,
+            "idle": null
+          }
+        ]
+      }
+    },
+    {
+      "source": {
+        "repository": "ViniciusLopes7/Crias-Server",
+        "commit": "020a6620e9568eae82afb6042e342815ffc69117",
+        "run_id": 45681991824,
+        "job_id": 139444649181,
+        "workflow_conclusion": "success"
+      },
+      "pty_passes": [
+        "PASS: navigation, detail, Esc, resize, Q and terminal restoration",
+        "PASS: search navigation, help isolation and terminal restoration",
+        "PASS: PTY xterm-256color 100x30 ascii=False no_color=False",
+        "PASS: PTY xterm-256color 80x24 ascii=False no_color=True",
+        "PASS: PTY linux 60x20 ascii=True no_color=False",
+        "PASS: PTY xterm-256color 40x15 ascii=True no_color=True",
+        "PASS: Esc and terminal restoration",
+        "PASS: Ctrl+C and terminal restoration",
+        "PASS: SIGTERM and terminal restoration",
+        "PASS: SIGHUP and terminal restoration",
+        "PASS: TERM=dumb rejected without terminal mutation",
+        "PASS: PTY hangup exits without orphaned session leader"
+      ],
+      "scanner": "No vulnerabilities found.",
+      "report": {
+        "schema": 1,
+        "mode": "hub-presentation-only",
+        "binary_sha256": "5ba144b475a965c4242e298f2d22f4853feefcaa4f9e02ebc42ff572353f93ab",
+        "binary_bytes": 5718926,
+        "kernel": "6.8.0-1070-azure",
+        "architecture": "x86_64",
+        "terminal": "controlling PTY 120x40 xterm-256color NO_COLOR",
+        "limitations": "No host discovery, game load or SSH; label observation not full render. Go tab switches differ from Bash submenu transitions. ASCII/no-color test mode. RSS is main process, not session PSS. Short idle sample, observational only.",
+        "startup_ms": {
+          "count": 30,
+          "median": 21.8443105,
+          "p95_nearest_rank": 22.445909,
+          "max": 22.616142
+        },
+        "navigation_ms": {
+          "count": 60,
+          "median": 16.5233115,
+          "p95_nearest_rank": 17.318442,
+          "max": 17.502876
+        },
+        "rss_main_kib": {
+          "count": 30,
+          "median": 5760,
+          "p95_nearest_rank": 5888,
+          "max": 6016
+        },
+        "samples": [
+          {
+            "startup_ms": 21.71025,
+            "navigation_ms": [
+              15.206293,
+              17.188604
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 855,
+            "idle": {
+              "seconds": 5.000302637999994,
+              "bytes": 0,
+              "cpu_percent_one_core": 0
+            }
+          },
+          {
+            "startup_ms": 21.551379,
+            "navigation_ms": [
+              16.554899,
+              16.064414
+            ],
+            "rss_main_kib": 6016,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.872675,
+            "navigation_ms": [
+              15.522016,
+              17.15729
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.761411,
+            "navigation_ms": [
+              15.54043,
+              16.76078
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.498477,
+            "navigation_ms": [
+              16.656881,
+              15.746981
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.834338,
+            "navigation_ms": [
+              15.492322,
+              17.253775
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.678646,
+            "navigation_ms": [
+              15.679188,
+              17.067869
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.691515,
+            "navigation_ms": [
+              16.583373,
+              16.491724
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.472866,
+            "navigation_ms": [
+              15.522848,
+              17.347933
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.063383,
+            "navigation_ms": [
+              15.550754,
+              16.854829
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.483347,
+            "navigation_ms": [
+              16.597824,
+              15.860302
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.451344,
+            "navigation_ms": [
+              15.846923,
+              16.891936
+            ],
+            "rss_main_kib": 5632,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.709592,
+            "navigation_ms": [
+              15.662032,
+              17.152396
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.963336,
+            "navigation_ms": [
+              15.459553,
+              17.502876
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.255238,
+            "navigation_ms": [
+              15.840618,
+              17.136883
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.824986,
+            "navigation_ms": [
+              15.315656,
+              17.126201
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.544945,
+            "navigation_ms": [
+              15.567598,
+              17.200003
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.918504,
+            "navigation_ms": [
+              15.622824,
+              16.993871
+            ],
+            "rss_main_kib": 5632,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.958835,
+            "navigation_ms": [
+              15.415185,
+              16.934582
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.616142,
+            "navigation_ms": [
+              15.00379,
+              17.108473
+            ],
+            "rss_main_kib": 5632,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.657385,
+            "navigation_ms": [
+              15.483166,
+              17.332374
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.998821,
+            "navigation_ms": [
+              16.609944,
+              16.254885
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.879475,
+            "navigation_ms": [
+              15.480187,
+              17.215875
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.854283,
+            "navigation_ms": [
+              16.57026,
+              15.946698
+            ],
+            "rss_main_kib": 5504,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.415645,
+            "navigation_ms": [
+              15.50641,
+              17.022761
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.445909,
+            "navigation_ms": [
+              15.481345,
+              17.19091
+            ],
+            "rss_main_kib": 5760,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.751709,
+            "navigation_ms": [
+              15.652357,
+              17.108994
+            ],
+            "rss_main_kib": 5632,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.004717,
+            "navigation_ms": [
+              15.440739,
+              17.318442
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 22.226559,
+            "navigation_ms": [
+              15.581071,
+              17.16867
+            ],
+            "rss_main_kib": 5888,
+            "pty_bytes_observed": 855,
+            "idle": null
+          },
+          {
+            "startup_ms": 21.912295,
+            "navigation_ms": [
+              16.851825,
+              16.449676
+            ],
+            "rss_main_kib": 5632,
+            "pty_bytes_observed": 855,
+            "idle": null
+          }
+        ]
+      }
+    }
+  ]
+}

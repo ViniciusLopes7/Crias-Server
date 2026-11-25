@@ -95,3 +95,20 @@ func TestFocusAndResponsiveContext(t *testing.T) {
 		t.Fatal("help lost previous focus")
 	}
 }
+
+func TestSearchResizeAndRestore(t *testing.T) {
+	before := press(New().Resize(120, 40), "2", "enter")
+	s := press(before, "/", "q", "6", "esc")
+	if s != before {
+		t.Fatalf("cancel search lost state: %+v, want %+v", s, before)
+	}
+	s = press(before, "/", "up").Resize(20, 4)
+	s = press(s, "enter")
+	if s.Overlay != OverlaySearch || s.Tab != before.Tab || !s.Detail {
+		t.Fatal("hidden result selected")
+	}
+	s = press(s.Resize(80, 24), "enter")
+	if s.Overlay != OverlayNone || s.Tab != 5 || s.Detail {
+		t.Fatal("selection not restored after resize")
+	}
+}

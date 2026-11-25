@@ -120,3 +120,23 @@ func TestForestContrast(t *testing.T) {
 		}
 	}
 }
+
+func TestContextVisibilityAndSearchGuard(t *testing.T) {
+	s := app.New().Resize(120, 40)
+	s, _ = s.Key("f6")
+	s, _ = s.Key("f6")
+	if !strings.Contains(Render(s, Options{}), "Foco: Contexto") {
+		t.Fatal("context focus not identified")
+	}
+	s, _ = s.Key("f2")
+	got := Render(s, Options{})
+	if strings.Contains(got, " | Contexto") || !strings.Contains(got, "Foco: Conteúdo") {
+		t.Fatal("hidden context still rendered or focus not restored")
+	}
+	s, _ = s.Key("/")
+	s = s.Resize(40, 4)
+	got = Render(s, Options{ASCII: true})
+	if !strings.Contains(got, "amplie o terminal") || strings.Contains(got, "> 1") {
+		t.Fatal("unusable search displayed an actionable result")
+	}
+}

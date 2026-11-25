@@ -109,3 +109,37 @@ linux. PTY simula TERM, não emula pixels nem comprova terminal físico.
 Teste de sinais e restauração preservado. Novos testes aguardam CI.
 Sem novas dependências, operações administrativas, mudança no workflow
 ou coletores. Restam revisão dos atalhos físicos, refinamento e evidências.
+
+## C02.5 — Auditoria e refinamento final (candidato)
+
+Run 45681991824, commit 020a662, 15 jobs aprovados, release ignorada.
+Job Hub 139444649181: 576 combinações de layout, 168 de overlays,
+contraste, perfis de terminal, busca/ajuda, 12 grupos PTY e govulncheck
+sem alertas. Evidências de db9df03 e 020a662 em
+[evidence/hub-c02/pty-layout-navigation.json](evidence/hub-c02/pty-layout-navigation.json).
+Estatísticas recalculadas dos 30 startups e 60 transições por candidato.
+
+| Métrica | C02 inicial | C02.4 |
+|---|---:|---:|
+| Startup mediano (ms) | 22.816 | 21.844 |
+| Navegação p95 (ms) | 17.143 | 17.318 |
+| RSS principal mediana (KiB) | 5888 | 5760 |
+| Binário (bytes) | 5692436 | 5718926 |
+
+Ambiente Ubuntu, kernel 6.8.0-1070-azure, Go 1.27.4, PTY 120x40,
+ASCII/NO_COLOR. Runners distintos; observação, não teste estatístico.
+Sem coletores, jogos ou SSH real. Zero ticks ociosos em janela de 5 s
+não prova consumo permanentemente nulo.
+
+Contraprova: em viewport menor que 24x5, a busca não permite Enter
+selecionar um resultado invisível; conserva consulta/seleção até resize
+ou Esc. Rodapé específico para detalhes, teste de retorno de foco e
+lateral oculta; novo PTY envia sequências xterm F6 e F2, confirma mudança
+de foco e restauração após Esc. Marcadores são fragmentos observados,
+não reconstrução do framebuffer. Testes do refinamento ainda pendentes.
+Nenhuma dependência nova, alteração de workflow ou ação administrativa.
+Foco atual usa F6 para alternar região, Tab/setas para abas; busca restrita
+às seis áreas e aliases, não catálogo de ações. C03 introduzirá métricas reais.
+Gates Arch/SSH físico, equivalência administrativa, carga de jogo,
+estabilidade prolongada e homologação permanecem obrigatórios. M2 ainda
+depende de C03. Não publicar ou alterar ponto de entrada.

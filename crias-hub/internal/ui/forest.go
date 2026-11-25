@@ -191,7 +191,14 @@ func Render(s app.State, opt Options) string {
 	compact := width < 59 || height < 20
 	wide := s.ContextVisible()
 	footer := "1-6 / ← → / Tab | F6: foco | F2: lateral | /: busca | ?: ajuda | Q: sair"
+	if s.Detail {
+		footer = "Esc: fechar detalhes | F6: foco | /: busca | ?: ajuda | Q: sair"
+	}
 	if s.Overlay != app.OverlayNone {
+		if s.Overlay == app.OverlaySearch && !s.SearchUsable() {
+			lines = append(lines, line{"Busca: amplie o terminal.", muted})
+			return finish(lines, "Esc: voltar", width, height, opt)
+		}
 		rows, hint := overlay(s, height)
 		lines = append(lines, rows...)
 		return finish(lines, hint, width, height, opt)
