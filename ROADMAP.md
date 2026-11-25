@@ -8,7 +8,7 @@ Planejamento aprovado em dez etapas na [issue #22](https://github.com/ViniciusLo
 
 | Fase | Ciclo | Entrega e gate |
 |---|---|---|
-| A — Fundação | C00 | Auditoria, contratos, baseline e documentação; confirmar CI/releases e medir antes de avançar. **Em andamento**. |
+| A — Fundação | C00 | Auditoria, contratos, baseline e documentação. **Encerrado condicionalmente**; gates físicos/SSH antes de M3/C04 e carga/homologação em C10/C11. |
 | A | C01 | PoC Go, Bubble Tea/Lip Gloss candidatos; eventos, PTY/SSH e restauração de terminal, build e benchmarks. |
 | B — Interface e paridade | C02 | Crias Forest, layout híbrido, seis abas, foco, busca, header/rodapé e responsividade. |
 | B | C03 | Coletores, dashboard, histórico limitado, perfis e alertas verificáveis. |
@@ -21,7 +21,7 @@ Planejamento aprovado em dez etapas na [issue #22](https://github.com/ViniciusLo
 | E — Consolidação | C10 | Profiling, benchmarks, testes prolongados, auditoria, QEMU, jogos e hardware reais. |
 | E | C11 | Distribuição, migração real, rollback, fallback Bash, documentação e release autorizada. |
 
-Todos os ciclos após C00 estão planejados, não executados. Dependências principais: C00 → C01 → C02 → C03 → C04; C05/C06/C08 após C04; C07 após C03. Contratos de segurança desde C01 e proteções implementadas antes de cada ação de escrita sensível, ainda que o C09 consolide mecanismos compartilhados. C10 depende do escopo entregue em C04–C09 e C11 depende de C10.
+C01 autorizado em caráter experimental somente leitura; demais ciclos planejados. Ver decisão de saída no documento C00. Dependências principais: C00 → C01 → C02 → C03 → C04; C05/C06/C08 após C04; C07 após C03. Contratos de segurança desde C01 e proteções implementadas antes de cada ação de escrita sensível, ainda que o C09 consolide mecanismos compartilhados. C10 depende do escopo entregue em C04–C09 e C11 depende de C10.
 
 **Marcos verificáveis:** M1/C01 protótipo; M2/C03 interface e métricas reais; M3/C04 paridade experimental; M4/C07 expansão condicionada à segurança; M5/C09 resiliência; M6/C11 entrega padrão. A TUI experimental pode coexistir com Bash; nomes candidatos `crias-tui-next` e `--legacy` serão validados antes da distribuição. `--doctor` deve permanecer independente. Sem reinstalar jogos/host.
 

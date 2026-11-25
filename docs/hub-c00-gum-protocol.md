@@ -48,5 +48,5 @@ A VM usa três amostras por fixture e 30 com descoberta real, idle curto de
    autorização apropriada. Não inferir resultados a partir de teste pré-EULA.
 5. Registrar dados brutos sanitizados e as limitações por SHA. Caso o acesso
    físico não esteja disponível, registrar bloqueador explicitamente e
-   manter o gate C00 aberto até decisão fundamentada do mantenedor.
+   preservar a pendência como gate obrigatório conforme decisão de saída aprovada em 25/11/2026: baseline física/SSH antes de M3/C04 e carga/estabilidade em C10/C11.
 

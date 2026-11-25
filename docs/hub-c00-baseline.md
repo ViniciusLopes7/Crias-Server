@@ -1,6 +1,6 @@
 # C00 — Auditoria e baseline pré-Go
 
-Estado: iniciado, gate ainda aberto. Data: 25/11/2026. Escopo: [#22](https://github.com/ViniciusLopes7/Crias-Server/issues/22).
+Estado: encerrado de forma condicionada; C01 experimental autorizado. Data: 25/11/2026. Escopo: [#22](https://github.com/ViniciusLopes7/Crias-Server/issues/22).
 
 ## Referência estática
 
@@ -196,7 +196,7 @@ Próximo teste: [protocolo Gum e validação física](hub-c00-gum-protocol.md). 
 
 Três processos da sessão observados por amostra; RSS soma páginas compartilhadas, não equivale a RSS principal nem PSS. Idle de 2 s nas fixtures e 5 s no host, zero bytes durante as janelas, identidade estável nos extremos; não é teste de 10 min, não captura processos efêmeros. Tempos são até reconhecimento de labels no PTY, não renderização final de cliente SSH. Amostras de 3 não sustentam inferência estatística robusta. A diferença startup Gum vs numérico entre runs não demonstra superioridade de um modo. Nenhum jogo em carga, hardware físico ou controle de energia foi validado.
 
-### Avaliação de saída (sem alteração unilateral do gate)
+### Avaliação de saída (histórico anterior à aprovação)
 
 - Fundamentos documentais, caracterização de rotas/contratos e baseline pré-Go em Arch controlado: evidências disponíveis (91 cenários adicionais, 126 amostras preservadas de três runs; não contar repetições intermediárias).
 - CI de código de testes em 32a1c71: workflow aprovado; CI de atualização documental posterior deve ser consultado separadamente. Main permanece ee247bc na consulta. Releases fixadas verificadas; release mais recente/instalada e CI pós-merge da main não confirmados.
@@ -215,7 +215,18 @@ Três processos da sessão observados por amostra; RSS soma páginas compartilha
 - [x] Casos negativos de backend e CI de 38667bb aprovados (39 cenários adicionais; 13 jobs).
 - [x] Dados observacionais de 30 amostras por stack preservados com origem e limitações.
 - [x] Capturar baseline de execução em Arch/QEMU, incluindo Gum real, e arquivar evidências.
-- [ ] Capturar baseline física/SSH e impacto em jogo, ou obter decisão explícita de isolamento e transferência para gate posterior antes da migração.
-- [ ] Validar decisão de saída C00 antes de C01; não iniciar PoC sem aprovação do gate ou isolamento explícito.
+- [x] Isolamento aprovado; baseline física/SSH antes de M3/C04 e impacto em jogo em C10/C11 permanecem gates obrigatórios.
+- [x] Encerramento condicionado aprovado pelo mantenedor; C01 experimental somente leitura autorizado.
 
 Não há código Go, mudança de runtime, merge ou release neste ciclo; as mudanças adicionais são exclusivamente testes, ferramenta de medição e documentação.
+
+## Decisão de saída aprovada — 25/11/2026
+
+O mantenedor aprovou explicitamente o encerramento condicionado do C00 e o início do C01, preservando as validações pendentes como gates obrigatórios. O CI documental do commit 2c2fcd1 terminou com sucesso (run 45661098923). Esta decisão não é homologação de produção.
+
+- Antes de M3/C04: baseline física do Bash/Gum preservado, SSH interativo real, versão instalada e release vigente; contraprovas negativas do harness antes de usar seus resultados como gate.
+- C10: ociosidade prolongada, estabilidade, PSS/custo agregado e impacto em jogos/Chunky em carga equivalente; validação física antes de disponibilizar cada controle.
+- C11: migração, paridade, recuperação e rollback reais; CI de integração e pós-merge aplicável. Sem troca padrão ou release automática.
+- C01: protótipo local opt-in, sem operações administrativas de escrita, sem acesso a segredos, sem modificar instalador, serviços ou Bash. Não declarar M1 concluído antes de testes e evidências.
+
+O PR #45 permanece separado; aprovação deste gate não é autorização de merge/release. As lacunas não foram eliminadas, apenas isoladas para permitir experimentação segura.
