@@ -231,6 +231,7 @@ run_test "download-modrinth-test"   "tests/download-modrinth-test.sh"
 # mocks/fixtures e podem ser executados sem QEMU, mundo real ou rede SSH.
 run_test "hub-gum-test"                 "tests/hub-gum-test.sh"
 run_test "hub-ssh-console-status-test"  "tests/hub-ssh-console-status-test.sh"
+run_test "hub-service-menu-test"       "tests/hub-service-menu-test.sh"
 run_test "hub-memory-menu-test"        "tests/hub-memory-menu-test.sh"
 run_test "chunky-progress-watch-test"  "tests/chunky-progress-watch-test.sh"
 run_test "minecraft-heap-control-test" "tests/minecraft-heap-control-test.sh"
