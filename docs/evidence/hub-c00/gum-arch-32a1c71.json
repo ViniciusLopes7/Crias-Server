@@ -1,0 +1,517 @@
+{
+  "schema": 1,
+  "source": {
+    "repository": "ViniciusLopes7/Crias-Server",
+    "commit": "32a1c716bb1c61261d8e30fa8d0e43e88fec3370",
+    "run_id": 45626528412,
+    "job_id": 139248101194,
+    "workflow_conclusion": "success",
+    "job_conclusion": "success"
+  },
+  "reports": [
+    {
+      "schema": 1,
+      "mode": "fixture",
+      "stack": "minecraft",
+      "hub_sha256": "0fce6d3e1943e30fee8bda5da19b6240c5bba4e3106737579502777bffb74367",
+      "gum_version": "gum version 2.0.2 (879f048)",
+      "kernel": "7.3.4-arch1-2",
+      "architecture": "x86_64",
+      "terminal": "controlling PTY 120x40, xterm-256color",
+      "limitations": "Frame labels, not pixel-render completion; local PTY only, no SSH/game load. RSS sum counts shared pages multiple times. Idle CPU is available only with stable session membership and is observational. PTY bytes are not network traffic.",
+      "startup_ms": {
+        "count": 3,
+        "median": 119.820826,
+        "p95_nearest_rank": 121.415689,
+        "max": 121.415689
+      },
+      "navigation_ms": {
+        "count": 6,
+        "median": 138.7070895,
+        "p95_nearest_rank": 166.895263,
+        "max": 166.895263
+      },
+      "session_rss_sum_kib": {
+        "count": 3,
+        "median": 37352,
+        "p95_nearest_rank": 37648,
+        "max": 37648
+      },
+      "samples": [
+        {
+          "startup_ms": 119.820826,
+          "navigation_ms": [
+            113.876175,
+            163.538004
+          ],
+          "session_rss_sum_kib": 37648,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": {
+            "seconds": 2.002089156000011,
+            "bytes": 0,
+            "stable_membership": true,
+            "cpu_percent_one_core": 0.9989565120045979
+          }
+        },
+        {
+          "startup_ms": 121.415689,
+          "navigation_ms": [
+            112.734707,
+            166.895263
+          ],
+          "session_rss_sum_kib": 37352,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 119.257434,
+          "navigation_ms": [
+            110.749254,
+            165.468301
+          ],
+          "session_rss_sum_kib": 35624,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "mode": "fixture",
+      "stack": "terraria",
+      "hub_sha256": "0fce6d3e1943e30fee8bda5da19b6240c5bba4e3106737579502777bffb74367",
+      "gum_version": "gum version 2.0.2 (879f048)",
+      "kernel": "7.3.4-arch1-2",
+      "architecture": "x86_64",
+      "terminal": "controlling PTY 120x40, xterm-256color",
+      "limitations": "Frame labels, not pixel-render completion; local PTY only, no SSH/game load. RSS sum counts shared pages multiple times. Idle CPU is available only with stable session membership and is observational. PTY bytes are not network traffic.",
+      "startup_ms": {
+        "count": 3,
+        "median": 118.574747,
+        "p95_nearest_rank": 119.93417,
+        "max": 119.93417
+      },
+      "navigation_ms": {
+        "count": 6,
+        "median": 139.0752345,
+        "p95_nearest_rank": 178.23808,
+        "max": 178.23808
+      },
+      "session_rss_sum_kib": {
+        "count": 3,
+        "median": 35392,
+        "p95_nearest_rank": 35408,
+        "max": 35408
+      },
+      "samples": [
+        {
+          "startup_ms": 118.25596,
+          "navigation_ms": [
+            114.68892,
+            178.23808
+          ],
+          "session_rss_sum_kib": 35392,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2717,
+          "idle": {
+            "seconds": 2.0020966820000012,
+            "bytes": 0,
+            "stable_membership": true,
+            "cpu_percent_one_core": 0.9989527568679117
+          }
+        },
+        {
+          "startup_ms": 119.93417,
+          "navigation_ms": [
+            116.058746,
+            162.091723
+          ],
+          "session_rss_sum_kib": 35348,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2717,
+          "idle": null
+        },
+        {
+          "startup_ms": 118.574747,
+          "navigation_ms": [
+            115.737121,
+            163.269817
+          ],
+          "session_rss_sum_kib": 35408,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2717,
+          "idle": null
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "mode": "host",
+      "stack": "auto-detected",
+      "hub_sha256": "0fce6d3e1943e30fee8bda5da19b6240c5bba4e3106737579502777bffb74367",
+      "gum_version": "gum version 2.0.2 (879f048)",
+      "kernel": "7.3.4-arch1-2",
+      "architecture": "x86_64",
+      "terminal": "controlling PTY 120x40, xterm-256color",
+      "limitations": "Frame labels, not pixel-render completion; local PTY only, no SSH/game load. RSS sum counts shared pages multiple times. Idle CPU is available only with stable session membership and is observational. PTY bytes are not network traffic.",
+      "startup_ms": {
+        "count": 30,
+        "median": 686.619196,
+        "p95_nearest_rank": 702.821793,
+        "max": 714.035154
+      },
+      "navigation_ms": {
+        "count": 60,
+        "median": 150.527247,
+        "p95_nearest_rank": 172.655585,
+        "max": 178.310092
+      },
+      "session_rss_sum_kib": {
+        "count": 30,
+        "median": 35420,
+        "p95_nearest_rank": 37384,
+        "max": 37716
+      },
+      "samples": [
+        {
+          "startup_ms": 685.025707,
+          "navigation_ms": [
+            115.223335,
+            171.869536
+          ],
+          "session_rss_sum_kib": 34936,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": {
+            "seconds": 5.001856261,
+            "bytes": 0,
+            "stable_membership": true,
+            "cpu_percent_one_core": 0.9996288855770459
+          }
+        },
+        {
+          "startup_ms": 684.989873,
+          "navigation_ms": [
+            114.384504,
+            167.112967
+          ],
+          "session_rss_sum_kib": 33412,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 684.505054,
+          "navigation_ms": [
+            117.784539,
+            167.615603
+          ],
+          "session_rss_sum_kib": 37384,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 686.087958,
+          "navigation_ms": [
+            113.056502,
+            168.69276
+          ],
+          "session_rss_sum_kib": 35780,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 684.716071,
+          "navigation_ms": [
+            116.464142,
+            168.703654
+          ],
+          "session_rss_sum_kib": 35688,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 690.802246,
+          "navigation_ms": [
+            113.90952,
+            169.947099
+          ],
+          "session_rss_sum_kib": 35476,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 682.600741,
+          "navigation_ms": [
+            114.093272,
+            172.655585
+          ],
+          "session_rss_sum_kib": 35300,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 668.070273,
+          "navigation_ms": [
+            113.332487,
+            166.771155
+          ],
+          "session_rss_sum_kib": 35052,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 684.021278,
+          "navigation_ms": [
+            114.804565,
+            168.146029
+          ],
+          "session_rss_sum_kib": 35472,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 686.98801,
+          "navigation_ms": [
+            111.895724,
+            167.270567
+          ],
+          "session_rss_sum_kib": 35724,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 686.420782,
+          "navigation_ms": [
+            114.360004,
+            170.851182
+          ],
+          "session_rss_sum_kib": 35240,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 690.355862,
+          "navigation_ms": [
+            114.134629,
+            168.968204
+          ],
+          "session_rss_sum_kib": 35424,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 684.898245,
+          "navigation_ms": [
+            112.155523,
+            168.259773
+          ],
+          "session_rss_sum_kib": 35276,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 685.646603,
+          "navigation_ms": [
+            113.534644,
+            166.884437
+          ],
+          "session_rss_sum_kib": 34724,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 686.574182,
+          "navigation_ms": [
+            120.120333,
+            173.115934
+          ],
+          "session_rss_sum_kib": 35416,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 702.821793,
+          "navigation_ms": [
+            113.07859,
+            168.995885
+          ],
+          "session_rss_sum_kib": 37368,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 694.296996,
+          "navigation_ms": [
+            113.08037,
+            169.258053
+          ],
+          "session_rss_sum_kib": 35364,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 693.020748,
+          "navigation_ms": [
+            114.089788,
+            178.310092
+          ],
+          "session_rss_sum_kib": 35504,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 687.239475,
+          "navigation_ms": [
+            113.04133,
+            168.323876
+          ],
+          "session_rss_sum_kib": 35424,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 685.111639,
+          "navigation_ms": [
+            114.264642,
+            165.775354
+          ],
+          "session_rss_sum_kib": 35492,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 690.521666,
+          "navigation_ms": [
+            119.115154,
+            170.287282
+          ],
+          "session_rss_sum_kib": 35336,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 686.554489,
+          "navigation_ms": [
+            115.292966,
+            170.182171
+          ],
+          "session_rss_sum_kib": 35536,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 690.811877,
+          "navigation_ms": [
+            113.711003,
+            170.176554
+          ],
+          "session_rss_sum_kib": 35356,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 685.985271,
+          "navigation_ms": [
+            112.999713,
+            169.681958
+          ],
+          "session_rss_sum_kib": 35424,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 689.837691,
+          "navigation_ms": [
+            112.268647,
+            167.124406
+          ],
+          "session_rss_sum_kib": 35356,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 687.881015,
+          "navigation_ms": [
+            135.27914,
+            167.037737
+          ],
+          "session_rss_sum_kib": 37716,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 692.34067,
+          "navigation_ms": [
+            115.552841,
+            176.231135
+          ],
+          "session_rss_sum_kib": 35352,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 686.66421,
+          "navigation_ms": [
+            110.92961,
+            167.459877
+          ],
+          "session_rss_sum_kib": 35352,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 690.254708,
+          "navigation_ms": [
+            117.188831,
+            170.178304
+          ],
+          "session_rss_sum_kib": 35492,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        },
+        {
+          "startup_ms": 714.035154,
+          "navigation_ms": [
+            117.367142,
+            169.61709
+          ],
+          "session_rss_sum_kib": 35248,
+          "session_processes_at_first_frame": 3,
+          "pty_bytes_observed": 2903,
+          "idle": null
+        }
+      ]
+    }
+  ]
+}

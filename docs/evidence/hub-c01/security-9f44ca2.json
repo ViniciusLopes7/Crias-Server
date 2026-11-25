@@ -1,0 +1,375 @@
+{
+  "schema": 1,
+  "source": {
+    "repository": "ViniciusLopes7/Crias-Server",
+    "commit": "9f44ca2daf60dea6f0aaf2d50c5c67358279a878",
+    "run_id": 45675296914,
+    "job_id": 139421097170,
+    "workflow_conclusion": "success",
+    "job_conclusion": "success"
+  },
+  "scanner": {
+    "version": "v1.10.0",
+    "go": "1.27.4",
+    "result": [
+      "Govulncheck scanned the following 19 modules and the go1.27.4 standard library:",
+      "  github.com/ViniciusLopes7/Crias-Server/crias-hub",
+      "  charm.land/bubbletea/v2@v2.1.2",
+      "  charm.land/lipgloss/v2@v2.1.1",
+      "  github.com/charmbracelet/colorprofile@v0.4.3",
+      "  github.com/charmbracelet/ultraviolet@v0.0.0-20261008173134-6b8d4baf91b4",
+      "  github.com/charmbracelet/x/ansi@v0.11.9",
+      "  github.com/charmbracelet/x/term@v0.2.2",
+      "  github.com/charmbracelet/x/termios@v0.1.1",
+      "  github.com/charmbracelet/x/windows@v0.2.2",
+      "  github.com/clipperhouse/displaywidth@v0.11.0",
+      "  github.com/clipperhouse/uax29/v2@v2.7.0",
+      "  github.com/lucasb-eyer/go-colorful@v1.4.1",
+      "  github.com/mattn/go-runewidth@v0.0.30",
+      "  github.com/muesli/cancelreader@v0.2.2",
+      "  github.com/rivo/uniseg@v0.4.7",
+      "  github.com/xo/terminfo@v1.0.0",
+      "  golang.org/x/sync@v0.22.0",
+      "  golang.org/x/sys@v0.49.0",
+      "  golang.org/x/term@v0.47.0",
+      "",
+      "No vulnerabilities found."
+    ],
+    "previous_findings": 15,
+    "reported_findings": 0
+  },
+  "report": {
+    "schema": 1,
+    "mode": "c01-presentation-only",
+    "binary_sha256": "7b6be2fed4b68e88b65fdbe0cd22c72b3e9775a2902a771e22b796585ac72bb7",
+    "binary_bytes": 5675712,
+    "kernel": "6.8.0-1073-azure",
+    "architecture": "x86_64",
+    "terminal": "controlling PTY 120x40 xterm-256color NO_COLOR",
+    "limitations": "No host discovery, game load or SSH; label observation not full render. Go tab switches differ from Bash submenu transitions. RSS is main process, not session PSS. Short idle sample, observational only.",
+    "startup_ms": {
+      "count": 30,
+      "median": 21.921846000000002,
+      "p95_nearest_rank": 22.263567,
+      "max": 22.308666
+    },
+    "navigation_ms": {
+      "count": 60,
+      "median": 16.434421999999998,
+      "p95_nearest_rank": 17.181804,
+      "max": 17.313363
+    },
+    "rss_main_kib": {
+      "count": 30,
+      "median": 5504,
+      "p95_nearest_rank": 5760,
+      "max": 5760
+    },
+    "samples": [
+      {
+        "startup_ms": 22.069246,
+        "navigation_ms": [
+          15.245049,
+          17.181804
+        ],
+        "rss_main_kib": 5504,
+        "pty_bytes_observed": 285,
+        "idle": {
+          "seconds": 5.000196102000018,
+          "bytes": 0,
+          "cpu_percent_one_core": 0
+        }
+      },
+      {
+        "startup_ms": 21.984989,
+        "navigation_ms": [
+          16.534553,
+          16.256878
+        ],
+        "rss_main_kib": 5504,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.748178,
+        "navigation_ms": [
+          16.57128,
+          16.419529
+        ],
+        "rss_main_kib": 5376,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.759904,
+        "navigation_ms": [
+          16.595296,
+          16.323541
+        ],
+        "rss_main_kib": 5632,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 22.308666,
+        "navigation_ms": [
+          15.668996,
+          16.820798
+        ],
+        "rss_main_kib": 5632,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 22.259465,
+        "navigation_ms": [
+          15.649134,
+          17.058156
+        ],
+        "rss_main_kib": 5504,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.957015,
+        "navigation_ms": [
+          15.756882,
+          16.90983
+        ],
+        "rss_main_kib": 5632,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.91307,
+        "navigation_ms": [
+          15.610854,
+          17.062768
+        ],
+        "rss_main_kib": 5248,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.91844,
+        "navigation_ms": [
+          15.621158,
+          16.753864
+        ],
+        "rss_main_kib": 5504,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.837581,
+        "navigation_ms": [
+          15.57093,
+          17.019017
+        ],
+        "rss_main_kib": 5504,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.805367,
+        "navigation_ms": [
+          15.624745,
+          16.83367
+        ],
+        "rss_main_kib": 5760,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 22.044498,
+        "navigation_ms": [
+          15.601548,
+          16.815185
+        ],
+        "rss_main_kib": 5632,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.661036,
+        "navigation_ms": [
+          15.646924,
+          17.204553
+        ],
+        "rss_main_kib": 5504,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.859838,
+        "navigation_ms": [
+          16.758896,
+          15.995257
+        ],
+        "rss_main_kib": 5632,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 22.127213,
+        "navigation_ms": [
+          15.513897,
+          17.313363
+        ],
+        "rss_main_kib": 5632,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.966467,
+        "navigation_ms": [
+          16.565664,
+          16.235698
+        ],
+        "rss_main_kib": 5632,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.837857,
+        "navigation_ms": [
+          16.645653,
+          15.828503
+        ],
+        "rss_main_kib": 5504,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.667057,
+        "navigation_ms": [
+          16.558648,
+          16.153447
+        ],
+        "rss_main_kib": 5504,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.857606,
+        "navigation_ms": [
+          15.581054,
+          16.783108
+        ],
+        "rss_main_kib": 5632,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.941642,
+        "navigation_ms": [
+          15.83385,
+          17.208446
+        ],
+        "rss_main_kib": 5504,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.814506,
+        "navigation_ms": [
+          15.645012,
+          17.086438
+        ],
+        "rss_main_kib": 5632,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.925252,
+        "navigation_ms": [
+          16.520424,
+          16.331941
+        ],
+        "rss_main_kib": 5376,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.918355,
+        "navigation_ms": [
+          15.464535,
+          16.857256
+        ],
+        "rss_main_kib": 5504,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.891541,
+        "navigation_ms": [
+          16.467144,
+          16.335611
+        ],
+        "rss_main_kib": 5504,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.955076,
+        "navigation_ms": [
+          15.523409,
+          16.9009
+        ],
+        "rss_main_kib": 5632,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 22.263567,
+        "navigation_ms": [
+          15.531882,
+          17.169574
+        ],
+        "rss_main_kib": 5376,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 22.052943,
+        "navigation_ms": [
+          16.449315,
+          15.873228
+        ],
+        "rss_main_kib": 5632,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 22.050842,
+        "navigation_ms": [
+          15.624195,
+          16.97866
+        ],
+        "rss_main_kib": 5504,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 22.148055,
+        "navigation_ms": [
+          15.401154,
+          17.072692
+        ],
+        "rss_main_kib": 5760,
+        "pty_bytes_observed": 285,
+        "idle": null
+      },
+      {
+        "startup_ms": 21.855235,
+        "navigation_ms": [
+          15.574863,
+          17.163084
+        ],
+        "rss_main_kib": 5632,
+        "pty_bytes_observed": 285,
+        "idle": null
+      }
+    ]
+  }
+}
