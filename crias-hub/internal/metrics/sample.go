@@ -1,7 +1,10 @@
 // Package metrics contains read-only, typed host telemetry contracts.
 package metrics
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 type Availability string
 
@@ -41,7 +44,7 @@ func missing(state Availability, unit Unit, source, scope string, at time.Time) 
 
 // Valid reports an actual observation, not an estimate or a missing value.
 func (s Sample) Valid() bool {
-	return s.State == Available
+	return s.State == Available && !math.IsNaN(s.Value) && !math.IsInf(s.Value, 0)
 }
 
 type Profile uint8
