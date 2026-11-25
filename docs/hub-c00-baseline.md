@@ -11,7 +11,7 @@ Checkout observado: main@ee247bc39e6f4cab5bc3ea94595f6c1d19ca96a4, antes de alte
 | crias-tui.sh | 642 | 77573f24b987dc1bcbe9a8a1a1c447413d00d573 |
 | shared/lib/manager-common.sh | 411 | a0b83565b36aa824afe0364ed46e49cf8ea200dd |
 | minecraft/mc-manager.sh | 615 | b6f5b20dbc118a8e87f2bf3649170f150fa68bb2 |
-| terraria/tt-manager.sh | 228 | b77dfb2c7a86771245a920f63e0f |
+| terraria/tt-manager.sh | 228 | b77dfb2c7a86771245a920fcbc15572c1cf43e0f |
 | crias-update.sh | 481 | 8997284d167ce23db2854ee7772d9e9a62f5178e |
 
 A contagem é de texto retornado pelo conector, não uma execução de wc; conferir no checkout. O histórico em [quality-baseline.md](quality-baseline.md) registra main() 384 → 219 linhas (ciclos 3–7), arquivo Hub 603 → 642; extração de responsabilidades, não ganho de desempenho medido. Preservar referência histórica 9496a5f.
