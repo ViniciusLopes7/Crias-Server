@@ -66,3 +66,30 @@ func BenchmarkRender(b *testing.B) {
 		_ = Render(s, Options{Color: true})
 	}
 }
+
+func TestOverlayBoundsAndIsolation(t *testing.T) {
+	for _, size := range [][2]int{{120, 40}, {100, 30}, {80, 24}, {60, 20}, {20, 5}, {1, 1}, {0, 0}} {
+		for _, keys := range [][]string{{"/"}, {"/", "up"}, {"/", "q", "6"}, {"?"}} {
+			s := app.New().Resize(size[0], size[1])
+			for _, key := range keys {
+				s, _ = s.Key(key)
+			}
+			for _, opt := range []Options{{}, {ASCII: true}, {Color: true}, {ASCII: true, Color: true}} {
+				got := Render(s, opt)
+				if !utf8.ValidString(got) || lipgloss.Width(got) > max(0, size[0]-1) ||
+					(size[1] > 0 && lipgloss.Height(got) > size[1]) {
+					t.Fatalf("overlay overflow at %v, keys %v, opt %+v", size, keys, opt)
+				}
+				if !opt.Color && strings.Contains(got, "\x1b") {
+					t.Fatal("escape codes in overlay without color")
+				}
+			}
+		}
+	}
+	s, _ := app.New().Key("/")
+	s, _ = s.Key("up")
+	got := Render(s.Resize(40, 5), Options{ASCII: true})
+	if !strings.Contains(got, "> 6 Configuracoes") {
+		t.Fatalf("compact search lost selected result: %q", got)
+	}
+}

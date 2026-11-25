@@ -81,3 +81,8 @@ fora de escopo. Atalhos F2/F6 e PTY real ainda precisam ser comprovados.
 Testes unitários novos: busca, limites, seleção circular, isolamento,
 foco, resize e lateral; teste PTY busca e ajuda. Preparação em branch
 temporária para preservar CI anterior. Nenhuma mudança de workflow.
+
+A matriz de overlays acrescenta 112 combinações (7 tamanhos, 4 estados,
+4 modos), inclusive seleção visível em 40x5. Marcadores PTY observam
+fragmentos emitidos pelo renderer, não presumem uma linha inteira após
+cada atualização; as transições completas são verificadas em testes puros.

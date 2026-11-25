@@ -160,7 +160,7 @@ def lifecycle(binary: Path) -> None:
     with Session(binary) as s:
         s.ready()
         s.key(b"/", b"Busca")
-        s.key(b"ram", b"Consulta: ram")
+        s.key(b"ram", b"ram")
         s.key(b"\r", b"Hardware")
         s.key(b"?", b"Ajuda")
         os.write(s.master, b"q6")
