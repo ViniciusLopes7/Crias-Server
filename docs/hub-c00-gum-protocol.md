@@ -1,8 +1,8 @@
 # C00 — Protocolo Gum real e validação física
 
-Estado: candidato experimental em branch temporária. Não substituir a referência
-numérica já medida; não marcar teste executado sem logs de execução. A branch
-principal do PR #45 deve permanecer intacta até terminar o QEMU de 9c07cc4.
+Estado: candidato experimental. Não substituir a referência numérica já medida;
+não marcar teste executado sem logs de execução. O QEMU de 9c07cc4 terminou
+com sucesso; a próxima execução valida o Gum real.
 
 ## Gum em Arch descartável
 
@@ -27,6 +27,8 @@ páginas compartilhadas; não confundir com PSS. CPU em repouso usa diferença d
 ticks da sessão apenas se a identidade dos processos observados nos extremos
 for estável; não captura filhos efêmeros. Sem limite temporal rígido no CI.
 Idle de 600 s somente na primeira amostra; não introduzir espera longa em CI.
+A VM usa três amostras por fixture e 30 com descoberta real, idle curto de
+2/5 s, instalação de Gum exclusivamente no guest descartável e logs existentes.
 
 ## Gate para integração
 

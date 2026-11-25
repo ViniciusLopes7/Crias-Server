@@ -154,7 +154,7 @@ def sample(hub: Path, mode: str, stack: str, timeout: float, idle: float) -> dic
         # unexpected screen; sudo and pacman are additionally blocked.
         t = time.monotonic_ns()
         os.write(fd, b"\r")
-        terminal.frame(b"Servidor", b"Voltar")
+        terminal.frame("Servidor —".encode("utf-8"), b"Voltar")
         enter = (time.monotonic_ns()-t)/1e6
         t = time.monotonic_ns()
         os.write(fd, b"\x1b")
@@ -216,9 +216,12 @@ def main() -> None:
     if not hub.is_file():
         parser.error("use a trusted legacy Hub script")
     try:
-        version = subprocess.run([gum, "--version"], check=True, capture_output=True,
+        version_result = subprocess.run([gum, "--version"], check=True, capture_output=True,
                                  text=True, timeout=5,
-                                 env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}).stdout.strip()
+                                 env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"})
+        version = (version_result.stdout or version_result.stderr).strip()
+        if not version:
+            raise RuntimeError("Gum version not identifiable")
         rows = [sample(hub, args.mode, args.stack, args.timeout,
                        args.idle_seconds if i == 0 else 0) for i in range(args.samples)]
     except (OSError, RuntimeError, EOFError, TimeoutError, subprocess.SubprocessError) as exc:
