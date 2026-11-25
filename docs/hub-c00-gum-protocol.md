@@ -1,8 +1,8 @@
 # C00 — Protocolo Gum real e validação física
 
-Estado: candidato experimental. Não substituir a referência numérica já medida;
-não marcar teste executado sem logs de execução. O QEMU de 9c07cc4 terminou
-com sucesso; a próxima execução valida o Gum real.
+Estado: Gum real validado em Arch/QEMU no run 45626528412, commit 32a1c71.
+A referência numérica permanece preservada. A validação física e os cenários
+negativos específicos do harness seguem pendentes. Ver [baseline](hub-c00-baseline.md).
 
 ## Gum em Arch descartável
 

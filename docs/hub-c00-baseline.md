@@ -180,6 +180,30 @@ Kernel 7.3.4-arch1-2, x86_64, VM de 2 vCPU e 2048 MiB configurada no runner; ace
 
 Próximo teste: [protocolo Gum e validação física](hub-c00-gum-protocol.md). O harness usa PTY controlador, Gum real, navegação sem escrita, RSS somada da sessão (não PSS), bytes PTY e observação curta de ociosidade. A instalação de Gum ocorre apenas na VM descartável. A execução deste candidato ainda não está comprovada; não contabilizar novas amostras até o CI terminar. O gate C00 continua aberto.
 
+## C00.6 — Gum real validado e avaliação de saída
+
+[Run 45626528412](https://github.com/ViniciusLopes7/Crias-Server/actions/runs/45626528412), commit `32a1c716bb1c61261d8e30fa8d0e43e88fec3370`: workflow success, release ignorada; job QEMU 139248101194 concluído com sucesso e linha PASS de Gum real. Dados brutos em [gum-arch-32a1c71.json](evidence/hub-c00/gum-arch-32a1c71.json). 36 execuções (3+3 fixtures, 30 descoberta real), 72 transições; contagens, mediana, p95 e máximo recalculados e conferidos. Gum 2.0.2 (879f048), kernel 7.3.4-arch1-2, x86_64, PTY controlador 120x40, TERM=xterm-256color.
+
+| Métrica | Fixture MC | Fixture TT | Host VM |
+|---|---:|---:|---:|
+| Inicialização mediana (ms) | 119.821 | 118.575 | 686.619 |
+| Inicialização p95 (ms) | 121.416 | 119.934 | 702.822 |
+| Navegação mediana (ms) | 138.707 | 139.075 | 150.527 |
+| Navegação p95 (ms) | 166.895 | 178.238 | 172.656 |
+| RSS somada mediana (KiB) | 37352 | 35392 | 35420 |
+| CPU ociosa (% de um núcleo; uma janela curta) | 0.999 | 0.999 | 1.000 |
+| Bytes PTY no roteiro (por amostra) | 2903 | 2717 | 2903 |
+
+Três processos da sessão observados por amostra; RSS soma páginas compartilhadas, não equivale a RSS principal nem PSS. Idle de 2 s nas fixtures e 5 s no host, zero bytes durante as janelas, identidade estável nos extremos; não é teste de 10 min, não captura processos efêmeros. Tempos são até reconhecimento de labels no PTY, não renderização final de cliente SSH. Amostras de 3 não sustentam inferência estatística robusta. A diferença startup Gum vs numérico entre runs não demonstra superioridade de um modo. Nenhum jogo em carga, hardware físico ou controle de energia foi validado.
+
+### Avaliação de saída (sem alteração unilateral do gate)
+
+- Fundamentos documentais, caracterização de rotas/contratos e baseline pré-Go em Arch controlado: evidências disponíveis (91 cenários adicionais, 126 amostras preservadas de três runs; não contar repetições intermediárias).
+- CI de código de testes em 32a1c71: workflow aprovado; CI de atualização documental posterior deve ser consultado separadamente. Main permanece ee247bc na consulta. Releases fixadas verificadas; release mais recente/instalada e CI pós-merge da main não confirmados.
+- Riscos legados de auto-reparo, estados ambíguos, elevação e transações permanecem documentados; C01 deve ser opt-in, somente apresentação, sem escrita administrativa, sem trocar ponto de entrada nem tocar serviços. Isso permite isolar esses riscos para o protótipo se houver aprovação.
+- Bloqueadores externos: execução física com a versão instalada, ociosidade de 10 min, navegação prolongada, SSH real, PSS/custo agregado e impacto em jogo. A validação de falhas específicas do novo harness (Gum ausente, saída inesperada e timeout) também não foi comprovada neste run. Não apresentar como homologados.
+- Recomendação ao mantenedor: aprovar encerramento **restrito da fundação C00 para C01 experimental**, com pendências físicas explicitamente transferidas para gate anterior a M3/C04 (coletar a referência Bash ainda preservada) e homologação C10/C11; manter limitações de segurança bloqueantes antes de cada operação. Caso não aprove, C00 permanece aberto até as medições. Nenhum requisito de produção deve ser dispensado, e nenhuma migração definitiva será realizada sem homologação. Esta recomendação ainda não é decisão aprovada.
+
 ## Gate C00
 
 - [x] Referência de código fixada e leitura inicial de main/PRs.
@@ -190,7 +214,8 @@ Próximo teste: [protocolo Gum e validação física](hub-c00-gum-protocol.md). 
 - [x] Validar harness PTY e JSON em CI (7433663, Test Shell).
 - [x] Casos negativos de backend e CI de 38667bb aprovados (39 cenários adicionais; 13 jobs).
 - [x] Dados observacionais de 30 amostras por stack preservados com origem e limitações.
-- [ ] Capturar baseline de execução com dados reais e arquivar evidências.
-- [ ] Resolver ou isolar bloqueadores e validar C00 antes de C01.
+- [x] Capturar baseline de execução em Arch/QEMU, incluindo Gum real, e arquivar evidências.
+- [ ] Capturar baseline física/SSH e impacto em jogo, ou obter decisão explícita de isolamento e transferência para gate posterior antes da migração.
+- [ ] Validar decisão de saída C00 antes de C01; não iniciar PoC sem aprovação do gate ou isolamento explícito.
 
 Não há código Go, mudança de runtime, merge ou release neste ciclo; as mudanças adicionais são exclusivamente testes, ferramenta de medição e documentação.
