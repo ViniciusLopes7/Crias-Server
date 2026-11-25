@@ -1,6 +1,6 @@
 # C01 — Arquitetura e protótipo Go
 
-Estado: implementação experimental iniciada; M1 ainda não aprovado.
+Estado: M1 validado no candidato 9f44ca2; escopo experimental concluído. Integração e gates de produção pendentes.
 Base: C00 encerrado condicionalmente em 507d4f9; gates pendentes preservados.
 
 ## Escolha candidata
@@ -12,7 +12,7 @@ na documentação pública dos módulos:
 - https://pkg.go.dev/charm.land/lipgloss/v2@v2.1.1
 - https://pkg.go.dev/golang.org/x/term@v0.47.0
 
-O agente já usa Go 1.26.0 e a CI usa 1.27.1. Módulo independente crias-hub,
+O agente já usa Go 1.26.0 e a CI usa Go 1.27.4 (pin inicial 1.27.1, corrigido após auditoria). Módulo independente crias-hub,
 sem adicionar dependências ao agente. A API v2 permite declarar alternate
 screen na View e receber eventos de resize/tecla. Lip Gloss é utilizado
 somente no título no C01; tema e contraste ficam para C02. Estado puro,
@@ -251,13 +251,48 @@ Preparado em branch temporária para não cancelar QEMU de 6fca9c6;
 integração após conclusão. A correção ainda não está comprovada por novo
 scan. Nenhuma supressão de alerta. M1 aberto até confirmação do candidato.
 
+## C01.8 — Fechamento M1 (escopo experimental)
+
+Run [45675296914](https://github.com/ViniciusLopes7/Crias-Server/actions/runs/45675296914),
+commit 9f44ca2: 15 jobs aprovados, release ignorada. Job Hub 139421097170
+confirmou Go 1.27.4 linux/amd64, lock readonly, testes, build, os sete
+grupos PTY e scanner detalhado: "No vulnerabilities found." Os 15 alertas
+anteriores não reapareceram; nenhum alerta suprimido. Dados brutos e
+estatísticas conferidas em [security-9f44ca2.json](evidence/hub-c01/security-9f44ca2.json).
+
+30 startups, 60 transições, kernel 6.8.0-1073-azure. Startup mediano
+21.922 ms, navegação p95 17.182 ms, RSS principal mediana 5504 KiB,
+binário 5675712 bytes, zero ticks na janela de idle de 5 s. Valores
+observacionais; kernel/runner variam. Não afirmar ausência de regressão
+estatisticamente comprovada, nem ausência de vulnerabilidades desconhecidas.
+
+**M1 concluído no escopo de apresentação experimental** no candidato
+9f44ca2: Bubble Tea v2/Lip Gloss v2 mantidos; estado puro e terminal
+validado por PTY Linux. A integração QEMU do workflow continua cobrindo
+o Hub Bash e os serviços existentes; não constitui homologação do
+binário Go dentro do guest nem SSH real. Rebuild byte a byte comprovado
+com Go 1.27.1, repetir em Go 1.27.4 no gate de distribuição. Nenhuma
+mudança administrativa, instalação ou alteração do ponto de entrada.
+
+A comparação com trabalho administrativo equivalente, SSH real, baseline
+física, versão instalada, estabilidade prolongada, PSS/custo agregado,
+carga de jogo/Chunky e hardware continuam gates aprovados do C00/C04/C10/C11.
+Validar o executável Go em Arch/SSH antes de M3. A economia real do CI
+seletivo continua pendente de alteração sem mudança acumulada de workflow
+após integração autorizada. Não criar PR ou release artificial para medi-la.
+PR #45 precede #46; nenhum merge/release autorizado. A revisão documental
+posterior ao candidato aprovado tem CI próprio, não confundir os SHAs.
+
+C02 pode iniciar em branch dependente, com interface experimental sem
+métricas fictícias ou operações administrativas. M2 ainda não alcançado.
+
 ## Gate M1
 
 - [x] Resolver e versionar grafo de dependências/lock (66cc984).
 - [x] Revalidar lock readonly (6d07067).
 - [x] Varredura govulncheck no protótipo (zero alcançáveis, 9999f9c).
 - [x] Identificar e revisar os 15 alertas não alcançáveis (6fca9c6).
-- [ ] Validar Go 1.27.4 e repetir govulncheck antes de ampliar funcionalidades.
+- [x] Validar Go 1.27.4 e repetir govulncheck (9f44ca2; zero alertas reportados).
 - [x] Primeiro build, gofmt, vet e race; testes de estado e limites (ecff721).
 - [x] Revalidar build com lock fixado (6d07067).
 - [x] Reprodutibilidade byte a byte com caches independentes (9999f9c, mesmo ambiente).
@@ -266,7 +301,8 @@ scan. Nenhuma supressão de alerta. M1 aberto até confirmação do candidato.
 - [x] Benchmark observacional do protótipo em PTY, RSS/CPU e latência.
 - [x] Comparação observacional de apresentação no mesmo runner (9999f9c).
 - [ ] Comparação administrativa equivalente permanece obrigatória antes da homologação, conforme gates físicos.
-- [ ] Documentar limitações e evidências, CI final aprovado.
+- [x] Documentar limitações e evidências; CI integral de 9f44ca2 aprovado.
+- [ ] Integração autorizada e CI da revisão documental posterior; não equivale à conclusão de produção.
 
 Gates físicos/SSH antes de M3/C04 e homologação C10/C11 continuam obrigatórios.
 O PR C01 depende do PR #45; nenhum merge na main ou release autorizado aqui.
