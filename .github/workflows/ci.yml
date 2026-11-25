@@ -193,6 +193,7 @@ jobs:
           bash tests/run-all-contract-test.sh
           # Policy + reproducible baseline smoke (no new LoC threshold).
           python3 tests/quality-report-test.py
+          python3 tests/hub-baseline-test.py
           python3 tools/quality-report.py --format markdown
           bash tests/stack-installer-test.sh
           bash tests/agent-install-hook-test.sh
