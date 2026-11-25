@@ -25,13 +25,15 @@ LEAVE_ALT = b"\x1b[?1049l"
 
 
 class Session:
-    def __init__(self, binary: Path, term: str = "xterm-256color") -> None:
+    def __init__(self, binary: Path, term: str = "xterm-256color",
+                 width: int = 120, height: int = 40,
+                 ascii_mode: bool = True, no_color: bool = True) -> None:
         self.master, self.slave = pty.openpty()
         self.original = termios.tcgetattr(self.slave)
         self.output = b""
         self.status = None
         self.start_ns = time.monotonic_ns()
-        self.resize(120, 40)
+        self.resize(width, height)
         self.pid = os.fork()
         if self.pid == 0:
             try:
@@ -42,10 +44,12 @@ class Session:
                     os.dup2(self.slave, fd)
                 if self.slave > 2:
                     os.close(self.slave)
-                os.execve(str(binary), [str(binary)], {
-                    "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8",
-                    "TERM": term, "NO_COLOR": "1", "CRIAS_HUB_ASCII": "1",
-                })
+                env = {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "TERM": term}
+                if ascii_mode:
+                    env["CRIAS_HUB_ASCII"] = "1"
+                if no_color:
+                    env["NO_COLOR"] = "1"
+                os.execve(str(binary), [str(binary)], env)
             except BaseException:
                 os._exit(127)
 
@@ -173,6 +177,21 @@ def lifecycle(binary: Path) -> None:
         os.write(s.master, b"q")
         s.finish((0,))
     print("PASS: search navigation, help isolation and terminal restoration")
+    for terminal, width, height, ascii_mode, no_color in [
+        ("xterm-256color", 100, 30, False, False),
+        ("xterm-256color", 80, 24, False, True),
+        ("linux", 60, 20, True, False),
+        ("xterm-256color", 40, 15, True, True),
+    ]:
+        with Session(binary, term=terminal, width=width, height=height,
+                     ascii_mode=ascii_mode, no_color=no_color) as s:
+            s.expect(b"CRIAS HUB")
+            s.expect(b"Visao geral" if ascii_mode else "Visão geral".encode())
+            s.expect(ENTER_ALT)
+            s.key(b"2", b"Servidores")
+            os.write(s.master, b"q")
+            s.finish((0,))
+        print(f"PASS: PTY {terminal} {width}x{height} ascii={ascii_mode} no_color={no_color}")
     for key, label in [(b"\x1b", "Esc"), (b"\x03", "Ctrl+C")]:
         with Session(binary) as s:
             s.ready()

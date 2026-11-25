@@ -18,8 +18,9 @@ const (
 )
 
 type Options struct {
-	Color bool
-	ASCII bool
+	Color     bool
+	ASCII     bool
+	Palette16 bool
 }
 
 type role uint8
@@ -77,6 +78,15 @@ func styled(l line, width int, opt Options) string {
 	text := fit(l.text, width)
 	if !opt.Color || text == "" {
 		return text
+	}
+	if opt.Palette16 {
+		// ANSI colors follow the user's terminal palette. Avoid explicit
+		// backgrounds in limited-color mode; labels retain textual focus.
+		style := lipgloss.NewStyle()
+		if l.role == heading || l.role == surface {
+			style = style.Bold(true).Foreground(lipgloss.Color("2"))
+		}
+		return style.Render(text)
 	}
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color(forestText)).Background(lipgloss.Color(forestBackground))
 	switch l.role {
@@ -188,6 +198,9 @@ func Render(s app.State, opt Options) string {
 	}
 	if compact {
 		lines = append(lines, line{"Área: " + s.Section(), normal})
+		if height >= 5 {
+			lines = append(lines, line{"Foco: " + focusLabel(s.Focus), muted})
+		}
 		if s.Detail {
 			lines = append(lines, line{"Nenhuma operação administrativa disponível.", muted})
 		}
@@ -216,6 +229,9 @@ func Render(s app.State, opt Options) string {
 	}
 	if compact || lipgloss.Width(footer) > width {
 		footer = "1-6 / Tab | / | ? | Q: sair"
+		if width < 27 {
+			footer = "/ ? Q: sair"
+		}
 	}
 	return finish(lines, footer, width, height, opt)
 }

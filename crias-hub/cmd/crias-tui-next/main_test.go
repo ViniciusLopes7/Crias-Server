@@ -32,3 +32,26 @@ func TestResizeEvent(t *testing.T) {
 		t.Fatal("resize caused unexpected effect")
 	}
 }
+
+func TestTerminalOptions(t *testing.T) {
+	for _, tc := range []struct {
+		env          map[string]string
+		color, ascii bool
+		basic        bool
+	}{
+		{map[string]string{"TERM": "xterm-256color"}, true, false, false},
+		{map[string]string{"TERM": "linux"}, true, false, true},
+		{map[string]string{"TERM": "ansi"}, true, false, true},
+		{map[string]string{"TERM": "vt100"}, false, true, false},
+		{map[string]string{"TERM": "xterm-256color", "NO_COLOR": ""}, false, false, false},
+		{map[string]string{"TERM": "xterm-256color", "CRIAS_HUB_COLOR": "16", "CRIAS_HUB_ASCII": "1"}, true, true, true},
+	} {
+		opt := terminalOptions(func(k string) string { return tc.env[k] }, func(k string) (string, bool) {
+			v, ok := tc.env[k]
+			return v, ok
+		})
+		if opt.Color != tc.color || opt.ASCII != tc.ascii || opt.Palette16 != tc.basic {
+			t.Fatalf("terminal options for %v: %+v", tc.env, opt)
+		}
+	}
+}

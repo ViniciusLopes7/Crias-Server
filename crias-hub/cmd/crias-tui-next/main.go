@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	tea "charm.land/bubbletea/v2"
@@ -20,6 +21,7 @@ type model struct {
 	state app.State
 	color bool
 	ascii bool
+	basic bool
 }
 
 func (m model) Init() tea.Cmd { return nil }
@@ -40,9 +42,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders state only; no host reads or effects in the render loop.
 func (m model) View() tea.View {
-	v := tea.NewView(ui.Render(m.state, ui.Options{Color: m.color, ASCII: m.ascii}))
+	v := tea.NewView(ui.Render(m.state, ui.Options{Color: m.color, ASCII: m.ascii, Palette16: m.basic}))
 	v.AltScreen = true
 	return v
+}
+
+// terminalOptions avoids assuming truecolor on basic terminals. NO_COLOR
+// takes precedence; the terminal renderer still negotiates its capabilities.
+func terminalOptions(getenv func(string) string, lookup func(string) (string, bool)) ui.Options {
+	termName := strings.ToLower(getenv("TERM"))
+	_, noColor := lookup("NO_COLOR")
+	ascii := getenv("CRIAS_HUB_ASCII") == "1"
+	limited := termName == "linux" || termName == "ansi" ||
+		getenv("CRIAS_HUB_COLOR") == "16"
+	monochrome := termName == "vt100" || termName == "vt220" || termName == "dumb"
+	return ui.Options{Color: !noColor && !monochrome, ASCII: ascii || monochrome, Palette16: limited}
 }
 
 const help = "crias-tui-next: prototipo C02 somente leitura\nUso: crias-tui-next [--help | --version]\nSem TTY: use crias-tui --doctor (legado)."
@@ -73,9 +87,8 @@ func run(args []string, stdin, stdout *os.File, stderr io.Writer) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGHUP)
 	defer stop()
-	_, noColor := os.LookupEnv("NO_COLOR")
-	ascii := os.Getenv("CRIAS_HUB_ASCII") == "1"
-	p := tea.NewProgram(model{state: app.New(), color: !noColor, ascii: ascii}, tea.WithContext(ctx), tea.WithInput(stdin), tea.WithOutput(stdout))
+	options := terminalOptions(os.Getenv, os.LookupEnv)
+	p := tea.NewProgram(model{state: app.New(), color: options.Color, ascii: options.ASCII, basic: options.Palette16}, tea.WithContext(ctx), tea.WithInput(stdin), tea.WithOutput(stdout))
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(stderr, "C02:", err)
 		return 1

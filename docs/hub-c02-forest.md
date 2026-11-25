@@ -86,3 +86,26 @@ A matriz de overlays acrescenta 112 combinações (7 tamanhos, 4 estados,
 4 modos), inclusive seleção visível em 40x5. Marcadores PTY observam
 fragmentos emitidos pelo renderer, não presumem uma linha inteira após
 cada atualização; as transições completas são verificadas em testes puros.
+
+## C02.4 — Acessibilidade e compatibilidade inicial
+
+CI de db9df03 (45679818006) terminou success: 15 jobs, inclusive QEMU,
+release ignorada. Candidato C02.3 em branch temporária revisado antes de
+integração. Corrigida formatação da declaração adjacente de New/Section.
+
+Modo de cores limitado: TERM linux/ansi ou CRIAS_HUB_COLOR=16 usa destaque
+ANSI sem fundo forçado; TERM vt100/vt220 usa ASCII/monocromático. NO_COLOR
+tem precedência; não assumir a paleta RGB do usuário em modo ANSI.
+Teste de contraste relativo sRGB exige 4,5:1 nos quatro pares utilizados
+pelo tema explícito. Isso não é certificação de acessibilidade do
+terminal; contraste de paletas customizadas e renderização real ainda
+dependem do emulador. Seleção e foco textuais permanecem sem cor.
+Rodapé compacto prioriza sair e ajuda; foco visível quando altura permite.
+
+Matriz de layout expandida a 576 combinações e overlays a 168 (seis modos
+de apresentação). Testes de seleção de perfil; quatro novas sessões PTY
+100x30, 80x24, 60x20, 40x15, Unicode/ASCII e com/sem cor, incluindo TERM
+linux. PTY simula TERM, não emula pixels nem comprova terminal físico.
+Teste de sinais e restauração preservado. Novos testes aguardam CI.
+Sem novas dependências, operações administrativas, mudança no workflow
+ou coletores. Restam revisão dos atalhos físicos, refinamento e evidências.

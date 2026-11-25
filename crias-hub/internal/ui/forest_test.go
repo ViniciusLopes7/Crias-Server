@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"math"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -13,7 +15,7 @@ func TestRenderMatrix(t *testing.T) {
 	for _, size := range [][2]int{{120, 40}, {100, 30}, {80, 24}, {60, 20}, {59, 19}, {20, 5}, {1, 1}, {0, 0}} {
 		for tab := range app.Sections() {
 			for _, detail := range []bool{false, true} {
-				for _, opt := range []Options{{}, {ASCII: true}, {Color: true}, {ASCII: true, Color: true}} {
+				for _, opt := range []Options{{}, {ASCII: true}, {Color: true}, {ASCII: true, Color: true}, {Color: true, Palette16: true}, {ASCII: true, Color: true, Palette16: true}} {
 					s := app.New().Resize(size[0], size[1])
 					s.Tab, s.Detail = tab, detail
 					got := Render(s, opt)
@@ -74,7 +76,7 @@ func TestOverlayBoundsAndIsolation(t *testing.T) {
 			for _, key := range keys {
 				s, _ = s.Key(key)
 			}
-			for _, opt := range []Options{{}, {ASCII: true}, {Color: true}, {ASCII: true, Color: true}} {
+			for _, opt := range []Options{{}, {ASCII: true}, {Color: true}, {ASCII: true, Color: true}, {Color: true, Palette16: true}, {ASCII: true, Color: true, Palette16: true}} {
 				got := Render(s, opt)
 				if !utf8.ValidString(got) || lipgloss.Width(got) > max(0, size[0]-1) ||
 					(size[1] > 0 && lipgloss.Height(got) > size[1]) {
@@ -91,5 +93,30 @@ func TestOverlayBoundsAndIsolation(t *testing.T) {
 	got := Render(s.Resize(40, 5), Options{ASCII: true})
 	if !strings.Contains(got, "> 6 Configuracoes") {
 		t.Fatalf("compact search lost selected result: %q", got)
+	}
+}
+
+func luminance(hex string) float64 {
+	n, err := strconv.ParseUint(strings.TrimPrefix(hex, "#"), 16, 24)
+	if err != nil {
+		panic(err)
+	}
+	channel := func(shift uint) float64 {
+		v := float64((n>>shift)&255) / 255
+		if v <= 0.04045 {
+			return v / 12.92
+		}
+		return math.Pow((v+0.055)/1.055, 2.4)
+	}
+	return 0.2126*channel(16) + 0.7152*channel(8) + 0.0722*channel(0)
+}
+
+func TestForestContrast(t *testing.T) {
+	for _, pair := range [][2]string{{forestText, forestBackground}, {forestAccent, forestBackground}, {forestMuted, forestBackground}, {forestAccent, forestSurface}} {
+		a, b := luminance(pair[0]), luminance(pair[1])
+		ratio := (max(a, b) + 0.05) / (min(a, b) + 0.05)
+		if ratio < 4.5 {
+			t.Fatalf("contrast %v: %.2f", pair, ratio)
+		}
 	}
 }
