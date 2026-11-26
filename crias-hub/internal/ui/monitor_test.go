@@ -32,14 +32,10 @@ func TestHardwarePaginationAndStates(t *testing.T) {
 		t.Fatal("not all sensors reachable", found)
 	}
 	s.Hardware.Sensors.State = metrics.Stale
-	if strings.Contains(strings.Join(func() []string {
-		var out []string
-		for _, row := range hardwareRows(s) {
-			out = append(out, row.text)
+	for _, row := range hardwareRows(s) {
+		if strings.Contains(row.text, "bad??label") {
+			t.Fatal("stale sensor shown as current")
 		}
-		return out
-	}(), "\n"), "bad??label") {
-		t.Fatal("stale sensor shown as current")
 	}
 }
 
@@ -57,5 +53,28 @@ func TestHistoryAndProfileView(t *testing.T) {
 	got = Render(state, Options{Telemetry: &s, Monitor: m})
 	if !strings.Contains(got, "Econômico") || !strings.Contains(got, "CPU/RAM: 3s") {
 		t.Fatal(got)
+	}
+}
+
+func TestHardwareWrapAndEntryHint(t *testing.T) {
+	state := app.New().Resize(60, 20)
+	state.Tab = 2
+	s := metrics.Snapshot{}
+	s.Hardware.Sensors.State = metrics.Available
+	s.Hardware.Sensors.Data.Values = []metrics.Sensor{{
+		ID: "hwmon0", Label: strings.Repeat("x", 120),
+		Value: metrics.Sample{State: metrics.Available, Unit: metrics.Celsius, Value: 42.5},
+	}}
+	if !strings.Contains(Render(state, Options{ASCII: true, Telemetry: &s}), "Enter: detalhes de hardware") {
+		t.Fatal("detail entry hidden at minimum terminal")
+	}
+	state.Detail = true
+	var all strings.Builder
+	for page := 0; page < HardwarePages(s); page++ {
+		got := Render(state, Options{ASCII: true, Telemetry: &s, Monitor: MonitorView{HardwarePage: page}})
+		all.WriteString(got)
+	}
+	if !strings.Contains(all.String(), "42.5") || !strings.Contains(all.String(), "graus C") {
+		t.Fatal("wrapped reading lost", all.String())
 	}
 }

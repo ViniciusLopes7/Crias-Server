@@ -274,3 +274,9 @@ estático C02 preservado. Testes de paginação, limites, estados, perfis
 e histórico escritos; CI pendente. Ainda faltam testes PTY dos novos
 atalhos, otimização de inventário, alertas, serviços, header térmico/
 potência e benchmark real. M2 aberto. Nenhuma alteração de hardware.
+
+Contra-auditoria: hint Enter antes do inventário no mínimo 60x20;
+wrap de campos longos antes da paginação com margem para ASCII, labels
+limitados com reticências explícitas; clamp de página apenas em detalhe
+ativo (evitar formatar inventário durante navegação de outras abas).
+Testes adicionais de quebra de linha e isolamento dos atalhos.

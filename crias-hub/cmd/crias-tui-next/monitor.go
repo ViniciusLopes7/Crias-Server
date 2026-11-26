@@ -51,7 +51,9 @@ func (m *model) refreshMonitor() {
 	if m.engine == nil || m.snapshot == nil {
 		return
 	}
-	m.monitor.HardwarePage = min(m.monitor.HardwarePage, ui.HardwarePages(*m.snapshot)-1)
+	if m.state.Tab == 2 && m.state.Detail {
+		m.monitor.HardwarePage = min(m.monitor.HardwarePage, ui.HardwarePages(*m.snapshot)-1)
+	}
 	if m.state.Tab == 0 && m.state.Overlay == app.OverlayNone {
 		if m.monitor.Window == 0 {
 			m.monitor.Window = time.Minute

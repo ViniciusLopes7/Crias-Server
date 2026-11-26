@@ -63,6 +63,9 @@ func historyRows(m MonitorView) []line {
 // printable ASCII boundary here so fixture or future data cannot inject
 // terminal escapes, newlines or control sequences into the view.
 func deviceLabel(s string) string {
+	if len(s) > 256 {
+		s = s[:256] + "..."
+	}
 	return strings.Map(func(r rune) rune {
 		if r < 32 || r > 126 {
 			return '?'
@@ -98,7 +101,11 @@ func hardwareRows(s metrics.Snapshot) []line {
 		rows = append(rows, inventory(label, state, count))
 		return state == metrics.Available
 	}
-	add := func(text string) { rows = append(rows, line{text, normal}) }
+	add := func(text string) {
+		for _, part := range wrapHardware(text) {
+			rows = append(rows, line{part, normal})
+		}
+	}
 	if group("Políticas CPU", h.Frequencies.State, len(h.Frequencies.Data.Policies)) {
 		for _, p := range h.Frequencies.Data.Policies {
 			id := deviceLabel(p.ID)
@@ -166,6 +173,42 @@ func hardwareRows(s metrics.Snapshot) []line {
 		}
 	}
 	return rows
+}
+
+// Wrap before pagination, using the ASCII fallback width so expanded
+// units (degrees) also fit. Long unbroken device labels are split.
+func wrapHardware(text string) []string {
+	const width = 55
+	var out []string
+	row := ""
+	columns := func(s string) int { return len(transliterate.Replace(s)) }
+	for _, word := range strings.Fields(text) {
+		for columns(word) > width {
+			if row != "" {
+				out = append(out, row)
+				row = ""
+			}
+			runes := []rune(word)
+			n := 1
+			for n < len(runes) && columns(string(runes[:n+1])) <= width {
+				n++
+			}
+			out = append(out, string(runes[:n]))
+			word = string(runes[n:])
+		}
+		if row != "" && columns(row+" "+word) > width {
+			out = append(out, row)
+			row = ""
+		}
+		if row != "" {
+			row += " "
+		}
+		row += word
+	}
+	if row != "" {
+		out = append(out, row)
+	}
+	return out
 }
 
 // Fixed six-row pages fit even at the minimum full-size terminal,
