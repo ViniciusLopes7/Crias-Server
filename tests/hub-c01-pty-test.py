@@ -346,7 +346,9 @@ def select_profile(session: Session, mode: str) -> None:
     if mode in ("economy", "detailed"):
         session.key(b"p", b"Economico")
     if mode == "detailed":
-        session.key(b"p", b"Detalhado")
+        # Incremental renderer retains the final o from Economico. The
+        # changed cadence is an unambiguous observed marker (500 ms).
+        session.key(b"p", b"500ms | Sensores: 1s")
     session.key(b"1", b"Historico 1 min")
 
 
@@ -412,7 +414,9 @@ def compare_telemetry(binary: Path, count: int, idle_seconds: float, warmup_seco
                     ready_ms = (time.monotonic_ns()-session.start_ns)/1e6
                 select_profile(session, mode)
                 idle = None
-                if trial == 0:
+                # Validate short sessions for every mode before spending
+                # runner minutes on the longer idle measurements.
+                if trial == count-1:
                     drain_window(session, warmup_seconds, False)
                     idle = drain_window(session, idle_seconds, True)
                 # Observe destination-specific body content, not labels
@@ -439,7 +443,7 @@ def compare_telemetry(binary: Path, count: int, idle_seconds: float, warmup_seco
                 "startup_ms": summary([r["startup_ms"] for r in rows]),
                 "first_ram_ms": summary([r["first_ram_ms"] for r in rows]) if mode != "static" else None,
                 "navigation_ms": summary([v for r in rows for v in r["navigation_ms"]]),
-                "idle": rows[0]["idle"], "samples": rows,
+                "idle": rows[-1]["idle"], "samples": rows,
             } for mode, rows in results.items()
         },
     }
