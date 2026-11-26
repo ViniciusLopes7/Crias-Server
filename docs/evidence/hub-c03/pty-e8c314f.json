@@ -1,0 +1,4867 @@
+{
+  "schema": 1,
+  "source": {
+    "repository": "ViniciusLopes7/Crias-Server",
+    "commit": "e8c314fc11d1e2e6f3427b86458929e5c82f5597",
+    "run_id": 45896695284,
+    "job_id": 140172246100,
+    "workflow_conclusion": "success"
+  },
+  "assurance": {
+    "scanner": "No vulnerabilities found.",
+    "raw_samples_total": 238,
+    "independent_recalculation": {
+      "static": {
+        "samples": 61,
+        "seconds": 60.000544664,
+        "main_ticks": 0,
+        "waited_child_ticks": 0,
+        "cpu_percent": 0,
+        "stat_rss": {
+          "count": 61,
+          "median": 6016,
+          "p95_nearest_rank": 6016,
+          "max": 6016
+        },
+        "rollup_rss": {
+          "count": 61,
+          "median": 6492,
+          "p95_nearest_rank": 6492,
+          "max": 6492
+        },
+        "pss": {
+          "count": 61,
+          "median": 6488,
+          "p95_nearest_rank": 6488,
+          "max": 6488
+        },
+        "validated": true
+      },
+      "balanced": {
+        "samples": 59,
+        "seconds": 60.000353714,
+        "main_ticks": 28,
+        "waited_child_ticks": 4,
+        "cpu_percent": 0.5333301892274241,
+        "stat_rss": {
+          "count": 59,
+          "median": 9728,
+          "p95_nearest_rank": 9984,
+          "max": 10240
+        },
+        "rollup_rss": {
+          "count": 59,
+          "median": 10180,
+          "p95_nearest_rank": 10328,
+          "max": 10524
+        },
+        "pss": {
+          "count": 59,
+          "median": 10176,
+          "p95_nearest_rank": 10324,
+          "max": 10520
+        },
+        "validated": true
+      },
+      "economy": {
+        "samples": 60,
+        "seconds": 60.000473465,
+        "main_ticks": 9,
+        "waited_child_ticks": 1,
+        "cpu_percent": 0.16666535149648923,
+        "stat_rss": {
+          "count": 60,
+          "median": 9088,
+          "p95_nearest_rank": 9472,
+          "max": 9600
+        },
+        "rollup_rss": {
+          "count": 60,
+          "median": 9592,
+          "p95_nearest_rank": 10016,
+          "max": 10052
+        },
+        "pss": {
+          "count": 60,
+          "median": 9588,
+          "p95_nearest_rank": 10012,
+          "max": 10048
+        },
+        "validated": true
+      },
+      "detailed": {
+        "samples": 58,
+        "seconds": 60.000389668,
+        "main_ticks": 47,
+        "waited_child_ticks": 6,
+        "cpu_percent": 0.8833275965917016,
+        "stat_rss": {
+          "count": 58,
+          "median": 10166,
+          "p95_nearest_rank": 10488,
+          "max": 10488
+        },
+        "rollup_rss": {
+          "count": 58,
+          "median": 10460,
+          "p95_nearest_rank": 10780,
+          "max": 10904
+        },
+        "pss": {
+          "count": 58,
+          "median": 10456,
+          "p95_nearest_rank": 10776,
+          "max": 10900
+        },
+        "validated": true
+      }
+    }
+  },
+  "reports": [
+    {
+      "schema": 1,
+      "mode": "hub-presentation-only",
+      "binary_sha256": "0290d861964c79c09b604a2ee691d3b7294af3523c634a6e4dffeaf27ae2d077",
+      "binary_bytes": 6129091,
+      "kernel": "6.8.0-1070-azure",
+      "architecture": "x86_64",
+      "terminal": "controlling PTY 120x40 xterm-256color NO_COLOR",
+      "limitations": "No host discovery, game load or SSH; label observation not full render. Go tab switches differ from Bash submenu transitions. ASCII/no-color test mode. RSS is main process, not session PSS. Short idle sample, observational only.",
+      "startup_ms": {
+        "count": 30,
+        "median": 21.696462,
+        "p95_nearest_rank": 21.895576,
+        "max": 21.977791
+      },
+      "navigation_ms": {
+        "count": 60,
+        "median": 16.3551645,
+        "p95_nearest_rank": 17.153768,
+        "max": 17.531488
+      },
+      "rss_main_kib": {
+        "count": 30,
+        "median": 6144,
+        "p95_nearest_rank": 6272,
+        "max": 6400
+      },
+      "samples": [
+        {
+          "startup_ms": 21.81892,
+          "navigation_ms": [
+            15.952414,
+            17.15891
+          ],
+          "rss_main_kib": 6144,
+          "pty_bytes_observed": 855,
+          "idle": {
+            "seconds": 5.0001719389999835,
+            "bytes": 0,
+            "cpu_percent_one_core": 0
+          }
+        },
+        {
+          "startup_ms": 21.683849,
+          "navigation_ms": [
+            16.57109,
+            16.074955
+          ],
+          "rss_main_kib": 6144,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.676393,
+          "navigation_ms": [
+            16.485814,
+            16.546599
+          ],
+          "rss_main_kib": 6400,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.752665,
+          "navigation_ms": [
+            15.464562,
+            17.05701
+          ],
+          "rss_main_kib": 6272,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.689606,
+          "navigation_ms": [
+            16.369608,
+            16.16635
+          ],
+          "rss_main_kib": 6272,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.612473,
+          "navigation_ms": [
+            16.348247,
+            16.23476
+          ],
+          "rss_main_kib": 6144,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.703318,
+          "navigation_ms": [
+            16.320356,
+            16.546388
+          ],
+          "rss_main_kib": 6272,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.895576,
+          "navigation_ms": [
+            16.479049,
+            16.133992
+          ],
+          "rss_main_kib": 6144,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.574253,
+          "navigation_ms": [
+            16.53078,
+            16.094284
+          ],
+          "rss_main_kib": 6144,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.643594,
+          "navigation_ms": [
+            16.368747,
+            16.120272
+          ],
+          "rss_main_kib": 6016,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.390512,
+          "navigation_ms": [
+            16.356555,
+            16.072902
+          ],
+          "rss_main_kib": 6016,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.635723,
+          "navigation_ms": [
+            15.459549,
+            17.153768
+          ],
+          "rss_main_kib": 6144,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.584823,
+          "navigation_ms": [
+            15.440361,
+            17.200471
+          ],
+          "rss_main_kib": 6016,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.82441,
+          "navigation_ms": [
+            16.466111,
+            16.127052
+          ],
+          "rss_main_kib": 6016,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.80366,
+          "navigation_ms": [
+            16.496966,
+            16.134402
+          ],
+          "rss_main_kib": 6272,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.755709,
+          "navigation_ms": [
+            16.357761,
+            16.066182
+          ],
+          "rss_main_kib": 6016,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.772955,
+          "navigation_ms": [
+            16.353975,
+            16.07843
+          ],
+          "rss_main_kib": 6272,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.79049,
+          "navigation_ms": [
+            15.63678,
+            17.045353
+          ],
+          "rss_main_kib": 6016,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.6375,
+          "navigation_ms": [
+            16.49993,
+            16.083017
+          ],
+          "rss_main_kib": 6144,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.808137,
+          "navigation_ms": [
+            16.505358,
+            16.577114
+          ],
+          "rss_main_kib": 6272,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.763871,
+          "navigation_ms": [
+            16.475935,
+            16.066252
+          ],
+          "rss_main_kib": 6144,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.750116,
+          "navigation_ms": [
+            16.477877,
+            16.656972
+          ],
+          "rss_main_kib": 6144,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.874379,
+          "navigation_ms": [
+            16.359244,
+            16.127902
+          ],
+          "rss_main_kib": 6144,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.624867,
+          "navigation_ms": [
+            16.345393,
+            16.1535
+          ],
+          "rss_main_kib": 6272,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.67451,
+          "navigation_ms": [
+            15.484531,
+            17.142075
+          ],
+          "rss_main_kib": 5888,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.384819,
+          "navigation_ms": [
+            16.356354,
+            16.086231
+          ],
+          "rss_main_kib": 5888,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.755814,
+          "navigation_ms": [
+            15.447561,
+            17.12486
+          ],
+          "rss_main_kib": 6016,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.561869,
+          "navigation_ms": [
+            16.591565,
+            16.161121
+          ],
+          "rss_main_kib": 6144,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.977791,
+          "navigation_ms": [
+            15.513043,
+            17.531488
+          ],
+          "rss_main_kib": 6272,
+          "pty_bytes_observed": 855,
+          "idle": null
+        },
+        {
+          "startup_ms": 21.65753,
+          "navigation_ms": [
+            16.551321,
+            16.072306
+          ],
+          "rss_main_kib": 6144,
+          "pty_bytes_observed": 855,
+          "idle": null
+        }
+      ]
+    },
+    {
+      "schema": 2,
+      "mode": "hub-telemetry-comparison",
+      "binary_sha256": "0290d861964c79c09b604a2ee691d3b7294af3523c634a6e4dffeaf27ae2d077",
+      "binary_bytes": 6129091,
+      "kernel": "6.8.0-1070-azure",
+      "architecture": "x86_64",
+      "cpu_count": 4,
+      "clock_ticks_per_second": 100,
+      "terminal": "controlling PTY 120x40 xterm-256color NO_COLOR",
+      "warmup_seconds": 15,
+      "idle_seconds_requested": 60,
+      "limitations": "Startup is initial static/default-balanced render; other profiles are selected after startup. Navigation observes markers, not full frames. Idle has one observation per mode, CPU interval uses timestamps at stat reads, memory samples include stat RSS and optional rollup RSS/PSS for the main process only; waited-child CPU excludes running children at boundaries. No game load, physical host, SSH or long-run leak conclusion. Shared runner; observational, no absolute performance gate.",
+      "modes": {
+        "static": {
+          "startup_ms": {
+            "count": 5,
+            "median": 21.706294,
+            "p95_nearest_rank": 21.981354,
+            "max": 21.981354
+          },
+          "first_ram_ms": null,
+          "navigation_ms": {
+            "count": 10,
+            "median": 16.352403000000002,
+            "p95_nearest_rank": 17.347418,
+            "max": 17.347418
+          },
+          "idle": {
+            "seconds": 60.000167799999986,
+            "cpu_sample_seconds": 60.000544664,
+            "cpu_main_percent_one_core": 0,
+            "cpu_waited_children_percent_one_core": 0,
+            "cpu_main_plus_waited_percent_one_core": 0,
+            "pty_bytes": 0,
+            "pty_bytes_per_second": 0,
+            "memory_sample_count": 61,
+            "rss_kib": {
+              "count": 61,
+              "median": 6016,
+              "p95_nearest_rank": 6016,
+              "max": 6016
+            },
+            "rollup_rss_kib": {
+              "count": 61,
+              "median": 6492,
+              "p95_nearest_rank": 6492,
+              "max": 6492
+            },
+            "rollup_rss_missing_samples": 0,
+            "pss_kib": {
+              "count": 61,
+              "median": 6488,
+              "p95_nearest_rank": 6488,
+              "max": 6488
+            },
+            "pss_missing_samples": 0,
+            "rss_delta_kib": 0,
+            "sample_columns": [
+              "relative_ns",
+              "main_ticks_delta",
+              "waited_child_ticks_delta",
+              "stat_rss_kib",
+              "rollup_rss_kib",
+              "pss_kib"
+            ],
+            "raw_samples": [
+              [
+                0,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                1002220715,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                2004656666,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                3006980398,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                4009347848,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                5011690370,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                6013990045,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                7016320836,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                8018824772,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                9021082941,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                10023452627,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                11025752607,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                12028070834,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                13030389869,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                14032728227,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                15035104619,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                16037530438,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                17039904122,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                18042277355,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                19044653400,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                20047116179,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                21049600706,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                22052109831,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                23054563889,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                24057129482,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                25059738123,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                26062219224,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                27064683087,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                28067143324,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                29069649969,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                30072136191,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                31074644062,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                32077158998,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                33079586501,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                34082159841,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                35084603359,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                36087109390,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                37089629832,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                38092153371,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                39094592136,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                40097005400,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                41099560492,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                42102094805,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                43104620987,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                44107245376,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                45109725007,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                46112242063,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                47114704454,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                48117168529,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                49119586192,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                50122145344,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                51124550251,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                52127039058,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                53129605602,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                54132125935,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                55134658956,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                56137142917,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                57139664265,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                58142181768,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                59144725734,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ],
+              [
+                60000544664,
+                0,
+                0,
+                6016,
+                6492,
+                6488
+              ]
+            ]
+          },
+          "samples": [
+            {
+              "startup_ms": 21.890255,
+              "first_ram_ms": null,
+              "navigation_ms": [
+                15.582356,
+                17.071267
+              ],
+              "idle": null
+            },
+            {
+              "startup_ms": 21.599512,
+              "first_ram_ms": null,
+              "navigation_ms": [
+                16.588476,
+                16.114283
+              ],
+              "idle": null
+            },
+            {
+              "startup_ms": 21.706294,
+              "first_ram_ms": null,
+              "navigation_ms": [
+                16.816932,
+                15.963727
+              ],
+              "idle": null
+            },
+            {
+              "startup_ms": 21.65984,
+              "first_ram_ms": null,
+              "navigation_ms": [
+                16.569407,
+                16.135399
+              ],
+              "idle": null
+            },
+            {
+              "startup_ms": 21.981354,
+              "first_ram_ms": null,
+              "navigation_ms": [
+                13.955035,
+                17.347418
+              ],
+              "idle": {
+                "seconds": 60.000167799999986,
+                "cpu_sample_seconds": 60.000544664,
+                "cpu_main_percent_one_core": 0,
+                "cpu_waited_children_percent_one_core": 0,
+                "cpu_main_plus_waited_percent_one_core": 0,
+                "pty_bytes": 0,
+                "pty_bytes_per_second": 0,
+                "memory_sample_count": 61,
+                "rss_kib": {
+                  "count": 61,
+                  "median": 6016,
+                  "p95_nearest_rank": 6016,
+                  "max": 6016
+                },
+                "rollup_rss_kib": {
+                  "count": 61,
+                  "median": 6492,
+                  "p95_nearest_rank": 6492,
+                  "max": 6492
+                },
+                "rollup_rss_missing_samples": 0,
+                "pss_kib": {
+                  "count": 61,
+                  "median": 6488,
+                  "p95_nearest_rank": 6488,
+                  "max": 6488
+                },
+                "pss_missing_samples": 0,
+                "rss_delta_kib": 0,
+                "sample_columns": [
+                  "relative_ns",
+                  "main_ticks_delta",
+                  "waited_child_ticks_delta",
+                  "stat_rss_kib",
+                  "rollup_rss_kib",
+                  "pss_kib"
+                ],
+                "raw_samples": [
+                  [
+                    0,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    1002220715,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    2004656666,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    3006980398,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    4009347848,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    5011690370,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    6013990045,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    7016320836,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    8018824772,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    9021082941,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    10023452627,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    11025752607,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    12028070834,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    13030389869,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    14032728227,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    15035104619,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    16037530438,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    17039904122,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    18042277355,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    19044653400,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    20047116179,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    21049600706,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    22052109831,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    23054563889,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    24057129482,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    25059738123,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    26062219224,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    27064683087,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    28067143324,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    29069649969,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    30072136191,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    31074644062,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    32077158998,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    33079586501,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    34082159841,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    35084603359,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    36087109390,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    37089629832,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    38092153371,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    39094592136,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    40097005400,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    41099560492,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    42102094805,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    43104620987,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    44107245376,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    45109725007,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    46112242063,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    47114704454,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    48117168529,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    49119586192,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    50122145344,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    51124550251,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    52127039058,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    53129605602,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    54132125935,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    55134658956,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    56137142917,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    57139664265,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    58142181768,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    59144725734,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ],
+                  [
+                    60000544664,
+                    0,
+                    0,
+                    6016,
+                    6492,
+                    6488
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        "balanced": {
+          "startup_ms": {
+            "count": 5,
+            "median": 21.575766,
+            "p95_nearest_rank": 22.266593,
+            "max": 22.266593
+          },
+          "first_ram_ms": {
+            "count": 5,
+            "median": 71.677399,
+            "p95_nearest_rank": 73.173872,
+            "max": 73.173872
+          },
+          "navigation_ms": {
+            "count": 10,
+            "median": 16.622571,
+            "p95_nearest_rank": 17.243039,
+            "max": 17.243039
+          },
+          "idle": {
+            "seconds": 60.000077428000054,
+            "cpu_sample_seconds": 60.000353714,
+            "cpu_main_percent_one_core": 0.4666639155739961,
+            "cpu_waited_children_percent_one_core": 0.06666627365342802,
+            "cpu_main_plus_waited_percent_one_core": 0.5333301892274241,
+            "pty_bytes": 4335,
+            "pty_bytes_per_second": 72.24990676390358,
+            "memory_sample_count": 59,
+            "rss_kib": {
+              "count": 59,
+              "median": 9728,
+              "p95_nearest_rank": 9984,
+              "max": 10240
+            },
+            "rollup_rss_kib": {
+              "count": 59,
+              "median": 10180,
+              "p95_nearest_rank": 10328,
+              "max": 10524
+            },
+            "rollup_rss_missing_samples": 0,
+            "pss_kib": {
+              "count": 59,
+              "median": 10176,
+              "p95_nearest_rank": 10324,
+              "max": 10520
+            },
+            "pss_missing_samples": 0,
+            "rss_delta_kib": 1408,
+            "sample_columns": [
+              "relative_ns",
+              "main_ticks_delta",
+              "waited_child_ticks_delta",
+              "stat_rss_kib",
+              "rollup_rss_kib",
+              "pss_kib"
+            ],
+            "raw_samples": [
+              [
+                0,
+                0,
+                0,
+                8832,
+                9340,
+                9336
+              ],
+              [
+                1054634388,
+                1,
+                0,
+                8832,
+                9352,
+                9348
+              ],
+              [
+                2055429200,
+                1,
+                0,
+                8832,
+                9364,
+                9360
+              ],
+              [
+                3056049580,
+                2,
+                0,
+                8832,
+                9396,
+                9392
+              ],
+              [
+                4156401510,
+                2,
+                0,
+                8960,
+                9412,
+                9408
+              ],
+              [
+                5157289750,
+                3,
+                0,
+                9088,
+                9432,
+                9428
+              ],
+              [
+                6257655084,
+                3,
+                0,
+                9088,
+                9444,
+                9440
+              ],
+              [
+                7258281827,
+                4,
+                0,
+                9088,
+                9472,
+                9468
+              ],
+              [
+                8358757652,
+                4,
+                0,
+                9088,
+                9500,
+                9496
+              ],
+              [
+                9359443844,
+                5,
+                0,
+                9088,
+                9520,
+                9516
+              ],
+              [
+                10459872640,
+                5,
+                0,
+                9216,
+                9540,
+                9536
+              ],
+              [
+                11460512784,
+                6,
+                0,
+                9216,
+                9568,
+                9564
+              ],
+              [
+                12560979706,
+                6,
+                0,
+                9216,
+                9576,
+                9572
+              ],
+              [
+                13561672754,
+                7,
+                0,
+                9216,
+                9640,
+                9636
+              ],
+              [
+                14662228103,
+                7,
+                0,
+                9216,
+                9640,
+                9636
+              ],
+              [
+                15762636500,
+                7,
+                2,
+                9216,
+                9764,
+                9760
+              ],
+              [
+                16779827981,
+                7,
+                2,
+                9216,
+                9800,
+                9796
+              ],
+              [
+                17863635642,
+                9,
+                2,
+                9216,
+                9828,
+                9824
+              ],
+              [
+                18880945888,
+                9,
+                2,
+                9344,
+                9860,
+                9856
+              ],
+              [
+                19964848556,
+                9,
+                2,
+                9472,
+                9932,
+                9928
+              ],
+              [
+                21063554460,
+                10,
+                2,
+                9600,
+                10052,
+                10048
+              ],
+              [
+                22080426728,
+                11,
+                2,
+                9600,
+                10064,
+                10060
+              ],
+              [
+                23164226910,
+                11,
+                2,
+                9600,
+                10076,
+                10072
+              ],
+              [
+                24181584863,
+                12,
+                2,
+                9600,
+                10080,
+                10076
+              ],
+              [
+                25265409331,
+                12,
+                2,
+                9600,
+                10084,
+                10080
+              ],
+              [
+                26282121374,
+                13,
+                2,
+                9600,
+                10084,
+                10080
+              ],
+              [
+                27366457996,
+                13,
+                2,
+                9600,
+                10124,
+                10120
+              ],
+              [
+                28383733189,
+                13,
+                2,
+                9600,
+                10128,
+                10124
+              ],
+              [
+                29467899383,
+                14,
+                2,
+                9600,
+                10156,
+                10152
+              ],
+              [
+                30485356042,
+                14,
+                2,
+                9728,
+                10180,
+                10176
+              ],
+              [
+                31569853515,
+                14,
+                2,
+                9728,
+                10208,
+                10204
+              ],
+              [
+                32586912764,
+                16,
+                2,
+                9728,
+                10216,
+                10212
+              ],
+              [
+                33671180743,
+                16,
+                2,
+                9728,
+                10236,
+                10232
+              ],
+              [
+                34687828228,
+                16,
+                2,
+                9728,
+                10240,
+                10236
+              ],
+              [
+                35755333979,
+                16,
+                2,
+                9728,
+                10260,
+                10256
+              ],
+              [
+                36789719390,
+                17,
+                2,
+                9728,
+                10260,
+                10256
+              ],
+              [
+                37873472269,
+                17,
+                2,
+                9856,
+                10300,
+                10296
+              ],
+              [
+                38890287075,
+                17,
+                2,
+                9856,
+                10308,
+                10304
+              ],
+              [
+                39975164517,
+                18,
+                2,
+                9984,
+                10324,
+                10320
+              ],
+              [
+                41074346708,
+                19,
+                2,
+                9984,
+                10328,
+                10324
+              ],
+              [
+                42091031162,
+                20,
+                2,
+                9984,
+                10244,
+                10240
+              ],
+              [
+                43175341870,
+                20,
+                2,
+                9984,
+                10248,
+                10244
+              ],
+              [
+                44192084828,
+                21,
+                2,
+                9984,
+                10248,
+                10244
+              ],
+              [
+                45259373742,
+                21,
+                4,
+                9984,
+                10252,
+                10248
+              ],
+              [
+                46293409281,
+                22,
+                4,
+                9984,
+                10252,
+                10248
+              ],
+              [
+                47377145299,
+                23,
+                4,
+                9984,
+                10252,
+                10248
+              ],
+              [
+                48393787684,
+                23,
+                4,
+                9984,
+                10252,
+                10248
+              ],
+              [
+                49478298402,
+                24,
+                4,
+                9984,
+                10252,
+                10248
+              ],
+              [
+                50494897182,
+                24,
+                4,
+                9984,
+                10252,
+                10248
+              ],
+              [
+                51579607255,
+                24,
+                4,
+                9984,
+                10252,
+                10248
+              ],
+              [
+                52596545570,
+                24,
+                4,
+                9984,
+                10252,
+                10248
+              ],
+              [
+                53680371256,
+                25,
+                4,
+                9984,
+                10256,
+                10252
+              ],
+              [
+                54697167093,
+                26,
+                4,
+                9984,
+                10256,
+                10252
+              ],
+              [
+                55763961756,
+                26,
+                4,
+                9984,
+                10256,
+                10252
+              ],
+              [
+                56797829405,
+                26,
+                4,
+                9984,
+                10256,
+                10252
+              ],
+              [
+                57881386004,
+                27,
+                4,
+                9984,
+                10272,
+                10268
+              ],
+              [
+                58898757007,
+                27,
+                4,
+                9984,
+                10304,
+                10300
+              ],
+              [
+                59982868254,
+                28,
+                4,
+                10240,
+                10520,
+                10516
+              ],
+              [
+                60000353714,
+                28,
+                4,
+                10240,
+                10524,
+                10520
+              ]
+            ]
+          },
+          "samples": [
+            {
+              "startup_ms": 21.575766,
+              "first_ram_ms": 73.173872,
+              "navigation_ms": [
+                16.15624,
+                17.068072
+              ],
+              "idle": null
+            },
+            {
+              "startup_ms": 22.266593,
+              "first_ram_ms": 72.193879,
+              "navigation_ms": [
+                17.243039,
+                16.149741
+              ],
+              "idle": null
+            },
+            {
+              "startup_ms": 21.429471,
+              "first_ram_ms": 71.677399,
+              "navigation_ms": [
+                16.188937,
+                17.056205
+              ],
+              "idle": null
+            },
+            {
+              "startup_ms": 21.278369,
+              "first_ram_ms": 71.612234,
+              "navigation_ms": [
+                16.111674,
+                17.074641
+              ],
+              "idle": null
+            },
+            {
+              "startup_ms": 22.098919,
+              "first_ram_ms": 71.397293,
+              "navigation_ms": [
+                13.871603,
+                17.223816
+              ],
+              "idle": {
+                "seconds": 60.000077428000054,
+                "cpu_sample_seconds": 60.000353714,
+                "cpu_main_percent_one_core": 0.4666639155739961,
+                "cpu_waited_children_percent_one_core": 0.06666627365342802,
+                "cpu_main_plus_waited_percent_one_core": 0.5333301892274241,
+                "pty_bytes": 4335,
+                "pty_bytes_per_second": 72.24990676390358,
+                "memory_sample_count": 59,
+                "rss_kib": {
+                  "count": 59,
+                  "median": 9728,
+                  "p95_nearest_rank": 9984,
+                  "max": 10240
+                },
+                "rollup_rss_kib": {
+                  "count": 59,
+                  "median": 10180,
+                  "p95_nearest_rank": 10328,
+                  "max": 10524
+                },
+                "rollup_rss_missing_samples": 0,
+                "pss_kib": {
+                  "count": 59,
+                  "median": 10176,
+                  "p95_nearest_rank": 10324,
+                  "max": 10520
+                },
+                "pss_missing_samples": 0,
+                "rss_delta_kib": 1408,
+                "sample_columns": [
+                  "relative_ns",
+                  "main_ticks_delta",
+                  "waited_child_ticks_delta",
+                  "stat_rss_kib",
+                  "rollup_rss_kib",
+                  "pss_kib"
+                ],
+                "raw_samples": [
+                  [
+                    0,
+                    0,
+                    0,
+                    8832,
+                    9340,
+                    9336
+                  ],
+                  [
+                    1054634388,
+                    1,
+                    0,
+                    8832,
+                    9352,
+                    9348
+                  ],
+                  [
+                    2055429200,
+                    1,
+                    0,
+                    8832,
+                    9364,
+                    9360
+                  ],
+                  [
+                    3056049580,
+                    2,
+                    0,
+                    8832,
+                    9396,
+                    9392
+                  ],
+                  [
+                    4156401510,
+                    2,
+                    0,
+                    8960,
+                    9412,
+                    9408
+                  ],
+                  [
+                    5157289750,
+                    3,
+                    0,
+                    9088,
+                    9432,
+                    9428
+                  ],
+                  [
+                    6257655084,
+                    3,
+                    0,
+                    9088,
+                    9444,
+                    9440
+                  ],
+                  [
+                    7258281827,
+                    4,
+                    0,
+                    9088,
+                    9472,
+                    9468
+                  ],
+                  [
+                    8358757652,
+                    4,
+                    0,
+                    9088,
+                    9500,
+                    9496
+                  ],
+                  [
+                    9359443844,
+                    5,
+                    0,
+                    9088,
+                    9520,
+                    9516
+                  ],
+                  [
+                    10459872640,
+                    5,
+                    0,
+                    9216,
+                    9540,
+                    9536
+                  ],
+                  [
+                    11460512784,
+                    6,
+                    0,
+                    9216,
+                    9568,
+                    9564
+                  ],
+                  [
+                    12560979706,
+                    6,
+                    0,
+                    9216,
+                    9576,
+                    9572
+                  ],
+                  [
+                    13561672754,
+                    7,
+                    0,
+                    9216,
+                    9640,
+                    9636
+                  ],
+                  [
+                    14662228103,
+                    7,
+                    0,
+                    9216,
+                    9640,
+                    9636
+                  ],
+                  [
+                    15762636500,
+                    7,
+                    2,
+                    9216,
+                    9764,
+                    9760
+                  ],
+                  [
+                    16779827981,
+                    7,
+                    2,
+                    9216,
+                    9800,
+                    9796
+                  ],
+                  [
+                    17863635642,
+                    9,
+                    2,
+                    9216,
+                    9828,
+                    9824
+                  ],
+                  [
+                    18880945888,
+                    9,
+                    2,
+                    9344,
+                    9860,
+                    9856
+                  ],
+                  [
+                    19964848556,
+                    9,
+                    2,
+                    9472,
+                    9932,
+                    9928
+                  ],
+                  [
+                    21063554460,
+                    10,
+                    2,
+                    9600,
+                    10052,
+                    10048
+                  ],
+                  [
+                    22080426728,
+                    11,
+                    2,
+                    9600,
+                    10064,
+                    10060
+                  ],
+                  [
+                    23164226910,
+                    11,
+                    2,
+                    9600,
+                    10076,
+                    10072
+                  ],
+                  [
+                    24181584863,
+                    12,
+                    2,
+                    9600,
+                    10080,
+                    10076
+                  ],
+                  [
+                    25265409331,
+                    12,
+                    2,
+                    9600,
+                    10084,
+                    10080
+                  ],
+                  [
+                    26282121374,
+                    13,
+                    2,
+                    9600,
+                    10084,
+                    10080
+                  ],
+                  [
+                    27366457996,
+                    13,
+                    2,
+                    9600,
+                    10124,
+                    10120
+                  ],
+                  [
+                    28383733189,
+                    13,
+                    2,
+                    9600,
+                    10128,
+                    10124
+                  ],
+                  [
+                    29467899383,
+                    14,
+                    2,
+                    9600,
+                    10156,
+                    10152
+                  ],
+                  [
+                    30485356042,
+                    14,
+                    2,
+                    9728,
+                    10180,
+                    10176
+                  ],
+                  [
+                    31569853515,
+                    14,
+                    2,
+                    9728,
+                    10208,
+                    10204
+                  ],
+                  [
+                    32586912764,
+                    16,
+                    2,
+                    9728,
+                    10216,
+                    10212
+                  ],
+                  [
+                    33671180743,
+                    16,
+                    2,
+                    9728,
+                    10236,
+                    10232
+                  ],
+                  [
+                    34687828228,
+                    16,
+                    2,
+                    9728,
+                    10240,
+                    10236
+                  ],
+                  [
+                    35755333979,
+                    16,
+                    2,
+                    9728,
+                    10260,
+                    10256
+                  ],
+                  [
+                    36789719390,
+                    17,
+                    2,
+                    9728,
+                    10260,
+                    10256
+                  ],
+                  [
+                    37873472269,
+                    17,
+                    2,
+                    9856,
+                    10300,
+                    10296
+                  ],
+                  [
+                    38890287075,
+                    17,
+                    2,
+                    9856,
+                    10308,
+                    10304
+                  ],
+                  [
+                    39975164517,
+                    18,
+                    2,
+                    9984,
+                    10324,
+                    10320
+                  ],
+                  [
+                    41074346708,
+                    19,
+                    2,
+                    9984,
+                    10328,
+                    10324
+                  ],
+                  [
+                    42091031162,
+                    20,
+                    2,
+                    9984,
+                    10244,
+                    10240
+                  ],
+                  [
+                    43175341870,
+                    20,
+                    2,
+                    9984,
+                    10248,
+                    10244
+                  ],
+                  [
+                    44192084828,
+                    21,
+                    2,
+                    9984,
+                    10248,
+                    10244
+                  ],
+                  [
+                    45259373742,
+                    21,
+                    4,
+                    9984,
+                    10252,
+                    10248
+                  ],
+                  [
+                    46293409281,
+                    22,
+                    4,
+                    9984,
+                    10252,
+                    10248
+                  ],
+                  [
+                    47377145299,
+                    23,
+                    4,
+                    9984,
+                    10252,
+                    10248
+                  ],
+                  [
+                    48393787684,
+                    23,
+                    4,
+                    9984,
+                    10252,
+                    10248
+                  ],
+                  [
+                    49478298402,
+                    24,
+                    4,
+                    9984,
+                    10252,
+                    10248
+                  ],
+                  [
+                    50494897182,
+                    24,
+                    4,
+                    9984,
+                    10252,
+                    10248
+                  ],
+                  [
+                    51579607255,
+                    24,
+                    4,
+                    9984,
+                    10252,
+                    10248
+                  ],
+                  [
+                    52596545570,
+                    24,
+                    4,
+                    9984,
+                    10252,
+                    10248
+                  ],
+                  [
+                    53680371256,
+                    25,
+                    4,
+                    9984,
+                    10256,
+                    10252
+                  ],
+                  [
+                    54697167093,
+                    26,
+                    4,
+                    9984,
+                    10256,
+                    10252
+                  ],
+                  [
+                    55763961756,
+                    26,
+                    4,
+                    9984,
+                    10256,
+                    10252
+                  ],
+                  [
+                    56797829405,
+                    26,
+                    4,
+                    9984,
+                    10256,
+                    10252
+                  ],
+                  [
+                    57881386004,
+                    27,
+                    4,
+                    9984,
+                    10272,
+                    10268
+                  ],
+                  [
+                    58898757007,
+                    27,
+                    4,
+                    9984,
+                    10304,
+                    10300
+                  ],
+                  [
+                    59982868254,
+                    28,
+                    4,
+                    10240,
+                    10520,
+                    10516
+                  ],
+                  [
+                    60000353714,
+                    28,
+                    4,
+                    10240,
+                    10524,
+                    10520
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        "economy": {
+          "startup_ms": {
+            "count": 5,
+            "median": 21.442611,
+            "p95_nearest_rank": 21.867836,
+            "max": 21.867836
+          },
+          "first_ram_ms": {
+            "count": 5,
+            "median": 71.653119,
+            "p95_nearest_rank": 73.096629,
+            "max": 73.096629
+          },
+          "navigation_ms": {
+            "count": 10,
+            "median": 16.4656605,
+            "p95_nearest_rank": 17.2982,
+            "max": 17.2982
+          },
+          "idle": {
+            "seconds": 60.000127695999936,
+            "cpu_sample_seconds": 60.000473465,
+            "cpu_main_percent_one_core": 0.1499988163468403,
+            "cpu_waited_children_percent_one_core": 0.016666535149648925,
+            "cpu_main_plus_waited_percent_one_core": 0.16666535149648923,
+            "pty_bytes": 1465,
+            "pty_bytes_per_second": 24.41661470159951,
+            "memory_sample_count": 60,
+            "rss_kib": {
+              "count": 60,
+              "median": 9088,
+              "p95_nearest_rank": 9472,
+              "max": 9600
+            },
+            "rollup_rss_kib": {
+              "count": 60,
+              "median": 9592,
+              "p95_nearest_rank": 10016,
+              "max": 10052
+            },
+            "rollup_rss_missing_samples": 0,
+            "pss_kib": {
+              "count": 60,
+              "median": 9588,
+              "p95_nearest_rank": 10012,
+              "max": 10048
+            },
+            "pss_missing_samples": 0,
+            "rss_delta_kib": 1408,
+            "sample_columns": [
+              "relative_ns",
+              "main_ticks_delta",
+              "waited_child_ticks_delta",
+              "stat_rss_kib",
+              "rollup_rss_kib",
+              "pss_kib"
+            ],
+            "raw_samples": [
+              [
+                0,
+                0,
+                0,
+                8192,
+                8568,
+                8564
+              ],
+              [
+                1051326510,
+                0,
+                0,
+                8192,
+                8580,
+                8576
+              ],
+              [
+                2053634599,
+                0,
+                0,
+                8192,
+                8588,
+                8584
+              ],
+              [
+                3056051657,
+                0,
+                0,
+                8192,
+                8596,
+                8592
+              ],
+              [
+                4151986122,
+                0,
+                0,
+                8192,
+                8604,
+                8600
+              ],
+              [
+                5154430862,
+                0,
+                0,
+                8192,
+                8632,
+                8628
+              ],
+              [
+                6156973212,
+                0,
+                0,
+                8192,
+                8632,
+                8628
+              ],
+              [
+                7252478679,
+                1,
+                0,
+                8192,
+                8676,
+                8672
+              ],
+              [
+                8254925962,
+                1,
+                0,
+                8192,
+                8684,
+                8680
+              ],
+              [
+                9257362460,
+                1,
+                0,
+                8192,
+                8716,
+                8712
+              ],
+              [
+                10353656663,
+                2,
+                0,
+                8192,
+                8732,
+                8728
+              ],
+              [
+                11356044549,
+                2,
+                0,
+                8192,
+                8772,
+                8768
+              ],
+              [
+                12358464707,
+                2,
+                0,
+                8192,
+                8772,
+                8768
+              ],
+              [
+                13454574724,
+                2,
+                0,
+                8320,
+                8828,
+                8824
+              ],
+              [
+                14457016470,
+                2,
+                0,
+                8320,
+                8828,
+                8824
+              ],
+              [
+                15459433130,
+                2,
+                0,
+                8448,
+                8848,
+                8844
+              ],
+              [
+                16556180322,
+                2,
+                0,
+                8832,
+                9292,
+                9288
+              ],
+              [
+                17558580455,
+                2,
+                0,
+                8832,
+                9388,
+                9384
+              ],
+              [
+                18561052336,
+                2,
+                0,
+                8832,
+                9388,
+                9384
+              ],
+              [
+                19655881305,
+                3,
+                0,
+                8832,
+                9428,
+                9424
+              ],
+              [
+                20658339655,
+                3,
+                0,
+                8832,
+                9428,
+                9424
+              ],
+              [
+                21660853466,
+                3,
+                0,
+                8960,
+                9472,
+                9468
+              ],
+              [
+                22756416590,
+                4,
+                0,
+                8960,
+                9476,
+                9472
+              ],
+              [
+                23758879418,
+                4,
+                0,
+                8960,
+                9500,
+                9496
+              ],
+              [
+                24761448092,
+                4,
+                0,
+                8960,
+                9500,
+                9496
+              ],
+              [
+                25840480370,
+                5,
+                0,
+                8960,
+                9524,
+                9520
+              ],
+              [
+                26843067221,
+                5,
+                0,
+                8960,
+                9524,
+                9520
+              ],
+              [
+                27845583278,
+                5,
+                0,
+                9088,
+                9544,
+                9540
+              ],
+              [
+                28857264103,
+                5,
+                0,
+                9088,
+                9572,
+                9568
+              ],
+              [
+                29859768673,
+                5,
+                0,
+                9088,
+                9592,
+                9588
+              ],
+              [
+                30862266241,
+                5,
+                0,
+                9088,
+                9592,
+                9588
+              ],
+              [
+                31957896742,
+                5,
+                0,
+                9216,
+                9640,
+                9636
+              ],
+              [
+                32960318758,
+                5,
+                0,
+                9216,
+                9660,
+                9656
+              ],
+              [
+                34056572513,
+                5,
+                0,
+                9216,
+                9676,
+                9672
+              ],
+              [
+                35059061148,
+                6,
+                0,
+                9216,
+                9692,
+                9688
+              ],
+              [
+                36061560454,
+                6,
+                0,
+                9216,
+                9692,
+                9688
+              ],
+              [
+                37156845114,
+                6,
+                0,
+                9344,
+                9720,
+                9716
+              ],
+              [
+                38159307949,
+                6,
+                0,
+                9344,
+                9720,
+                9716
+              ],
+              [
+                39161776126,
+                6,
+                0,
+                9344,
+                9732,
+                9728
+              ],
+              [
+                40257738559,
+                7,
+                0,
+                9344,
+                9744,
+                9740
+              ],
+              [
+                41260219417,
+                7,
+                0,
+                9344,
+                9764,
+                9760
+              ],
+              [
+                42262785604,
+                7,
+                0,
+                9344,
+                9764,
+                9760
+              ],
+              [
+                43358910107,
+                7,
+                0,
+                9344,
+                9808,
+                9804
+              ],
+              [
+                44361322584,
+                7,
+                0,
+                9344,
+                9808,
+                9804
+              ],
+              [
+                45376362095,
+                7,
+                1,
+                9344,
+                9864,
+                9860
+              ],
+              [
+                46460358759,
+                8,
+                1,
+                9472,
+                9904,
+                9900
+              ],
+              [
+                47462872332,
+                8,
+                1,
+                9472,
+                9908,
+                9904
+              ],
+              [
+                48465456099,
+                8,
+                1,
+                9472,
+                9908,
+                9904
+              ],
+              [
+                49560580413,
+                8,
+                1,
+                9472,
+                9920,
+                9916
+              ],
+              [
+                50563268319,
+                8,
+                1,
+                9472,
+                9920,
+                9916
+              ],
+              [
+                51565793027,
+                8,
+                1,
+                9472,
+                9936,
+                9932
+              ],
+              [
+                52568252267,
+                8,
+                1,
+                9472,
+                9944,
+                9940
+              ],
+              [
+                53570752177,
+                9,
+                1,
+                9472,
+                9964,
+                9960
+              ],
+              [
+                54573231196,
+                9,
+                1,
+                9472,
+                9964,
+                9960
+              ],
+              [
+                55575786237,
+                9,
+                1,
+                9472,
+                10012,
+                10008
+              ],
+              [
+                56578336371,
+                9,
+                1,
+                9472,
+                10012,
+                10008
+              ],
+              [
+                57580866364,
+                9,
+                1,
+                9472,
+                10016,
+                10012
+              ],
+              [
+                58661586365,
+                9,
+                1,
+                9600,
+                10028,
+                10024
+              ],
+              [
+                59664095933,
+                9,
+                1,
+                9600,
+                10052,
+                10048
+              ],
+              [
+                60000473465,
+                9,
+                1,
+                9600,
+                10052,
+                10048
+              ]
+            ]
+          },
+          "samples": [
+            {
+              "startup_ms": 21.867836,
+              "first_ram_ms": 72.168763,
+              "navigation_ms": [
+                17.248468,
+                15.989504
+              ],
+              "idle": null
+            },
+            {
+              "startup_ms": 21.314602,
+              "first_ram_ms": 71.41964,
+              "navigation_ms": [
+                16.23757,
+                17.057441
+              ],
+              "idle": null
+            },
+            {
+              "startup_ms": 21.394876,
+              "first_ram_ms": 71.653119,
+              "navigation_ms": [
+                17.2982,
+                15.983876
+              ],
+              "idle": null
+            },
+            {
+              "startup_ms": 21.442611,
+              "first_ram_ms": 71.519197,
+              "navigation_ms": [
+                17.17547,
+                16.121619
+              ],
+              "idle": null
+            },
+            {
+              "startup_ms": 21.825452,
+              "first_ram_ms": 73.096629,
+              "navigation_ms": [
+                9.634658,
+                16.693751
+              ],
+              "idle": {
+                "seconds": 60.000127695999936,
+                "cpu_sample_seconds": 60.000473465,
+                "cpu_main_percent_one_core": 0.1499988163468403,
+                "cpu_waited_children_percent_one_core": 0.016666535149648925,
+                "cpu_main_plus_waited_percent_one_core": 0.16666535149648923,
+                "pty_bytes": 1465,
+                "pty_bytes_per_second": 24.41661470159951,
+                "memory_sample_count": 60,
+                "rss_kib": {
+                  "count": 60,
+                  "median": 9088,
+                  "p95_nearest_rank": 9472,
+                  "max": 9600
+                },
+                "rollup_rss_kib": {
+                  "count": 60,
+                  "median": 9592,
+                  "p95_nearest_rank": 10016,
+                  "max": 10052
+                },
+                "rollup_rss_missing_samples": 0,
+                "pss_kib": {
+                  "count": 60,
+                  "median": 9588,
+                  "p95_nearest_rank": 10012,
+                  "max": 10048
+                },
+                "pss_missing_samples": 0,
+                "rss_delta_kib": 1408,
+                "sample_columns": [
+                  "relative_ns",
+                  "main_ticks_delta",
+                  "waited_child_ticks_delta",
+                  "stat_rss_kib",
+                  "rollup_rss_kib",
+                  "pss_kib"
+                ],
+                "raw_samples": [
+                  [
+                    0,
+                    0,
+                    0,
+                    8192,
+                    8568,
+                    8564
+                  ],
+                  [
+                    1051326510,
+                    0,
+                    0,
+                    8192,
+                    8580,
+                    8576
+                  ],
+                  [
+                    2053634599,
+                    0,
+                    0,
+                    8192,
+                    8588,
+                    8584
+                  ],
+                  [
+                    3056051657,
+                    0,
+                    0,
+                    8192,
+                    8596,
+                    8592
+                  ],
+                  [
+                    4151986122,
+                    0,
+                    0,
+                    8192,
+                    8604,
+                    8600
+                  ],
+                  [
+                    5154430862,
+                    0,
+                    0,
+                    8192,
+                    8632,
+                    8628
+                  ],
+                  [
+                    6156973212,
+                    0,
+                    0,
+                    8192,
+                    8632,
+                    8628
+                  ],
+                  [
+                    7252478679,
+                    1,
+                    0,
+                    8192,
+                    8676,
+                    8672
+                  ],
+                  [
+                    8254925962,
+                    1,
+                    0,
+                    8192,
+                    8684,
+                    8680
+                  ],
+                  [
+                    9257362460,
+                    1,
+                    0,
+                    8192,
+                    8716,
+                    8712
+                  ],
+                  [
+                    10353656663,
+                    2,
+                    0,
+                    8192,
+                    8732,
+                    8728
+                  ],
+                  [
+                    11356044549,
+                    2,
+                    0,
+                    8192,
+                    8772,
+                    8768
+                  ],
+                  [
+                    12358464707,
+                    2,
+                    0,
+                    8192,
+                    8772,
+                    8768
+                  ],
+                  [
+                    13454574724,
+                    2,
+                    0,
+                    8320,
+                    8828,
+                    8824
+                  ],
+                  [
+                    14457016470,
+                    2,
+                    0,
+                    8320,
+                    8828,
+                    8824
+                  ],
+                  [
+                    15459433130,
+                    2,
+                    0,
+                    8448,
+                    8848,
+                    8844
+                  ],
+                  [
+                    16556180322,
+                    2,
+                    0,
+                    8832,
+                    9292,
+                    9288
+                  ],
+                  [
+                    17558580455,
+                    2,
+                    0,
+                    8832,
+                    9388,
+                    9384
+                  ],
+                  [
+                    18561052336,
+                    2,
+                    0,
+                    8832,
+                    9388,
+                    9384
+                  ],
+                  [
+                    19655881305,
+                    3,
+                    0,
+                    8832,
+                    9428,
+                    9424
+                  ],
+                  [
+                    20658339655,
+                    3,
+                    0,
+                    8832,
+                    9428,
+                    9424
+                  ],
+                  [
+                    21660853466,
+                    3,
+                    0,
+                    8960,
+                    9472,
+                    9468
+                  ],
+                  [
+                    22756416590,
+                    4,
+                    0,
+                    8960,
+                    9476,
+                    9472
+                  ],
+                  [
+                    23758879418,
+                    4,
+                    0,
+                    8960,
+                    9500,
+                    9496
+                  ],
+                  [
+                    24761448092,
+                    4,
+                    0,
+                    8960,
+                    9500,
+                    9496
+                  ],
+                  [
+                    25840480370,
+                    5,
+                    0,
+                    8960,
+                    9524,
+                    9520
+                  ],
+                  [
+                    26843067221,
+                    5,
+                    0,
+                    8960,
+                    9524,
+                    9520
+                  ],
+                  [
+                    27845583278,
+                    5,
+                    0,
+                    9088,
+                    9544,
+                    9540
+                  ],
+                  [
+                    28857264103,
+                    5,
+                    0,
+                    9088,
+                    9572,
+                    9568
+                  ],
+                  [
+                    29859768673,
+                    5,
+                    0,
+                    9088,
+                    9592,
+                    9588
+                  ],
+                  [
+                    30862266241,
+                    5,
+                    0,
+                    9088,
+                    9592,
+                    9588
+                  ],
+                  [
+                    31957896742,
+                    5,
+                    0,
+                    9216,
+                    9640,
+                    9636
+                  ],
+                  [
+                    32960318758,
+                    5,
+                    0,
+                    9216,
+                    9660,
+                    9656
+                  ],
+                  [
+                    34056572513,
+                    5,
+                    0,
+                    9216,
+                    9676,
+                    9672
+                  ],
+                  [
+                    35059061148,
+                    6,
+                    0,
+                    9216,
+                    9692,
+                    9688
+                  ],
+                  [
+                    36061560454,
+                    6,
+                    0,
+                    9216,
+                    9692,
+                    9688
+                  ],
+                  [
+                    37156845114,
+                    6,
+                    0,
+                    9344,
+                    9720,
+                    9716
+                  ],
+                  [
+                    38159307949,
+                    6,
+                    0,
+                    9344,
+                    9720,
+                    9716
+                  ],
+                  [
+                    39161776126,
+                    6,
+                    0,
+                    9344,
+                    9732,
+                    9728
+                  ],
+                  [
+                    40257738559,
+                    7,
+                    0,
+                    9344,
+                    9744,
+                    9740
+                  ],
+                  [
+                    41260219417,
+                    7,
+                    0,
+                    9344,
+                    9764,
+                    9760
+                  ],
+                  [
+                    42262785604,
+                    7,
+                    0,
+                    9344,
+                    9764,
+                    9760
+                  ],
+                  [
+                    43358910107,
+                    7,
+                    0,
+                    9344,
+                    9808,
+                    9804
+                  ],
+                  [
+                    44361322584,
+                    7,
+                    0,
+                    9344,
+                    9808,
+                    9804
+                  ],
+                  [
+                    45376362095,
+                    7,
+                    1,
+                    9344,
+                    9864,
+                    9860
+                  ],
+                  [
+                    46460358759,
+                    8,
+                    1,
+                    9472,
+                    9904,
+                    9900
+                  ],
+                  [
+                    47462872332,
+                    8,
+                    1,
+                    9472,
+                    9908,
+                    9904
+                  ],
+                  [
+                    48465456099,
+                    8,
+                    1,
+                    9472,
+                    9908,
+                    9904
+                  ],
+                  [
+                    49560580413,
+                    8,
+                    1,
+                    9472,
+                    9920,
+                    9916
+                  ],
+                  [
+                    50563268319,
+                    8,
+                    1,
+                    9472,
+                    9920,
+                    9916
+                  ],
+                  [
+                    51565793027,
+                    8,
+                    1,
+                    9472,
+                    9936,
+                    9932
+                  ],
+                  [
+                    52568252267,
+                    8,
+                    1,
+                    9472,
+                    9944,
+                    9940
+                  ],
+                  [
+                    53570752177,
+                    9,
+                    1,
+                    9472,
+                    9964,
+                    9960
+                  ],
+                  [
+                    54573231196,
+                    9,
+                    1,
+                    9472,
+                    9964,
+                    9960
+                  ],
+                  [
+                    55575786237,
+                    9,
+                    1,
+                    9472,
+                    10012,
+                    10008
+                  ],
+                  [
+                    56578336371,
+                    9,
+                    1,
+                    9472,
+                    10012,
+                    10008
+                  ],
+                  [
+                    57580866364,
+                    9,
+                    1,
+                    9472,
+                    10016,
+                    10012
+                  ],
+                  [
+                    58661586365,
+                    9,
+                    1,
+                    9600,
+                    10028,
+                    10024
+                  ],
+                  [
+                    59664095933,
+                    9,
+                    1,
+                    9600,
+                    10052,
+                    10048
+                  ],
+                  [
+                    60000473465,
+                    9,
+                    1,
+                    9600,
+                    10052,
+                    10048
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        "detailed": {
+          "startup_ms": {
+            "count": 5,
+            "median": 21.921247,
+            "p95_nearest_rank": 22.049569,
+            "max": 22.049569
+          },
+          "first_ram_ms": {
+            "count": 5,
+            "median": 71.288803,
+            "p95_nearest_rank": 72.626927,
+            "max": 72.626927
+          },
+          "navigation_ms": {
+            "count": 10,
+            "median": 16.9475025,
+            "p95_nearest_rank": 17.173347,
+            "max": 17.173347
+          },
+          "idle": {
+            "seconds": 60.000070198,
+            "cpu_sample_seconds": 60.000389668,
+            "cpu_main_percent_one_core": 0.7833282460341504,
+            "cpu_waited_children_percent_one_core": 0.09999935055755112,
+            "cpu_main_plus_waited_percent_one_core": 0.8833275965917016,
+            "pty_bytes": 6002,
+            "pty_bytes_per_second": 100.0332162978047,
+            "memory_sample_count": 58,
+            "rss_kib": {
+              "count": 58,
+              "median": 10166,
+              "p95_nearest_rank": 10488,
+              "max": 10488
+            },
+            "rollup_rss_kib": {
+              "count": 58,
+              "median": 10460,
+              "p95_nearest_rank": 10780,
+              "max": 10904
+            },
+            "rollup_rss_missing_samples": 0,
+            "pss_kib": {
+              "count": 58,
+              "median": 10456,
+              "p95_nearest_rank": 10776,
+              "max": 10900
+            },
+            "pss_missing_samples": 0,
+            "rss_delta_kib": 884,
+            "sample_columns": [
+              "relative_ns",
+              "main_ticks_delta",
+              "waited_child_ticks_delta",
+              "stat_rss_kib",
+              "rollup_rss_kib",
+              "pss_kib"
+            ],
+            "raw_samples": [
+              [
+                0,
+                0,
+                0,
+                9472,
+                9816,
+                9812
+              ],
+              [
+                1036355039,
+                1,
+                0,
+                9472,
+                9888,
+                9884
+              ],
+              [
+                2136682495,
+                2,
+                0,
+                9472,
+                9952,
+                9948
+              ],
+              [
+                3236630201,
+                2,
+                0,
+                9472,
+                10008,
+                10004
+              ],
+              [
+                4237147895,
+                4,
+                0,
+                9600,
+                10028,
+                10024
+              ],
+              [
+                5320120313,
+                4,
+                0,
+                9600,
+                10096,
+                10092
+              ],
+              [
+                6337355183,
+                6,
+                0,
+                9728,
+                10140,
+                10136
+              ],
+              [
+                7437118663,
+                6,
+                1,
+                9268,
+                9608,
+                9604
+              ],
+              [
+                8437725854,
+                7,
+                1,
+                9396,
+                9680,
+                9676
+              ],
+              [
+                9453752395,
+                8,
+                1,
+                9396,
+                9680,
+                9676
+              ],
+              [
+                10554365070,
+                8,
+                1,
+                9396,
+                9712,
+                9708
+              ],
+              [
+                11555346110,
+                10,
+                1,
+                9396,
+                9724,
+                9720
+              ],
+              [
+                12556282996,
+                10,
+                1,
+                9396,
+                9764,
+                9760
+              ],
+              [
+                13656943421,
+                11,
+                1,
+                9396,
+                9796,
+                9792
+              ],
+              [
+                14657514381,
+                13,
+                1,
+                9524,
+                9832,
+                9828
+              ],
+              [
+                15757802800,
+                13,
+                1,
+                9524,
+                9860,
+                9856
+              ],
+              [
+                16758853888,
+                14,
+                1,
+                9524,
+                9904,
+                9900
+              ],
+              [
+                17859098823,
+                15,
+                1,
+                9652,
+                10100,
+                10096
+              ],
+              [
+                18942496531,
+                16,
+                1,
+                9780,
+                10144,
+                10140
+              ],
+              [
+                20025986153,
+                17,
+                1,
+                9780,
+                10152,
+                10148
+              ],
+              [
+                21044052339,
+                17,
+                1,
+                9780,
+                10172,
+                10168
+              ],
+              [
+                22044709685,
+                19,
+                1,
+                9780,
+                10172,
+                10168
+              ],
+              [
+                23145211265,
+                19,
+                2,
+                9908,
+                10236,
+                10232
+              ],
+              [
+                24245748888,
+                19,
+                2,
+                9908,
+                10240,
+                10236
+              ],
+              [
+                25330537635,
+                21,
+                2,
+                9908,
+                10272,
+                10268
+              ],
+              [
+                26347730704,
+                21,
+                2,
+                9908,
+                10356,
+                10352
+              ],
+              [
+                27448085307,
+                23,
+                2,
+                9908,
+                10432,
+                10428
+              ],
+              [
+                28448921475,
+                23,
+                2,
+                9976,
+                10308,
+                10304
+              ],
+              [
+                29464910622,
+                24,
+                2,
+                9976,
+                10416,
+                10412
+              ],
+              [
+                30565173229,
+                25,
+                3,
+                10360,
+                10580,
+                10576
+              ],
+              [
+                31582783310,
+                26,
+                3,
+                10360,
+                10620,
+                10616
+              ],
+              [
+                32683294922,
+                27,
+                3,
+                10360,
+                10676,
+                10672
+              ],
+              [
+                33783735400,
+                27,
+                3,
+                10360,
+                10736,
+                10732
+              ],
+              [
+                34883950436,
+                29,
+                3,
+                10360,
+                10780,
+                10776
+              ],
+              [
+                35884520722,
+                29,
+                3,
+                10360,
+                10844,
+                10840
+              ],
+              [
+                36951772672,
+                30,
+                3,
+                10360,
+                10904,
+                10900
+              ],
+              [
+                38052205840,
+                31,
+                4,
+                10360,
+                10536,
+                10532
+              ],
+              [
+                39052773617,
+                32,
+                4,
+                10360,
+                10536,
+                10532
+              ],
+              [
+                40086592535,
+                33,
+                4,
+                10360,
+                10540,
+                10536
+              ],
+              [
+                41152965199,
+                34,
+                4,
+                10360,
+                10544,
+                10540
+              ],
+              [
+                42154608869,
+                35,
+                4,
+                10360,
+                10544,
+                10540
+              ],
+              [
+                43255118667,
+                35,
+                4,
+                10360,
+                10548,
+                10544
+              ],
+              [
+                44355289116,
+                37,
+                4,
+                10360,
+                10556,
+                10552
+              ],
+              [
+                45388787713,
+                37,
+                5,
+                10360,
+                10600,
+                10596
+              ],
+              [
+                46455419727,
+                38,
+                5,
+                10360,
+                10636,
+                10632
+              ],
+              [
+                47489588689,
+                38,
+                5,
+                10360,
+                10488,
+                10484
+              ],
+              [
+                48589029458,
+                39,
+                5,
+                10360,
+                10496,
+                10492
+              ],
+              [
+                49657529930,
+                40,
+                5,
+                10360,
+                10512,
+                10508
+              ],
+              [
+                50690840106,
+                40,
+                5,
+                10360,
+                10512,
+                10508
+              ],
+              [
+                51707951646,
+                41,
+                5,
+                10360,
+                10600,
+                10596
+              ],
+              [
+                52808463804,
+                42,
+                5,
+                10488,
+                10644,
+                10640
+              ],
+              [
+                53809396460,
+                42,
+                5,
+                10488,
+                10656,
+                10652
+              ],
+              [
+                54909757001,
+                43,
+                5,
+                10488,
+                10676,
+                10672
+              ],
+              [
+                55959889788,
+                43,
+                5,
+                10488,
+                10728,
+                10724
+              ],
+              [
+                56960930480,
+                45,
+                5,
+                10488,
+                10776,
+                10772
+              ],
+              [
+                58011885434,
+                45,
+                5,
+                10356,
+                10596,
+                10592
+              ],
+              [
+                59062257802,
+                45,
+                5,
+                10356,
+                10596,
+                10592
+              ],
+              [
+                60000389668,
+                47,
+                6,
+                10356,
+                10596,
+                10592
+              ]
+            ]
+          },
+          "samples": [
+            {
+              "startup_ms": 21.649475,
+              "first_ram_ms": 71.899381,
+              "navigation_ms": [
+                16.207375,
+                17.027052
+              ],
+              "idle": null
+            },
+            {
+              "startup_ms": 22.027747,
+              "first_ram_ms": 71.211809,
+              "navigation_ms": [
+                16.867953,
+                17.030422
+              ],
+              "idle": null
+            },
+            {
+              "startup_ms": 22.049569,
+              "first_ram_ms": 71.288803,
+              "navigation_ms": [
+                17.173347,
+                16.12603
+              ],
+              "idle": null
+            },
+            {
+              "startup_ms": 21.623496,
+              "first_ram_ms": 72.626927,
+              "navigation_ms": [
+                16.146095,
+                17.108322
+              ],
+              "idle": null
+            },
+            {
+              "startup_ms": 21.921247,
+              "first_ram_ms": 71.158529,
+              "navigation_ms": [
+                11.140334,
+                17.106373
+              ],
+              "idle": {
+                "seconds": 60.000070198,
+                "cpu_sample_seconds": 60.000389668,
+                "cpu_main_percent_one_core": 0.7833282460341504,
+                "cpu_waited_children_percent_one_core": 0.09999935055755112,
+                "cpu_main_plus_waited_percent_one_core": 0.8833275965917016,
+                "pty_bytes": 6002,
+                "pty_bytes_per_second": 100.0332162978047,
+                "memory_sample_count": 58,
+                "rss_kib": {
+                  "count": 58,
+                  "median": 10166,
+                  "p95_nearest_rank": 10488,
+                  "max": 10488
+                },
+                "rollup_rss_kib": {
+                  "count": 58,
+                  "median": 10460,
+                  "p95_nearest_rank": 10780,
+                  "max": 10904
+                },
+                "rollup_rss_missing_samples": 0,
+                "pss_kib": {
+                  "count": 58,
+                  "median": 10456,
+                  "p95_nearest_rank": 10776,
+                  "max": 10900
+                },
+                "pss_missing_samples": 0,
+                "rss_delta_kib": 884,
+                "sample_columns": [
+                  "relative_ns",
+                  "main_ticks_delta",
+                  "waited_child_ticks_delta",
+                  "stat_rss_kib",
+                  "rollup_rss_kib",
+                  "pss_kib"
+                ],
+                "raw_samples": [
+                  [
+                    0,
+                    0,
+                    0,
+                    9472,
+                    9816,
+                    9812
+                  ],
+                  [
+                    1036355039,
+                    1,
+                    0,
+                    9472,
+                    9888,
+                    9884
+                  ],
+                  [
+                    2136682495,
+                    2,
+                    0,
+                    9472,
+                    9952,
+                    9948
+                  ],
+                  [
+                    3236630201,
+                    2,
+                    0,
+                    9472,
+                    10008,
+                    10004
+                  ],
+                  [
+                    4237147895,
+                    4,
+                    0,
+                    9600,
+                    10028,
+                    10024
+                  ],
+                  [
+                    5320120313,
+                    4,
+                    0,
+                    9600,
+                    10096,
+                    10092
+                  ],
+                  [
+                    6337355183,
+                    6,
+                    0,
+                    9728,
+                    10140,
+                    10136
+                  ],
+                  [
+                    7437118663,
+                    6,
+                    1,
+                    9268,
+                    9608,
+                    9604
+                  ],
+                  [
+                    8437725854,
+                    7,
+                    1,
+                    9396,
+                    9680,
+                    9676
+                  ],
+                  [
+                    9453752395,
+                    8,
+                    1,
+                    9396,
+                    9680,
+                    9676
+                  ],
+                  [
+                    10554365070,
+                    8,
+                    1,
+                    9396,
+                    9712,
+                    9708
+                  ],
+                  [
+                    11555346110,
+                    10,
+                    1,
+                    9396,
+                    9724,
+                    9720
+                  ],
+                  [
+                    12556282996,
+                    10,
+                    1,
+                    9396,
+                    9764,
+                    9760
+                  ],
+                  [
+                    13656943421,
+                    11,
+                    1,
+                    9396,
+                    9796,
+                    9792
+                  ],
+                  [
+                    14657514381,
+                    13,
+                    1,
+                    9524,
+                    9832,
+                    9828
+                  ],
+                  [
+                    15757802800,
+                    13,
+                    1,
+                    9524,
+                    9860,
+                    9856
+                  ],
+                  [
+                    16758853888,
+                    14,
+                    1,
+                    9524,
+                    9904,
+                    9900
+                  ],
+                  [
+                    17859098823,
+                    15,
+                    1,
+                    9652,
+                    10100,
+                    10096
+                  ],
+                  [
+                    18942496531,
+                    16,
+                    1,
+                    9780,
+                    10144,
+                    10140
+                  ],
+                  [
+                    20025986153,
+                    17,
+                    1,
+                    9780,
+                    10152,
+                    10148
+                  ],
+                  [
+                    21044052339,
+                    17,
+                    1,
+                    9780,
+                    10172,
+                    10168
+                  ],
+                  [
+                    22044709685,
+                    19,
+                    1,
+                    9780,
+                    10172,
+                    10168
+                  ],
+                  [
+                    23145211265,
+                    19,
+                    2,
+                    9908,
+                    10236,
+                    10232
+                  ],
+                  [
+                    24245748888,
+                    19,
+                    2,
+                    9908,
+                    10240,
+                    10236
+                  ],
+                  [
+                    25330537635,
+                    21,
+                    2,
+                    9908,
+                    10272,
+                    10268
+                  ],
+                  [
+                    26347730704,
+                    21,
+                    2,
+                    9908,
+                    10356,
+                    10352
+                  ],
+                  [
+                    27448085307,
+                    23,
+                    2,
+                    9908,
+                    10432,
+                    10428
+                  ],
+                  [
+                    28448921475,
+                    23,
+                    2,
+                    9976,
+                    10308,
+                    10304
+                  ],
+                  [
+                    29464910622,
+                    24,
+                    2,
+                    9976,
+                    10416,
+                    10412
+                  ],
+                  [
+                    30565173229,
+                    25,
+                    3,
+                    10360,
+                    10580,
+                    10576
+                  ],
+                  [
+                    31582783310,
+                    26,
+                    3,
+                    10360,
+                    10620,
+                    10616
+                  ],
+                  [
+                    32683294922,
+                    27,
+                    3,
+                    10360,
+                    10676,
+                    10672
+                  ],
+                  [
+                    33783735400,
+                    27,
+                    3,
+                    10360,
+                    10736,
+                    10732
+                  ],
+                  [
+                    34883950436,
+                    29,
+                    3,
+                    10360,
+                    10780,
+                    10776
+                  ],
+                  [
+                    35884520722,
+                    29,
+                    3,
+                    10360,
+                    10844,
+                    10840
+                  ],
+                  [
+                    36951772672,
+                    30,
+                    3,
+                    10360,
+                    10904,
+                    10900
+                  ],
+                  [
+                    38052205840,
+                    31,
+                    4,
+                    10360,
+                    10536,
+                    10532
+                  ],
+                  [
+                    39052773617,
+                    32,
+                    4,
+                    10360,
+                    10536,
+                    10532
+                  ],
+                  [
+                    40086592535,
+                    33,
+                    4,
+                    10360,
+                    10540,
+                    10536
+                  ],
+                  [
+                    41152965199,
+                    34,
+                    4,
+                    10360,
+                    10544,
+                    10540
+                  ],
+                  [
+                    42154608869,
+                    35,
+                    4,
+                    10360,
+                    10544,
+                    10540
+                  ],
+                  [
+                    43255118667,
+                    35,
+                    4,
+                    10360,
+                    10548,
+                    10544
+                  ],
+                  [
+                    44355289116,
+                    37,
+                    4,
+                    10360,
+                    10556,
+                    10552
+                  ],
+                  [
+                    45388787713,
+                    37,
+                    5,
+                    10360,
+                    10600,
+                    10596
+                  ],
+                  [
+                    46455419727,
+                    38,
+                    5,
+                    10360,
+                    10636,
+                    10632
+                  ],
+                  [
+                    47489588689,
+                    38,
+                    5,
+                    10360,
+                    10488,
+                    10484
+                  ],
+                  [
+                    48589029458,
+                    39,
+                    5,
+                    10360,
+                    10496,
+                    10492
+                  ],
+                  [
+                    49657529930,
+                    40,
+                    5,
+                    10360,
+                    10512,
+                    10508
+                  ],
+                  [
+                    50690840106,
+                    40,
+                    5,
+                    10360,
+                    10512,
+                    10508
+                  ],
+                  [
+                    51707951646,
+                    41,
+                    5,
+                    10360,
+                    10600,
+                    10596
+                  ],
+                  [
+                    52808463804,
+                    42,
+                    5,
+                    10488,
+                    10644,
+                    10640
+                  ],
+                  [
+                    53809396460,
+                    42,
+                    5,
+                    10488,
+                    10656,
+                    10652
+                  ],
+                  [
+                    54909757001,
+                    43,
+                    5,
+                    10488,
+                    10676,
+                    10672
+                  ],
+                  [
+                    55959889788,
+                    43,
+                    5,
+                    10488,
+                    10728,
+                    10724
+                  ],
+                  [
+                    56960930480,
+                    45,
+                    5,
+                    10488,
+                    10776,
+                    10772
+                  ],
+                  [
+                    58011885434,
+                    45,
+                    5,
+                    10356,
+                    10596,
+                    10592
+                  ],
+                  [
+                    59062257802,
+                    45,
+                    5,
+                    10356,
+                    10596,
+                    10592
+                  ],
+                  [
+                    60000389668,
+                    47,
+                    6,
+                    10356,
+                    10596,
+                    10592
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

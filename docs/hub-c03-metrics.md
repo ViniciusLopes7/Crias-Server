@@ -396,3 +396,32 @@ CI 45895181070 (d423107), 15 jobs aprovados; Hub 140167190307, QEMU 140167190264
 ### C03.8c — rastreabilidade do benchmark (schema 2)
 
 A oscilação observada em outro kernel impede declarar cumprimento estável da referência de CPU. O harness passa a preservar série amostral compacta (tempo monotônico relativo em ns, deltas cumulativos de ticks próprios/filhos aguardados, RSS stat, RSS/PSS smaps_rollup quando legíveis), sem PID/caminhos/logs de processo. CPU usa duração entre leituras stat, separada da duração da janela PTY; rejeita timestamps/contadores não monotônicos. RSS do mesmo rollup permite comparar PSS sem confundir interfaces. Dados opcionais ausentes são nulos e contados; schema 1 histórico permanece intacto. Mesmas cinco sessões/modo, 15s warmup e 60s idle por modo; sem novos jobs ou artefatos. Teste sintético verifica parsing, ausência, duplicata, resumos, duração, ticks e rejeição. Custo do log aumenta, duração de coleta não; não representa CPU de toda árvore, não cria prova física nem estabilidade longa. Alteração apenas em teste/CI/docs, ainda não executada no candidato. Próxima análise deve recalcular resultados diretamente das séries; meta de CPU e M2 permanecem abertos.
+
+### C03.8c — validação e contra-auditoria das séries
+
+CI 45896695284 (e8c314f), 15 jobs aprovados, release ignorada; Hub 140172246100, QEMU 140172246051. Teste sintético de evidência passou e scanner sem vulnerabilidades reportadas. Relatórios e recálculo independente em [pty-e8c314f.json](evidence/hub-c03/pty-e8c314f.json). 238 pontos de memória/contadores em quatro janelas de ~60s: 61 estático, 60 econômico, 59 balanceado, 58 detalhado. Conferidos timestamps relativos, monotonicidade dos ticks, duração CPU, CPU combinada, contagens, mediana/p95/máximo RSS stat, RSS rollup e PSS, ausências e delta RSS; todos os resumos conferem. Nenhuma amostra PSS maior que RSS do mesmo rollup. Dados em KiB; PSS principal não é PSS da árvore. CPU combinada estático/econômico/balanceado/detalhado 0/0,167/0,533/0,883%; RSS medianas 6016/9088/9728/10166 KiB; RSS rollup medianas 6492/9592/10180/10460 KiB; PSS medianas 6488/9588/10176/10456 KiB; navegação p95 17,347/17,298/17,243/17,173 ms. Kernel 6.8.0-1070-azure; segunda observação consecutiva balanceado ligeiramente acima de 0,5%, portanto variação não explicada apenas pela troca de kernel. Não atribuir causalidade a mudanças documentais/teste ou interpretar deltas RSS de curto prazo como vazamento.
+
+## Gate de saída C03 / M2 — revisão de prontidão
+
+Candidato funcional experimental e somente leitura: e8c314f com CI integral aprovado; a revisão documental posterior não é a mesma execução. Escopo técnico implementado; não confundir com homologação M2 ou produção.
+
+- [x] Coletores nativos limitados, estados e unidades explícitos, sem telemetria fictícia; CPU/RAM, swap, clock, hwmon/RPM, térmica, energia, bateria, rede, disco e espaço.
+- [x] Workers independentes, intervalos por perfil, snapshot/freshness e histórico limitado, cancelamento cooperativo, teste com I/O bloqueado; context não interrompe syscall presa no kernel.
+- [x] Interface opt-in, header, navegação, perfis, histórico e capacidades; alertas térmicos passivos somente com limites nativos válidos; nenhum controle administrativo habilitado.
+- [x] Testes Go, race, PTY, compatibilidade legado, QEMU e coletor systemd real não-root; scanner sem ocorrências reportadas. QEMU não constitui homologação de todos os sensores físicos nem do cliente SSH.
+- [x] Ganhos isolados verificados para histórico e largura ASCII; coalescência mantida por resultados observacionais. Evidências por SHA preservadas e contra-auditoria de potência, continuidade CPU e benchmark bruto validada.
+- [x] RAM, latência local por marcador, startup e binário dentro das metas desejáveis nas observações; nenhum daemon permanente novo. Não substituir o teste de frame completo, impacto em jogo ou memória agregada.
+- [ ] CPU: validar repetidamente em host controlado; referência <=0,5% de um núcleo permanece para comparação, balanceado oscila próximo dela, detalhado supera. Sem redefinir limites ou cadências; perfil detalhado não é padrão. Se persistir, investigar por profiling isolado, somente em ambiente descartável, antes de nova otimização. Não aprovar desempenho global por microbenchmark.
+- [ ] Gate anterior à passagem para M3/C04: baseline física Bash/Gum e Go no host autorizado, versão instalada e hash, SSH real e contraprovas negativas do harness de baseline. Reutilizar [protocolo C00](hub-c00-gum-protocol.md), sem acesso/credenciais inventados ou alterações administrativas.
+- [ ] C10/C11: estabilidade prolongada, custo agregado/filhos efêmeros, impacto em jogo/Chunky, rollback e homologação física dos controles antes de habilitá-los. Rebuild frio com toolchain fixada no gate de distribuição.
+- [ ] Decisão explícita de saída M2 após verificar gates aplicáveis; integração #45→#46→#47→#48 somente com autorização, sem release ou alteração do ponto de entrada.
+
+### Próxima validação controlada
+
+No host Linux autorizado, sem root, usar checkout confiável e binário experimental separado, não substituir o Hub instalado. Fixar SHA/versões e registrar condições do host, temperatura e carga. Rodar baseline C00 conforme protocolo existente e o harness Go com 30 startups e idle de 600 s por modo (comando abaixo, fora de CI). Repetir em condições equivalentes, alternar ordem e manter controle sem Hub; registrar CPU própria/filhos, RSS/PSS, bytes PTY e latência, não inferir tráfego SSH a partir de PTY. Não iniciar/reiniciar serviço nem mudar mundo/configuração para medir. Testar SSH com sessão autorizada, resize, Q/Esc, Ctrl+C e desconexão, verificando restauração de TTY. Para CPU total da árvore e carga real usar protocolo C10; este harness não mede filhos ainda vivos no fim, navegação prolongada ou jogo. Preservar JSON sanitizado por SHA e não compartilhar segredos/endereços privados.
+
+```bash
+python3 tests/hub-c01-pty-test.py /caminho/para/crias-tui-next --compare-telemetry --samples 30 --idle-seconds 600 --warmup-seconds 15
+```
+
+Sem acesso autorizado a host físico ou sessão SSH nesta execução; itens externos explicitamente bloqueados. Próxima ação: contraprovas negativas do harness e coleta controlada, sem abrir novas funcionalidades C04 ou alterar metas. M2 permanece aberto.
