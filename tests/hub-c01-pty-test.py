@@ -320,21 +320,41 @@ def benchmark(binary: Path, count: int, idle_seconds: float) -> dict:
 
 # C03 measurements preserve the C01 report and separately compare modes.
 # Linux stat accounts for waited children, not children still running.
+def parse_rollup(text: str) -> tuple[int | None, int | None]:
+    values = {"Rss:": None, "Pss:": None}
+    seen = set()
+    for line in text.splitlines():
+        fields = line.split()
+        if not fields or fields[0] not in values:
+            continue
+        key = fields[0]
+        if key in seen or len(fields) != 3 or fields[2] != "kB":
+            values[key] = None
+        else:
+            try:
+                value = int(fields[1])
+                values[key] = value if value >= 0 else None
+            except ValueError:
+                values[key] = None
+        seen.add(key)
+    return values["Rss:"], values["Pss:"]
+
+
 def telemetry_process(pid: int) -> dict:
     raw = Path(f"/proc/{pid}/stat").read_text()
+    stamp_ns = time.monotonic_ns()
     fields = raw[raw.rfind(")")+2:].split()
-    pss = None
+    rollup_rss, pss = None, None
     try:
-        for line in Path(f"/proc/{pid}/smaps_rollup").read_text().splitlines():
-            if line.startswith("Pss:"):
-                pss = int(line.split()[1])
-                break
+        rollup_rss, pss = parse_rollup(Path(f"/proc/{pid}/smaps_rollup").read_text())
     except OSError:
         pass
     return {
+        "stamp_ns": stamp_ns,
         "main_ticks": int(fields[11])+int(fields[12]),
         "waited_child_ticks": int(fields[13])+int(fields[14]),
         "rss_kib": int(fields[21])*os.sysconf("SC_PAGE_SIZE")//1024,
+        "rollup_rss_kib": rollup_rss,
         "pss_kib": pss,
     }
 
@@ -379,24 +399,47 @@ def drain_window(session: Session, seconds: float, sample_memory: bool) -> dict:
     elapsed = time.monotonic()-started
     final = telemetry_process(session.pid)
     samples.append(final)
-    hz = os.sysconf("SC_CLK_TCK")
-    pss = [s["pss_kib"] for s in samples if s["pss_kib"] is not None]
+    return idle_report(samples, elapsed, byte_count, os.sysconf("SC_CLK_TCK"))
+
+
+def idle_report(samples: list[dict], elapsed: float, byte_count: int, hz: int) -> dict:
+    initial, final = samples[0], samples[-1]
+    origin = initial["stamp_ns"]
+    cpu_seconds = (final["stamp_ns"]-origin)/1e9
+    if elapsed <= 0 or cpu_seconds <= 0 or hz <= 0:
+        raise RuntimeError("invalid measurement duration")
+    for a, b in zip(samples, samples[1:]):
+        if (b["stamp_ns"] <= a["stamp_ns"] or b["main_ticks"] < a["main_ticks"]
+                or b["waited_child_ticks"] < a["waited_child_ticks"]):
+            raise RuntimeError("non-monotonic measurement counters")
     main = final["main_ticks"]-initial["main_ticks"]
     children = final["waited_child_ticks"]-initial["waited_child_ticks"]
-    if main < 0 or children < 0:
-        raise RuntimeError("invalid CPU counters")
+    pss = [s["pss_kib"] for s in samples if s["pss_kib"] is not None]
+    rollup = [s["rollup_rss_kib"] for s in samples if s["rollup_rss_kib"] is not None]
+    # Relative time and cumulative tick deltas; no process IDs or paths.
+    raw_samples = [
+        [s["stamp_ns"]-origin, s["main_ticks"]-initial["main_ticks"],
+         s["waited_child_ticks"]-initial["waited_child_ticks"], s["rss_kib"],
+         s["rollup_rss_kib"], s["pss_kib"]] for s in samples
+    ]
     return {
         "seconds": elapsed,
-        "cpu_main_percent_one_core": 100*main/hz/elapsed,
-        "cpu_waited_children_percent_one_core": 100*children/hz/elapsed,
-        "cpu_main_plus_waited_percent_one_core": 100*(main+children)/hz/elapsed,
+        "cpu_sample_seconds": cpu_seconds,
+        "cpu_main_percent_one_core": 100*main/hz/cpu_seconds,
+        "cpu_waited_children_percent_one_core": 100*children/hz/cpu_seconds,
+        "cpu_main_plus_waited_percent_one_core": 100*(main+children)/hz/cpu_seconds,
         "pty_bytes": byte_count,
         "pty_bytes_per_second": byte_count/elapsed,
         "memory_sample_count": len(samples),
         "rss_kib": summary([s["rss_kib"] for s in samples]),
+        "rollup_rss_kib": summary(rollup) if rollup else None,
+        "rollup_rss_missing_samples": len(samples)-len(rollup),
         "pss_kib": summary(pss) if pss else None,
         "pss_missing_samples": len(samples)-len(pss),
         "rss_delta_kib": final["rss_kib"]-initial["rss_kib"],
+        "sample_columns": ["relative_ns", "main_ticks_delta", "waited_child_ticks_delta",
+                           "stat_rss_kib", "rollup_rss_kib", "pss_kib"],
+        "raw_samples": raw_samples,
     }
 
 
@@ -417,7 +460,8 @@ def compare_telemetry(binary: Path, count: int, idle_seconds: float, warmup_seco
                 # Validate short sessions for every mode before spending
                 # runner minutes on the longer idle measurements.
                 if trial == count-1:
-                    drain_window(session, warmup_seconds, False)
+                    if warmup_seconds > 0:
+                        drain_window(session, warmup_seconds, False)
                     idle = drain_window(session, idle_seconds, True)
                 # Observe destination-specific body content, not labels
                 # shared by both tabs or already present in the tab bar.
@@ -430,14 +474,14 @@ def compare_telemetry(binary: Path, count: int, idle_seconds: float, warmup_seco
                 results[mode].append({"startup_ms": startup, "first_ram_ms": ready_ms,
                                       "navigation_ms": navigation, "idle": idle})
     return {
-        "schema": 1, "mode": "hub-telemetry-comparison",
+        "schema": 2, "mode": "hub-telemetry-comparison",
         "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
         "binary_bytes": binary.stat().st_size,
         "kernel": os.uname().release, "architecture": os.uname().machine,
         "cpu_count": os.cpu_count(), "clock_ticks_per_second": os.sysconf("SC_CLK_TCK"),
         "terminal": "controlling PTY 120x40 xterm-256color NO_COLOR",
         "warmup_seconds": warmup_seconds, "idle_seconds_requested": idle_seconds,
-        "limitations": "Startup is initial static/default-balanced render; other profiles are selected after startup. Navigation observes markers, not full frames. Idle has one observation per mode, main process RSS/PSS only, waited-child CPU excludes running children at boundaries. No game load, physical host, SSH or long-run leak conclusion. Shared runner; observational, no absolute performance gate.",
+        "limitations": "Startup is initial static/default-balanced render; other profiles are selected after startup. Navigation observes markers, not full frames. Idle has one observation per mode, CPU interval uses timestamps at stat reads, memory samples include stat RSS and optional rollup RSS/PSS for the main process only; waited-child CPU excludes running children at boundaries. No game load, physical host, SSH or long-run leak conclusion. Shared runner; observational, no absolute performance gate.",
         "modes": {
             mode: {
                 "startup_ms": summary([r["startup_ms"] for r in rows]),
