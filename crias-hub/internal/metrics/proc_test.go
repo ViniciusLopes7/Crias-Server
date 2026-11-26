@@ -39,6 +39,7 @@ func TestCPUDeltaAndRecovery(t *testing.T) {
 		if got.State != tc.state || math.Abs(got.Value-tc.value) > 0.0001 || got.At != at || got.Unit != Percent {
 			t.Fatalf("CPU %q: %+v", tc.text, got)
 		}
+		at = at.Add(time.Second)
 	}
 	if got := c.Read(deniedFS{}, at); got.State != Permission {
 		t.Fatal(got)
@@ -91,8 +92,33 @@ func TestCPUIndividualCounterRegression(t *testing.T) {
 	var c CPUCollector
 	at := time.Unix(100, 0)
 	c.Read(fixture("stat", "cpu 100 0 50 100 10 0 0 0\n"), at)
-	got := c.Read(fixture("stat", "cpu 200 0 40 150 10 0 0 0\n"), at)
+	got := c.Read(fixture("stat", "cpu 200 0 40 150 10 0 0 0\n"), at.Add(time.Second))
 	if got.State != Invalid {
 		t.Fatal("regression masked by aggregate", got)
+	}
+}
+
+func TestCPUTimeDiscontinuity(t *testing.T) {
+	var c CPUCollector
+	start := time.Unix(100, 0)
+	for _, tc := range []struct {
+		offset time.Duration
+		text   string
+		state  Availability
+		value  float64
+	}{
+		{0, "cpu 100 0 0 100\n", Waiting, 0},
+		{12 * time.Second, "cpu 110 0 0 110\n", Available, 50},
+		{24*time.Second + time.Nanosecond, "cpu 120 0 0 120\n", Stale, 0},
+		{25 * time.Second, "cpu 130 0 0 130\n", Available, 50},
+		{25 * time.Second, "cpu 140 0 0 140\n", Invalid, 0},
+		{24 * time.Second, "cpu 150 0 0 150\n", Invalid, 0},
+		{26 * time.Second, "cpu 160 0 0 160\n", Available, 50},
+	} {
+		at := start.Add(tc.offset)
+		got := c.Read(fixture("stat", tc.text), at)
+		if got.State != tc.state || got.Value != tc.value || !got.At.Equal(at) {
+			t.Fatalf("offset %v: got %+v, want %s %v", tc.offset, got, tc.state, tc.value)
+		}
 	}
 }

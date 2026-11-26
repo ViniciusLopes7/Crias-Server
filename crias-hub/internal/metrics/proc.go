@@ -74,8 +74,9 @@ func parseCPU(text string) (cpuCounters, bool) {
 // CPUCollector owns its preceding observation. One caller at a time;
 // scheduling and cancellation will be owned by the C03 sampling engine.
 type CPUCollector struct {
-	previous cpuCounters
-	have     bool
+	previous   cpuCounters
+	previousAt time.Time
+	have       bool
 }
 
 func (c *CPUCollector) Read(proc fs.FS, at time.Time) Sample {
@@ -90,8 +91,8 @@ func (c *CPUCollector) Read(proc fs.FS, at time.Time) Sample {
 		c.have = false
 		return missing(Invalid, Percent, source, scope, at)
 	}
-	previous, have := c.previous, c.have
-	c.previous, c.have = next, true
+	previous, previousAt, have := c.previous, c.previousAt, c.have
+	c.previous, c.previousAt, c.have = next, at, true
 	if !have {
 		return missing(Waiting, Percent, source, scope, at)
 	}
@@ -102,6 +103,15 @@ func (c *CPUCollector) Read(proc fs.FS, at time.Time) Sample {
 	}
 	if next.total < previous.total || next.idle < previous.idle {
 		return missing(Invalid, Percent, source, scope, at)
+	}
+	// Never label a delta spanning a suspended or stalled sampler as a
+	// current observation. The new baseline allows recovery next cycle.
+	elapsed := at.Sub(previousAt)
+	if elapsed <= 0 {
+		return missing(Invalid, Percent, source, scope, at)
+	}
+	if elapsed > 12*time.Second {
+		return missing(Stale, Percent, source, scope, at)
 	}
 	total, idle := next.total-previous.total, next.idle-previous.idle
 	if idle > total {
