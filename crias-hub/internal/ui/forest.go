@@ -227,6 +227,7 @@ func Render(s app.State, opt Options) string {
 			lines = append(lines, line{"Host e métricas: indisponíveis (C03)", muted})
 		} else {
 			lines = append(lines, line{hostSummary(*opt.Telemetry), normal})
+			lines = append(lines, hardwareHeader(*opt.Telemetry)...)
 		}
 		lines = append(lines, tabs(s.Tab, width)...)
 		lines = append(lines, line{strings.Repeat("-", min(width, 100)), muted})

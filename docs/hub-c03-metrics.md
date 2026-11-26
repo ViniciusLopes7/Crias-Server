@@ -291,3 +291,7 @@ Race/build/PTY/scanner não executados nesse run. Revisão textual das
 importações dos novos arquivos; compilação local do módulo completo
 indisponível (ambiente Go 1.23.2, sem dependências do módulo Go 1.27.4).
 Novo CI obrigatório. Sem alterar comportamento, testes ou gates.
+
+### C03.4b.3 — indicadores de hardware no header
+
+O CI 45757244103 de 903d6ef concluiu com 15 jobs aprovados (Hub, race/PTY, QEMU inclusive), release ignorado. O cabeçalho em tamanho integral recebe duas linhas de telemetria: maior temperatura CPU observada dentre sensores conhecidos da família selecionada (Tdie, pacote coretemp ou Tctl explicitamente distinguido), percentual de uma única bateria não declarada ausente e potência instantânea ou média de um único domínio package powercap. Não soma domínios, não agrega baterias e não apresenta potência do pacote como consumo total do host. Estado de grupo indisponível/obsoleto bloqueia a apresentação dos valores. Compacto e overlays mantêm apresentação anterior para preservar navegação. Sem escrita ou nova coleta; testes de escopo, dados obsoletos, múltiplos dispositivos e layout adicionados. Novo CI e validação física pendentes.
