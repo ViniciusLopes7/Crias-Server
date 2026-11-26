@@ -146,6 +146,8 @@ type Sensor struct {
 	Driver string
 	Label  string
 	Value  Sample
+	Limits ThermalLimits
+	Alert  ThermalAlert
 }
 
 type Sensors struct {
@@ -228,7 +230,18 @@ func ReadSensors(sys fs.FS, at time.Time) Sensors {
 					v.State = Invalid
 				}
 			}
-			result.Values = append(result.Values, Sensor{ID: id + "/" + prefix, Driver: driver, Label: label, Value: v})
+			sensor := Sensor{ID: id + "/" + prefix, Driver: driver, Label: label, Value: v}
+			if temp && ds == Available && celsiusDriver(driver) {
+				limit := func(suffix string) Sample {
+					p := dir + "/" + prefix + suffix
+					if !names[prefix+suffix] {
+						return missing(Unavailable, Celsius, "/sys/"+p, scope, at)
+					}
+					return sysNumber(sys, p, scope, Celsius, 1000, -273.15, 1000, at)
+				}
+				sensor.Limits = ThermalLimits{Max: limit("_max"), Critical: limit("_crit"), MaxReset: limit("_max_hyst"), CriticalReset: limit("_crit_hyst")}
+			}
+			result.Values = append(result.Values, sensor)
 		}
 	}
 	if len(result.Values) == 0 && result.State == Available {

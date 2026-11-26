@@ -91,6 +91,7 @@ func startReading[T any](ctx context.Context, wg *sync.WaitGroup, e *Engine, bas
 func (e *Engine) startHardware(ctx context.Context, wg *sync.WaitGroup, proc, sys fs.FS, space func(time.Time) Capacity) {
 	h := &e.latest.Hardware
 	var power PowerCollector
+	var alerts ThermalTracker
 	var network TransferCollector
 	disk := TransferCollector{Disk: true}
 	startReading(ctx, wg, e, fastCadence, &h.Frequencies, func(at time.Time) (Frequencies, Availability) {
@@ -98,7 +99,7 @@ func (e *Engine) startHardware(ctx context.Context, wg *sync.WaitGroup, proc, sy
 		return v, v.State
 	})
 	startReading(ctx, wg, e, sensorCadence, &h.Sensors, func(at time.Time) (Sensors, Availability) {
-		v := ReadSensors(sys, at)
+		v := alerts.Update(ReadSensors(sys, at), at)
 		return v, v.State
 	})
 	startReading(ctx, wg, e, sensorCadence, &h.Thermal, func(at time.Time) (Sensors, Availability) {

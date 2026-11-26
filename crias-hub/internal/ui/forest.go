@@ -194,7 +194,11 @@ func Render(s app.State, opt Options) string {
 	if opt.Telemetry != nil {
 		version = "C03"
 	}
-	lines := []line{{"CRIAS HUB | " + version, heading}}
+	title := "CRIAS HUB | " + version
+	if opt.Telemetry != nil && width >= 59 && height >= 20 && s.Overlay == app.OverlayNone {
+		title += " | " + thermalSummary(opt.Telemetry.Hardware.Sensors)
+	}
+	lines := []line{{title, heading}}
 	compact := width < 59 || height < 20
 	wide := s.ContextVisible()
 	footer := "1-6 / ← → / Tab | F6: foco | F2: lateral | /: busca | ?: ajuda | Q: sair"

@@ -124,6 +124,9 @@ func hardwareRows(s metrics.Snapshot) []line {
 		if group(g.name, g.data.State, len(g.data.Data.Values)) {
 			for _, v := range g.data.Data.Values {
 				add(deviceLabel(v.ID+" "+v.Driver+" "+v.Label) + ": " + measurement(v.Value))
+				if v.Alert != "" && v.Alert != metrics.ThermalUnknown {
+					add("Térmico: " + thermalLabel(v.Alert) + " | máx " + measurement(v.Limits.Max) + " | crít " + measurement(v.Limits.Critical))
+				}
 			}
 		}
 	}
