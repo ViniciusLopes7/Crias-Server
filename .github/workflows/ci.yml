@@ -446,6 +446,11 @@ jobs:
         working-directory: crias-hub
         run: go test -mod=readonly -run '^$' -bench '^BenchmarkHistoryWindow$' -benchtime=200ms -count=3 ./internal/metrics
 
+      - name: C03 terminal width microbenchmark
+        if: github.head_ref == 'feat/hub-go-c03-metrics' || github.event_name == 'workflow_dispatch'
+        working-directory: crias-hub
+        run: go test -mod=readonly -run '^$' -bench '^BenchmarkFitWidth$' -benchtime=200ms -count=3 ./internal/ui
+
       - name: C03 telemetry comparison (observational)
         if: github.head_ref == 'feat/hub-go-c03-metrics' || github.event_name == 'workflow_dispatch'
         working-directory: crias-hub

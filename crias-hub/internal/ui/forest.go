@@ -48,11 +48,26 @@ var transliterate = strings.NewReplacer(
 	"°", " graus ", "—", "-", "·", "|", "←", "<", "→", ">", "↑", "^", "↓", "v",
 )
 
+// printableASCII is deliberately restricted to single-column printable
+// bytes. Control characters and every Unicode string use the existing
+// terminal width implementation.
+func printableASCII(text string) bool {
+	for i := 0; i < len(text); i++ {
+		if text[i] < 32 || text[i] > 126 {
+			return false
+		}
+	}
+	return true
+}
+
 // fit is used for built-in labels and bounded validated search input. It measures
 // display columns before adding ANSI styling, never slices UTF-8 by bytes.
 func fit(text string, width int) string {
 	if width <= 0 {
 		return ""
+	}
+	if printableASCII(text) {
+		return text[:min(len(text), width)]
 	}
 	if lipgloss.Width(text) <= width {
 		return text
