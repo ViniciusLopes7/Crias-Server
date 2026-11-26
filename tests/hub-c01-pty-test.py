@@ -354,6 +354,12 @@ def drain_window(session: Session, seconds: float, sample_memory: bool) -> dict:
     # Bound the captured transcript independently of window duration.
     # The final exit still checks the alternate-screen leave sequence.
     session.output = b""
+    # Discard already queued bytes at the boundary, with a bounded drain.
+    for _ in range(64):
+        session.read(0)
+        if not session.output:
+            break
+        session.output = b""
     initial = telemetry_process(session.pid)
     samples = [initial]
     byte_count = 0
@@ -381,7 +387,10 @@ def drain_window(session: Session, seconds: float, sample_memory: bool) -> dict:
         "seconds": elapsed,
         "cpu_main_percent_one_core": 100*main/hz/elapsed,
         "cpu_waited_children_percent_one_core": 100*children/hz/elapsed,
+        "cpu_main_plus_waited_percent_one_core": 100*(main+children)/hz/elapsed,
         "pty_bytes": byte_count,
+        "pty_bytes_per_second": byte_count/elapsed,
+        "memory_sample_count": len(samples),
         "rss_kib": summary([s["rss_kib"] for s in samples]),
         "pss_kib": summary(pss) if pss else None,
         "pss_missing_samples": len(samples)-len(pss),
@@ -406,8 +415,12 @@ def compare_telemetry(binary: Path, count: int, idle_seconds: float, warmup_seco
                 if trial == 0:
                     drain_window(session, warmup_seconds, False)
                     idle = drain_window(session, idle_seconds, True)
-                navigation = [session.key(b"2", b"Recursos ainda nao conectados."),
-                              session.key(b"1", b"Area: Visao geral")]
+                # Observe destination-specific body content, not labels
+                # shared by both tabs or already present in the tab bar.
+                overview = (b"Painel inicial e estado do host" if mode == "static"
+                            else b"Memoria do host")
+                navigation = [session.key(b"2", b"Minecraft e Terraria"),
+                              session.key(b"1", overview)]
                 os.write(session.master, b"q")
                 session.finish((0,))
                 results[mode].append({"startup_ms": startup, "first_ram_ms": ready_ms,
