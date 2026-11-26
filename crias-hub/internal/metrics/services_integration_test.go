@@ -14,7 +14,7 @@ func TestRealSystemdReadOnly(t *testing.T) {
 	if want == "" {
 		t.Skip("requires disposable Arch/systemd fixture")
 	}
-	if os.Geteuid() == 0 || (want != "active" && want != "inactive") {
+	if os.Geteuid() == 0 || (want != "active" && want != "inactive" && want != "failed") {
 		t.Fatal("invalid integration fixture")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
@@ -31,7 +31,7 @@ func TestRealSystemdReadOnly(t *testing.T) {
 		active string
 		sub    string
 	}{
-		{"minecraft.service", want, map[string]string{"active": "running", "inactive": "dead"}[want]},
+		{"minecraft.service", want, map[string]string{"active": "running", "inactive": "dead", "failed": "failed"}[want]},
 		{"sshd.service", "active", "running"},
 	} {
 		found := false

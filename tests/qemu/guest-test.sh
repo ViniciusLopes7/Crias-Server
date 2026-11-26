@@ -162,7 +162,20 @@ fi
 grep -q "completamente parado" /tmp/crias-memory-active-test.log
 systemctl stop minecraft.service
 ! systemctl is-active --quiet minecraft.service
-run_hub_systemd_check inactive
+# The synthetic JVM may exit with a failure status on SIGINT. A stopped
+# service can legitimately be failed, not inactive. Independently verify
+# the manager state and that no main process remains; never clear failure.
+if [ -n "$hub_systemd_test" ]; then
+    stopped_state="$(systemctl show -p ActiveState --value minecraft.service)"
+    stopped_sub="$(systemctl show -p SubState --value minecraft.service)"
+    case "$stopped_state/$stopped_sub" in
+        inactive/dead|failed/failed) ;;
+        *) echo "FAIL: unexpected stopped unit state $stopped_state/$stopped_sub" >&2; exit 1 ;;
+    esac
+    test "$(systemctl show -p MainPID --value minecraft.service)" = 0
+    systemctl show -p ActiveState -p SubState -p Result -p ExecMainCode -p ExecMainStatus -p MainPID minecraft.service
+    run_hub_systemd_check "$stopped_state"
+fi
 # Valide o limite persistente de memoria usando systemd real e drop-in.
 write_minecraft_systemd_memory_limit 640
 [ "$(systemctl show -p MemoryMax --value minecraft.service)" = 671088640 ]
