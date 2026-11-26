@@ -85,7 +85,17 @@ vm_ready=true
 ssh "${ssh_opts[@]}" ci@127.0.0.1 'sudo cloud-init status --wait'
 tar -C "$root" --exclude=.git --exclude=crias-qemu-artifacts -czf "$tmp/repo.tar.gz" .
 scp -q -i "$tmp/key" -P 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$tmp/repo.tar.gz" ci@127.0.0.1:/tmp/crias-repo.tar.gz
-ssh "${ssh_opts[@]}" ci@127.0.0.1 'mkdir -p /tmp/crias-repo && tar -xzf /tmp/crias-repo.tar.gz -C /tmp/crias-repo && sudo bash /tmp/crias-repo/tests/qemu/guest-test.sh /tmp/crias-repo' 2>&1 | tee "$log_dir/guest.log"
+if [ -n "${CRIAS_HUB_SYSTEMD_TEST:-}" ]; then
+    test -x "$CRIAS_HUB_SYSTEMD_TEST"
+    scp -q -i "$tmp/key" -P 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$CRIAS_HUB_SYSTEMD_TEST" ci@127.0.0.1:/tmp/hub-systemd.test
+    expected_sha="$(sha256sum "$CRIAS_HUB_SYSTEMD_TEST" | cut -d ' ' -f 1)"
+    guest_sha="$(ssh "${ssh_opts[@]}" ci@127.0.0.1 "sha256sum /tmp/hub-systemd.test" | cut -d ' ' -f 1)"
+    test "$expected_sha" = "$guest_sha"
+    ssh "${ssh_opts[@]}" ci@127.0.0.1 'mkdir -p /tmp/crias-repo && tar -xzf /tmp/crias-repo.tar.gz -C /tmp/crias-repo && sudo bash /tmp/crias-repo/tests/qemu/guest-test.sh /tmp/crias-repo /tmp/hub-systemd.test' 2>&1 | tee "$log_dir/guest.log"
+else
+    echo 'NOTE: local QEMU run without compiled Hub integration test'
+    ssh "${ssh_opts[@]}" ci@127.0.0.1 'mkdir -p /tmp/crias-repo && tar -xzf /tmp/crias-repo.tar.gz -C /tmp/crias-repo && sudo bash /tmp/crias-repo/tests/qemu/guest-test.sh /tmp/crias-repo' 2>&1 | tee "$log_dir/guest.log"
+fi
 # Artefatos de loader sao parte do gate: nao aceitar CI verde quando a
 # politica SSH/sudo torna os WARN do Forge invisiveis para o operador.
 if ! ssh "${ssh_opts[@]}" ci@127.0.0.1 \

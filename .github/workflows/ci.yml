@@ -335,7 +335,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 qemu-utils ovmf cloud-image-utils
           if [ -e /dev/kvm ]; then sudo chmod a+rw /dev/kvm; fi
+      - name: Set up Go for Hub integration test
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: crias-hub/go.sum
+      - name: Build read-only Hub systemd integration test
+        working-directory: crias-hub
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go test -mod=readonly -c -trimpath -o "$RUNNER_TEMP/hub-systemd.test" ./internal/metrics
       - name: Boot and test Arch VM
+        env:
+          CRIAS_HUB_SYSTEMD_TEST: ${{ runner.temp }}/hub-systemd.test
         run: bash tests/qemu/run-vm.sh
       - name: Preserve QEMU diagnostics
         if: always()
