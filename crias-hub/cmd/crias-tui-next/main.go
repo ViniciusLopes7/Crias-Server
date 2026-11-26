@@ -38,17 +38,10 @@ func (m model) waitMetrics() tea.Cmd {
 		return nil
 	}
 	return func() tea.Msg {
-		// A bounded freshness wakeup also covers the case where every
-		// collector is blocked. Only one wait is scheduled at a time.
-		timer := time.NewTimer(2 * time.Second)
-		defer timer.Stop()
-		select {
-		case <-m.ctx.Done():
+		// A single bounded wait batches independent collector notifications.
+		// The freshness wakeup still covers blocked collectors.
+		if !awaitMetrics(m.ctx, m.engine.Done(), m.engine.Changed(), metricsFreshnessWake, metricsBatchWindow) {
 			return nil
-		case <-m.engine.Done():
-			return nil
-		case <-m.engine.Changed():
-		case <-timer.C:
 		}
 		return metricsUpdate{}
 	}
