@@ -317,3 +317,7 @@ O job Hub de dba2f56 (run 45770645206, job 139742181545) foi aprovado; QEMU aind
 ### C03.5b — PTY com telemetria
 
 Amplia o harness existente, sem dependência nova: P alterna perfil, ajuda suspende P, H altera janela e a navegação confirma o texto em nova renderização, Enter abre capacidades, seta navega para página 2 e resize compacto/full confirma a página preservada; Esc e aba Sistema, Q e restauração de termios/alternate screen. O marcador de dígito isolado apenas sincroniza a leitura; a confirmação é o título completo após resize. Teste preparado, execução CI pendente. Não substitui teste SSH real nem benchmark com coleta ativa.
+
+### C03.5c — reparo do harness QEMU
+
+Run 45771496141: Hub 139744944467 aprovado, inclusive PTY ampliado; 13 jobs aprovados, ShellCheck e QEMU falharam. Logs mostram SC1089 na linha 704, warning de Go "no tests to run" e manager recusando recalibração com Minecraft ativo. Causa: a edição anterior interpolou a sequência dólar/apóstrofo do regex como sufixo de substituição JavaScript, duplicando trechos e engolindo comandos legados. Reconstrução a partir do guest-test.sh de dba2f56, com três inserções verificadas por reversão exata ao original. Helper único exige marcador de PASS do teste Go real em cada fase; código zero sem teste executado ou skip não basta. Nenhum ajuste de serviço/manager ou redução de gate; stop e verificação legados restaurados. Novo CI obrigatório, incluindo QEMU; benchmark ainda condicionado.
