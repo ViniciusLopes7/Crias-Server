@@ -23,6 +23,7 @@ type Options struct {
 	ASCII     bool
 	Palette16 bool
 	Telemetry *metrics.Snapshot
+	Monitor   MonitorView
 }
 
 type role uint8
@@ -230,8 +231,18 @@ func Render(s app.State, opt Options) string {
 		lines = append(lines, tabs(s.Tab, width)...)
 		lines = append(lines, line{strings.Repeat("-", min(width, 100)), muted})
 		lines = append(lines, line{"Área: " + s.Section(), heading})
-		if opt.Telemetry != nil && (s.Tab == 0 || s.Tab == 2) {
+		if opt.Telemetry != nil && s.Tab == 2 && s.Detail {
+			lines = append(lines, hardwarePage(*opt.Telemetry, opt.Monitor.HardwarePage)...)
+			footer = "↑ ↓: páginas | Esc: voltar | Q: sair"
+		} else if opt.Telemetry != nil && s.Tab == 5 {
+			lines = append(lines, monitorSettings(opt.Monitor.Profile)...)
+		} else if opt.Telemetry != nil && (s.Tab == 0 || s.Tab == 2) {
 			lines = append(lines, telemetryRows(*opt.Telemetry, s.Tab == 2)...)
+			if s.Tab == 0 {
+				lines = append(lines, historyRows(opt.Monitor)...)
+			} else {
+				lines = append(lines, line{"Enter: detalhes de hardware", heading})
+			}
 			if wide {
 				lines = append(lines, line{"Contexto | Somente leitura", muted})
 			}

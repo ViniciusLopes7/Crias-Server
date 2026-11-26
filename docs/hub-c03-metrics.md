@@ -256,3 +256,21 @@ Modo estático preserva 30 startups/60 transições anteriores. Novo PTY
 smoke opt-in verifica RAM em MiB, navegação e restauração, não precisão
 física ou carga. Teste de render com snapshots e falhas/ASCII/bounds.
 Testes escritos, CI novo obrigatório. M2 aberto.
+
+## C03.4b.2 — Detalhes, perfis e histórico (candidato)
+
+CI 45704390058 (5c3f02a): 15 jobs aprovados, inclusive Hub e QEMU.
+Hardware Enter abre páginas de seis linhas; ↑/↓ percorre o inventário
+inteiro, Esc volta. Identidades, clocks hardware/driver, limites e
+governor, sensores/RPM, domínios de potência, bateria/limites/fontes,
+taxas por rede/disco. Estados de grupo impedem mostrar dados obsoletos
+como atuais; ~ distingue estimativas. Total do host indisponível.
+Sanitização ASCII adicional dos labels na apresentação. Sem escrita.
+Configurações P alterna Balanceado/Econômico/Detalhado apenas na sessão,
+sem política de energia. Visão geral H alterna 1/5/15/60 min de histórico
+CPU/RAM, min/média/máx, contagem e lacunas, sem inventar valores. Atalhos
+locais bloqueados em overlays, contexto e terminais compactos. Estado
+estático C02 preservado. Testes de paginação, limites, estados, perfis
+e histórico escritos; CI pendente. Ainda faltam testes PTY dos novos
+atalhos, otimização de inventário, alertas, serviços, header térmico/
+potência e benchmark real. M2 aberto. Nenhuma alteração de hardware.

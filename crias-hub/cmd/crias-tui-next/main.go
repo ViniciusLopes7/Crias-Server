@@ -27,6 +27,7 @@ type model struct {
 	engine   *metrics.Engine
 	ctx      context.Context
 	snapshot *metrics.Snapshot
+	monitor  ui.MonitorView
 }
 
 type metricsUpdate struct{}
@@ -60,13 +61,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.engine != nil {
 			s := m.engine.Snapshot(time.Now())
 			m.snapshot = &s
+			m.refreshMonitor()
 			return m, m.waitMetrics()
 		}
 	case tea.WindowSizeMsg:
 		m.state = m.state.Resize(v.Width, v.Height)
 	case tea.KeyPressMsg:
+		if m.monitorKey(v.String()) {
+			return m, nil
+		}
 		next, quit := m.state.Key(v.String())
+		if next.Tab != m.state.Tab || !next.Detail {
+			m.monitor.HardwarePage = 0
+		}
 		m.state = next
+		m.refreshMonitor()
 		if quit {
 			return m, tea.Quit
 		}
@@ -76,7 +85,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders state only; no host reads or effects in the render loop.
 func (m model) View() tea.View {
-	v := tea.NewView(ui.Render(m.state, ui.Options{Color: m.color, ASCII: m.ascii, Palette16: m.basic, Telemetry: m.snapshot}))
+	v := tea.NewView(ui.Render(m.state, ui.Options{Color: m.color, ASCII: m.ascii, Palette16: m.basic, Telemetry: m.snapshot, Monitor: m.monitor}))
 	v.AltScreen = true
 	return v
 }
@@ -131,6 +140,8 @@ func run(args []string, stdin, stdout *os.File, stderr io.Writer) int {
 		defer m.engine.Stop()
 		s := m.engine.Snapshot(time.Now())
 		m.snapshot = &s
+		m.monitor.Window = time.Minute
+		m.refreshMonitor()
 	}
 	p := tea.NewProgram(m, tea.WithContext(ctx), tea.WithInput(stdin), tea.WithOutput(stdout))
 	if _, err := p.Run(); err != nil {
