@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/ViniciusLopes7/Crias-Server/crias-hub/internal/app"
-	"github.com/ViniciusLopes7/Crias-Server/crias-hub/internal/metrics"
 	"github.com/ViniciusLopes7/Crias-Server/crias-hub/internal/ui"
 )
 

@@ -280,3 +280,14 @@ wrap de campos longos antes da paginação com margem para ASCII, labels
 limitados com reticências explícitas; clamp de página apenas em detalhe
 ativo (evitar formatar inventário durante navegação de outras abas).
 Testes adicionais de quebra de linha e isolamento dos atalhos.
+
+## C03.4b.2a — Correção de import não utilizado
+
+Run 45756255555 (814c57a): 14 jobs aprovados, incluindo Arch/QEMU.
+Hub 139695457235 passou por gofmt, mas vet bloqueou import de metrics
+não utilizado em cmd/crias-tui-next/monitor.go. Removido exclusivamente
+esse import (tipos de monitoramento são inferidos a partir do modelo).
+Race/build/PTY/scanner não executados nesse run. Revisão textual das
+importações dos novos arquivos; compilação local do módulo completo
+indisponível (ambiente Go 1.23.2, sem dependências do módulo Go 1.27.4).
+Novo CI obrigatório. Sem alterar comportamento, testes ou gates.
