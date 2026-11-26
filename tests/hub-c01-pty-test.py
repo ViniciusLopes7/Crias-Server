@@ -239,6 +239,35 @@ def lifecycle(binary: Path) -> None:
         os.write(s.master, b"q")
         s.finish((0,))
     print("PASS: opt-in host telemetry, navigation and terminal restoration")
+    with Session(binary, telemetry=True) as s:
+        s.ready()
+        s.key(b"6", b"Monitoramento:")
+        s.key(b"p", b"Economico")
+        s.key(b"?", b"Ajuda")
+        os.write(s.master, b"pp")
+        s.key(b"\x1b", b"Monitoramento: Economico")
+        s.key(b"1", b"Historico 1 min")
+        # The renderer can emit only a changed digit; switch away and back
+        # to observe the entire history label after the key.
+        os.write(s.master, b"h")
+        s.key(b"2", b"Recursos ainda nao conectados.")
+        s.key(b"1", b"Historico 5 min")
+        s.key(b"3", b"Enter: detalhes de hardware")
+        s.key(b"\r", b"Capacidades de leitura")
+        # Observe the new page digit as a synchronization marker, then
+        # force a compact/full layout transition to assert the whole title.
+        s.key(b"\x1b[B", b"2")
+        offset = len(s.output)
+        s.resize(40, 15)
+        s.expect(b"Nenhuma operacao administrativa", offset)
+        offset = len(s.output)
+        s.resize(120, 40)
+        s.expect(b"Hardware 2/", offset)
+        s.key(b"\x1b", b"Enter: detalhes de hardware")
+        s.key(b"5", b"Servicos systemd")
+        os.write(s.master, b"q")
+        s.finish((0,))
+    print("PASS: telemetry profile, help isolation, history, hardware pages, resize and system view")
 
 
 def process_snapshot(pid: int) -> tuple[int, int]:
