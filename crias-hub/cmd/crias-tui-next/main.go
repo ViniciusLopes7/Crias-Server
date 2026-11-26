@@ -1,5 +1,6 @@
 // crias-tui-next is an opt-in, read-only prototype. It does not
-// invoke managers, sudo, systemctl, package tools or configuration writes.
+// invoke managers, sudo, package tools or configuration writes. Telemetry
+// may query systemctl show for a fixed list of units.
 package main
 
 import (
@@ -134,7 +135,7 @@ func run(args []string, stdin, stdout *os.File, stderr io.Writer) int {
 	options := terminalOptions(os.Getenv, os.LookupEnv)
 	m := model{state: app.New(), color: options.Color, ascii: options.ASCII, basic: options.Palette16, ctx: ctx}
 	if telemetry {
-		m.engine = metrics.NewHostEngine(ctx, os.DirFS("/proc"), os.DirFS("/sys"), func(at time.Time) metrics.Capacity {
+		m.engine = metrics.NewHostEngineWithServices(ctx, os.DirFS("/proc"), os.DirFS("/sys"), func(at time.Time) metrics.Capacity {
 			return metrics.Space("/", at)
 		})
 		defer m.engine.Stop()

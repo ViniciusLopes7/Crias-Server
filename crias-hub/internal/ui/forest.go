@@ -235,6 +235,8 @@ func Render(s app.State, opt Options) string {
 		if opt.Telemetry != nil && s.Tab == 2 && s.Detail {
 			lines = append(lines, hardwarePage(*opt.Telemetry, opt.Monitor.HardwarePage)...)
 			footer = "↑ ↓: páginas | F6: foco | Esc: voltar | Q: sair"
+		} else if opt.Telemetry != nil && s.Tab == 4 {
+			lines = append(lines, serviceRows(opt.Telemetry.Services)...)
 		} else if opt.Telemetry != nil && s.Tab == 5 {
 			lines = append(lines, monitorSettings(opt.Monitor.Profile)...)
 		} else if opt.Telemetry != nil && (s.Tab == 0 || s.Tab == 2) {

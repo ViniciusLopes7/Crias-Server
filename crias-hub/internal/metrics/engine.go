@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"io/fs"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -14,6 +15,7 @@ type Snapshot struct {
 	CPU      Sample
 	Memory   Memory
 	Hardware HardwareSnapshot
+	Services Reading[[]ServiceStatus]
 }
 
 // Engine is session-owned. One worker per independent collector; no
@@ -32,16 +34,21 @@ type Engine struct {
 }
 
 func NewEngine(parent context.Context, proc fs.FS) *Engine {
-	return newEngine(parent, proc, nil, nil)
+	return newEngine(parent, proc, nil, nil, false)
 }
 
 // NewHostEngine adds the native hardware collectors. The space callback must
 // read a known local filesystem, never a path obtained from terminal input.
 func NewHostEngine(parent context.Context, proc, sys fs.FS, space func(time.Time) Capacity) *Engine {
-	return newEngine(parent, proc, sys, space)
+	return newEngine(parent, proc, sys, space, false)
 }
 
-func newEngine(parent context.Context, proc, sys fs.FS, space func(time.Time) Capacity) *Engine {
+// NewHostEngineWithServices adds a bounded, read-only systemd worker.
+func NewHostEngineWithServices(parent context.Context, proc, sys fs.FS, space func(time.Time) Capacity) *Engine {
+	return newEngine(parent, proc, sys, space, true)
+}
+
+func newEngine(parent context.Context, proc, sys fs.FS, space func(time.Time) Capacity, services bool) *Engine {
 	ctx, cancel := context.WithCancel(parent)
 	now := time.Now()
 	cpu := missing(Waiting, Percent, "/proc/stat", "host CPU (aggregate)", now)
@@ -88,6 +95,11 @@ func newEngine(parent context.Context, proc, sys fs.FS, space func(time.Time) Ca
 	}()
 	if sys != nil {
 		e.startHardware(ctx, &wg, proc, sys, space)
+	}
+	if services {
+		startReading(ctx, &wg, e, 15*time.Second, &e.latest.Services, func(time.Time) ([]ServiceStatus, Availability) {
+			return readServices(ctx, querySystemd), Available
+		})
 	}
 	go func() {
 		wg.Wait()
@@ -151,6 +163,8 @@ func (e *Engine) Snapshot(now time.Time) Snapshot {
 	s, cpuInterval, memInterval := e.latest, e.cpuInterval, e.memInterval
 	e.mu.RUnlock()
 	s.Hardware = s.Hardware.copyAt(now)
+	s.Services = s.Services.at(now)
+	s.Services.Data = slices.Clone(s.Services.Data)
 	s.CPU = fresh(s.CPU, now, cpuInterval)
 	m := &s.Memory
 	for _, v := range []*Sample{&m.Total, &m.Available, &m.Used, &m.Usage, &m.SwapTotal, &m.SwapUsed} {

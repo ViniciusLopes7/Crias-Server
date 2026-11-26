@@ -70,5 +70,5 @@ func telemetryRows(s metrics.Snapshot, hardware bool) []line {
 			inventory("Interfaces de rede", h.Network.State, len(h.Network.Data.Values)),
 			inventory("Dispositivos de bloco", h.Disk.State, len(h.Disk.Data.Values)))
 	}
-	return append(rows, line{"Serviços e ações administrativas: ainda não conectados.", muted})
+	return append(rows, line{"Ações administrativas: ainda não conectadas.", muted})
 }
