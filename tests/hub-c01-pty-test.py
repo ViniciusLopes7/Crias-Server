@@ -318,19 +318,143 @@ def benchmark(binary: Path, count: int, idle_seconds: float) -> dict:
             "samples": rows}
 
 
+# C03 measurements preserve the C01 report and separately compare modes.
+# Linux stat accounts for waited children, not children still running.
+def telemetry_process(pid: int) -> dict:
+    raw = Path(f"/proc/{pid}/stat").read_text()
+    fields = raw[raw.rfind(")")+2:].split()
+    pss = None
+    try:
+        for line in Path(f"/proc/{pid}/smaps_rollup").read_text().splitlines():
+            if line.startswith("Pss:"):
+                pss = int(line.split()[1])
+                break
+    except OSError:
+        pass
+    return {
+        "main_ticks": int(fields[11])+int(fields[12]),
+        "waited_child_ticks": int(fields[13])+int(fields[14]),
+        "rss_kib": int(fields[21])*os.sysconf("SC_PAGE_SIZE")//1024,
+        "pss_kib": pss,
+    }
+
+
+def select_profile(session: Session, mode: str) -> None:
+    if mode == "static":
+        return
+    session.key(b"6", b"Monitoramento: Balanceado")
+    if mode in ("economy", "detailed"):
+        session.key(b"p", b"Economico")
+    if mode == "detailed":
+        session.key(b"p", b"Detalhado")
+    session.key(b"1", b"Historico 1 min")
+
+
+def drain_window(session: Session, seconds: float, sample_memory: bool) -> dict:
+    # Bound the captured transcript independently of window duration.
+    # The final exit still checks the alternate-screen leave sequence.
+    session.output = b""
+    initial = telemetry_process(session.pid)
+    samples = [initial]
+    byte_count = 0
+    started = time.monotonic()
+    next_sample = started + 1
+    while time.monotonic()-started < seconds:
+        if session.poll() is not None:
+            raise RuntimeError("Hub exited during idle measurement")
+        session.read(min(0.1, max(0, seconds-(time.monotonic()-started))))
+        byte_count += len(session.output)
+        session.output = b""
+        if sample_memory and time.monotonic() >= next_sample:
+            samples.append(telemetry_process(session.pid))
+            next_sample = time.monotonic()+1
+    elapsed = time.monotonic()-started
+    final = telemetry_process(session.pid)
+    samples.append(final)
+    hz = os.sysconf("SC_CLK_TCK")
+    pss = [s["pss_kib"] for s in samples if s["pss_kib"] is not None]
+    main = final["main_ticks"]-initial["main_ticks"]
+    children = final["waited_child_ticks"]-initial["waited_child_ticks"]
+    if main < 0 or children < 0:
+        raise RuntimeError("invalid CPU counters")
+    return {
+        "seconds": elapsed,
+        "cpu_main_percent_one_core": 100*main/hz/elapsed,
+        "cpu_waited_children_percent_one_core": 100*children/hz/elapsed,
+        "pty_bytes": byte_count,
+        "rss_kib": summary([s["rss_kib"] for s in samples]),
+        "pss_kib": summary(pss) if pss else None,
+        "pss_missing_samples": len(samples)-len(pss),
+        "rss_delta_kib": final["rss_kib"]-initial["rss_kib"],
+    }
+
+
+def compare_telemetry(binary: Path, count: int, idle_seconds: float, warmup_seconds: float) -> dict:
+    modes = ("static", "balanced", "economy", "detailed")
+    results = {mode: [] for mode in modes}
+    # Rotate mode order to reduce systematic host drift between trials.
+    for trial in range(count):
+        for mode in modes[trial % len(modes):]+modes[:trial % len(modes)]:
+            with Session(binary, telemetry=mode != "static") as session:
+                startup = session.ready()
+                ready_ms = None
+                if mode != "static":
+                    session.expect(b"MiB")
+                    ready_ms = (time.monotonic_ns()-session.start_ns)/1e6
+                select_profile(session, mode)
+                idle = None
+                if trial == 0:
+                    drain_window(session, warmup_seconds, False)
+                    idle = drain_window(session, idle_seconds, True)
+                navigation = [session.key(b"2", b"Recursos ainda nao conectados."),
+                              session.key(b"1", b"Area: Visao geral")]
+                os.write(session.master, b"q")
+                session.finish((0,))
+                results[mode].append({"startup_ms": startup, "first_ram_ms": ready_ms,
+                                      "navigation_ms": navigation, "idle": idle})
+    return {
+        "schema": 1, "mode": "hub-telemetry-comparison",
+        "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
+        "binary_bytes": binary.stat().st_size,
+        "kernel": os.uname().release, "architecture": os.uname().machine,
+        "cpu_count": os.cpu_count(), "clock_ticks_per_second": os.sysconf("SC_CLK_TCK"),
+        "terminal": "controlling PTY 120x40 xterm-256color NO_COLOR",
+        "warmup_seconds": warmup_seconds, "idle_seconds_requested": idle_seconds,
+        "limitations": "Startup is initial static/default-balanced render; other profiles are selected after startup. Navigation observes markers, not full frames. Idle has one observation per mode, main process RSS/PSS only, waited-child CPU excludes running children at boundaries. No game load, physical host, SSH or long-run leak conclusion. Shared runner; observational, no absolute performance gate.",
+        "modes": {
+            mode: {
+                "startup_ms": summary([r["startup_ms"] for r in rows]),
+                "first_ram_ms": summary([r["first_ram_ms"] for r in rows]) if mode != "static" else None,
+                "navigation_ms": summary([v for r in rows for v in r["navigation_ms"]]),
+                "idle": rows[0]["idle"], "samples": rows,
+            } for mode, rows in results.items()
+        },
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("binary", type=Path)
     parser.add_argument("--samples", type=int, default=30)
     parser.add_argument("--idle-seconds", type=float, default=5)
+    parser.add_argument("--compare-telemetry", action="store_true")
+    parser.add_argument("--warmup-seconds", type=float, default=15)
     args = parser.parse_args()
     if os.geteuid() == 0:
         parser.error("run as a non-root test user")
     if not 1 <= args.samples <= 100 or not math.isfinite(args.idle_seconds) or not 0 <= args.idle_seconds <= 600:
         parser.error("invalid sample count or idle duration")
+    if not math.isfinite(args.warmup_seconds) or not 0 <= args.warmup_seconds <= 600:
+        parser.error("invalid warmup duration")
+    if args.compare_telemetry and args.idle_seconds < 1:
+        parser.error("comparison requires positive idle duration")
     binary = args.binary.resolve(strict=True)
     if not binary.is_file() or not os.access(binary, os.X_OK):
         parser.error("trusted Hub executable required")
+    if args.compare_telemetry:
+        report = compare_telemetry(binary, args.samples, args.idle_seconds, args.warmup_seconds)
+        print("HUB_C03_PTY_JSON=" + json.dumps(report, separators=(",", ":"), allow_nan=False))
+        return
     lifecycle(binary)
     report = benchmark(binary, args.samples, args.idle_seconds)
     print("HUB_C01_PTY_JSON=" + json.dumps(report, separators=(",", ":"), allow_nan=False))
