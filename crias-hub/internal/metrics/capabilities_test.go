@@ -45,3 +45,52 @@ func TestCapabilityNoEvidence(t *testing.T) {
 		t.Fatal(got[6])
 	}
 }
+
+func TestPowerCapabilityEvidence(t *testing.T) {
+	sample := func(state Availability, unit Unit, value float64) Sample {
+		return Sample{State: state, Unit: unit, Value: value}
+	}
+	missing := sample(Unavailable, Watts, 0)
+	denied := sample(Permission, Watts, 0)
+	invalid := sample(Invalid, Watts, 0)
+	stale := sample(Stale, Watts, 0)
+	waiting := sample(Waiting, Watts, 0)
+	measured := sample(Available, Watts, 12)
+	estimated := sample(Estimated, Watts, 11)
+	badUnit := sample(Available, MHz, 12)
+	badValue := sample(Available, Watts, math.Inf(1))
+	for _, tc := range []struct {
+		name             string
+		instant, average Sample
+		want             Capability
+	}{
+		{"denied and missing", denied, missing, Capability{Denied: 1}},
+		{"missing and denied", missing, denied, Capability{Denied: 1}},
+		{"invalid and waiting", invalid, waiting, Capability{Invalid: 1}},
+		{"wrong unit and missing", badUnit, missing, Capability{Invalid: 1}},
+		{"nonfinite and denied", badValue, denied, Capability{Invalid: 1}},
+		{"stale and waiting", stale, waiting, Capability{Stale: 1}},
+		{"missing and waiting", missing, waiting, Capability{Waiting: 1}},
+		{"both missing", missing, missing, Capability{Missing: 1}},
+		{"denied and measured", denied, measured, Capability{Observed: 1}},
+		{"measured and invalid", measured, invalid, Capability{Observed: 1}},
+		{"estimated and measured", estimated, measured, Capability{Observed: 1}},
+		{"estimated and denied", estimated, denied, Capability{Estimated: 1}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := HardwareSnapshot{}
+			h.Domains.State = Available
+			h.Domains.Data.Values = []PowerDomain{{Instant: tc.instant, Average: tc.average}}
+			got := Capabilities(h)[5]
+			want := tc.want
+			want.Name, want.Group = "Potência por domínio", Available
+			if got != want {
+				t.Fatalf("got %+v, want %+v", got, want)
+			}
+			h.Domains.State = Stale
+			if got := Capabilities(h)[5]; got != (Capability{Name: want.Name, Group: Stale}) {
+				t.Fatalf("stale group exposed evidence: %+v", got)
+			}
+		})
+	}
+}

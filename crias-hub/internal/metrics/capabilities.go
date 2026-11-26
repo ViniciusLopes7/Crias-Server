@@ -44,6 +44,39 @@ func (c *Capability) add(s Sample, unit Unit) {
 	}
 }
 
+// powerEvidence selects one item of evidence per domain. Prefer a usable
+// measured value over an estimate, then preserve diagnostic states rather
+// than letting an absent alternate source hide a failed primary source.
+// The detailed view still exposes both independent readings.
+func powerEvidence(instant, average Sample) Sample {
+	rank := func(s Sample) int {
+		switch s.State {
+		case Available, Estimated:
+			if s.Unit != Watts || math.IsNaN(s.Value) || math.IsInf(s.Value, 0) {
+				return 4 // invalid, as Capability.add will classify it
+			}
+			if s.State == Available {
+				return 6
+			}
+			return 5
+		case Invalid:
+			return 4
+		case Permission:
+			return 3
+		case Stale:
+			return 2
+		case Waiting:
+			return 1
+		default:
+			return 0
+		}
+	}
+	if rank(average) > rank(instant) {
+		return average
+	}
+	return instant
+}
+
 // Capabilities derives a bounded inventory from the current snapshot.
 // Unavailable groups never expose old data. No new reads or probes occur.
 func Capabilities(h HardwareSnapshot) []Capability {
@@ -73,11 +106,7 @@ func Capabilities(h HardwareSnapshot) []Capability {
 	out = append(out, zones)
 	power := Capability{Name: "Potência por domínio", Group: h.Domains.State}
 	for _, d := range h.Domains.Data.Values {
-		if d.Instant.Valid() && d.Instant.Unit == Watts {
-			power.add(d.Instant, Watts)
-		} else {
-			power.add(d.Average, Watts)
-		}
+		power.add(powerEvidence(d.Instant, d.Average), Watts)
 	}
 	out = append(out, power)
 	bat := Capability{Name: "Carga de bateria", Group: h.Supplies.State}
