@@ -50,3 +50,14 @@ A VM usa três amostras por fixture e 30 com descoberta real, idle curto de
    físico não esteja disponível, registrar bloqueador explicitamente e
    preservar a pendência como gate obrigatório conforme decisão de saída aprovada em 25/11/2026: baseline física/SSH antes de M3/C04 e carga/estabilidade em C10/C11.
 
+## Contraprovas automatizadas do harness
+
+`python3 tests/hub-gum-negative-test.py` executa nove casos em fixtures
+locais, sem root e sem instalação de Gum. A ausência é simulada sem
+remover pacotes; o executável sintético não serve como benchmark nominal.
+Cada falha CLI exige código 1, mensagem específica e ausência de JSON;
+Gum ausente exige código 2. Cobertura: versão com erro/vazia, fechamento
+prematuro, fallback numérico, operação administrativa bloqueada, frame
+inesperado, silêncio/timeout e limite de saída. O job Test Shell existente
+executará a suite; aprovação pendente no candidato. Não confundir com
+validação física ou SSH e não dispensar o gate M2.

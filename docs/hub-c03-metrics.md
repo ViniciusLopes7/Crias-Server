@@ -425,3 +425,7 @@ python3 tests/hub-c01-pty-test.py /caminho/para/crias-tui-next --compare-telemet
 ```
 
 Sem acesso autorizado a host físico ou sessão SSH nesta execução; itens externos explicitamente bloqueados. Próxima ação: contraprovas negativas do harness e coleta controlada, sem abrir novas funcionalidades C04 ou alterar metas. M2 permanece aberto.
+
+### C03.9a — contraprovas negativas do harness C00
+
+Candidato acrescenta nove contraprovas no job Test Shell existente: ausência de Gum simulada por mock (sem remover pacote/PATH), executável de versão com erro ou versão vazia, PTY fechado antes do frame, fallback numérico, tentativa de sudo bloqueada pelo bootstrap do harness, frame inesperado, silêncio até timeout e saída acima de MAX_FRAME. Casos CLI usam diretório temporário, executável Gum sintético apenas para validar falhas e Hub fixture controlado; exigem saída não-zero, diagnóstico específico e nenhum JSON parcial. Timeout externo 15s por caso; timeout interno 1s. Sem instalação, serviço, escrita no host de produção, root ou credenciais. Testes não constituem medição Gum real; baseline nominal já validada em Arch/QEMU. Nenhum código produtivo alterado. CI anterior 45909843742 ainda em execução na consulta inicial; candidato separado até gate integral. Validação dos negativos e M2 ainda pendentes; contraprovas não substituem benchmark físico/SSH.
