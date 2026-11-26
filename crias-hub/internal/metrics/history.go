@@ -1,6 +1,9 @@
 package metrics
 
-import "time"
+import (
+	"sort"
+	"time"
+)
 
 // At the fastest approved cadence (500 ms), 7200 observations cover an
 // hour. Retention also uses timestamps so slower profiles never retain
@@ -60,11 +63,17 @@ func (h *history) summarize(now time.Time, window time.Duration) Stats {
 		return s
 	}
 	cutoff := now.Add(-window)
+	// Logical ring order is strictly increasing (add rejects older points).
+	// Seek the first point inside the open lower bound, then scan only
+	// the requested window in the original chronological order.
+	first := sort.Search(h.size, func(i int) bool {
+		return h.points[(h.start+i)%historyCapacity].at.After(cutoff)
+	})
 	var prev point
-	for i := 0; i < h.size; i++ {
+	for i := first; i < h.size; i++ {
 		p := h.points[(h.start+i)%historyCapacity]
-		if !p.at.After(cutoff) || p.at.After(now) {
-			continue
+		if p.at.After(now) {
+			break
 		}
 		if s.First.IsZero() {
 			s.First = p.at

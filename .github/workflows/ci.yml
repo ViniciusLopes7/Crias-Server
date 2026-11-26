@@ -441,6 +441,11 @@ jobs:
 
       # C03 evidence on its draft PR, then manual validation only after
       # the branch is consolidated. No new artifact or separate job.
+      - name: C03 history window microbenchmark
+        if: github.head_ref == 'feat/hub-go-c03-metrics' || github.event_name == 'workflow_dispatch'
+        working-directory: crias-hub
+        run: go test -mod=readonly -run '^$' -bench '^BenchmarkHistoryWindow$' -benchtime=200ms -count=3 ./internal/metrics
+
       - name: C03 telemetry comparison (observational)
         if: github.head_ref == 'feat/hub-go-c03-metrics' || github.event_name == 'workflow_dispatch'
         working-directory: crias-hub
