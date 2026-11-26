@@ -62,6 +62,7 @@ func telemetryRows(s metrics.Snapshot, hardware bool) []line {
 	}
 	if hardware {
 		rows = append(rows,
+			line{"Controles: não validados / bloqueados", muted},
 			inventory("Políticas CPU", h.Frequencies.State, len(h.Frequencies.Data.Policies)),
 			inventory("Sensores hwmon", h.Sensors.State, len(h.Sensors.Data.Values)),
 			inventory("Zonas térmicas", h.Thermal.State, len(h.Thermal.Data.Values)),

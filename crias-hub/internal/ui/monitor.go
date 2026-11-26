@@ -96,7 +96,7 @@ func measurement(s metrics.Sample) string {
 
 func hardwareRows(s metrics.Snapshot) []line {
 	h := s.Hardware
-	var rows []line
+	rows := capabilityRows(h)
 	group := func(label string, state metrics.Availability, count int) bool {
 		rows = append(rows, inventory(label, state, count))
 		return state == metrics.Available
