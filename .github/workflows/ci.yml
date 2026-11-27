@@ -459,6 +459,19 @@ jobs:
           python3 ../tests/hub-c03-evidence-test.py
           python3 ../tests/hub-c01-pty-test.py "$RUNNER_TEMP/crias-tui-next" --compare-telemetry --samples 5 --idle-seconds 60 --warmup-seconds 15
 
+      - name: VM validation runner smoke
+        if: github.head_ref == 'feat/hub-go-c03-metrics' || github.event_name == 'workflow_dispatch'
+        run: |
+          python3 tests/hub-vm-validation-test.py
+          python3 tools/hub-vm-validation.py --binary "$RUNNER_TEMP/crias-tui-next" --go-only --mode quick --output-parent "$RUNNER_TEMP"
+
+      - name: Hub module update inventory (read-only)
+        if: github.head_ref == 'feat/hub-go-c03-metrics' || github.event_name == 'workflow_dispatch'
+        working-directory: crias-hub
+        run: |
+          go list -m -u -mod=readonly all
+          git diff --exit-code -- go.mod go.sum
+
       - name: Hub vulnerability scan (detailed findings)
         working-directory: crias-hub
         run: |

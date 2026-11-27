@@ -54,3 +54,14 @@ Usar o binário separado em terminal local e sessão SSH existente/autorizada, n
 ## 4. Aceitação e devolução das evidências
 
 Referências preservadas: RSS principal <=25 MiB (desejável <=15), startup <=300 ms (desejável <=150), navegação p95 <=50 ms (desejável <=20), binário <=15 MiB (desejável <=10), CPU média idle <=0,5% de um núcleo (desejável <=0,2%). Medir todos os perfis, inclusive detalhado, sem reduzir cadência para passar. Se CPU exceder, preservar dados e investigar em ambiente descartável; não homologar por média de runners diferentes. Confirmar identidade instalada e equivalência de trabalho antes de afirmar paridade. Revisão física dos sensores, custo agregado, carga de jogos/Chunky, estabilidade prolongada, rollback e controles físicos permanecem nos gates aprovados C10/C11. Gate M2 somente com evidências revisadas e decisão explícita; não iniciar C04 sem autorização/gates aplicáveis. Entregar relatórios sanitizados e checklist, não credenciais. Nenhuma etapa deste roteiro foi executada em host físico nesta sessão.
+
+## 5. Executor automatizado para a VM
+
+Após instalar o servidor e manter o Hub legado, no checkout confiável do PR #48 execute como usuário normal (Python 3.11+):
+
+```bash
+python3 tools/hub-vm-validation.py --binary "$HOME/.local/bin/crias-tui-next" --mode quick
+python3 tools/hub-vm-validation.py --binary "$HOME/.local/bin/crias-tui-next" --mode full
+```
+
+O binário pode ser o experimental já instalado em caminho separado. Caso não tenha sido compilado, use `--build` no lugar de `--binary`: exige Go 1.27.4 e módulos em cache, compila no diretório privado de evidências e não instala nada. `--legacy /caminho` permite indicar a instalação Bash confiável; `--go-only` pula a comparação legada de forma explícita. `--source-audit` executa tidy -diff, verify, imports, vet, race e links sem baixar dependências; `--check-updates` autoriza somente consulta de versões Go pela rede, sem atualização. `--expected-binary-sha256` confere digest fornecido por fonte confiável. `--installed-release` é declaração do operador, não validação da release. O modo quick usa 3 sessões/modo, idle 5s, aquecimento 2s; é smoke, não prova CPU estável nem cobre a cadência de serviços de 45s. Full usa 30, 600s e 15s, mais 600s do Gum. Sem root, pacman, instalação ou ações administrativas. Relatório JSON e logs em diretório privado no HOME (ou --output-parent). Compartilhar primeiro report.json após revisar; logs podem conter paths/diagnósticos locais e devem ser sanitizados antes de enviar. O retorno 0 indica apenas que os testes automatizados executados passaram; referências de desempenho são observacionais e gates manuais continuam pendentes. Não alegar homologação física por teste em VM. O CI faz smoke Go-only e teste de contratos no job Hub existente; candidato ainda não validado.
