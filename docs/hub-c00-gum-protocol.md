@@ -1,8 +1,8 @@
 # C00 — Protocolo Gum real e validação física
 
 Estado: Gum real validado em Arch/QEMU no run 45626528412, commit 32a1c71.
-A referência numérica permanece preservada. A validação física e os cenários
-negativos específicos do harness seguem pendentes. Ver [baseline](hub-c00-baseline.md).
+A referência numérica permanece preservada. A validação física segue pendente; as nove contraprovas negativas do harness
+foram aprovadas no CI 45932442002 (70fa13e). Ver [baseline](hub-c00-baseline.md).
 
 ## Gum em Arch descartável
 
@@ -59,5 +59,5 @@ Cada falha CLI exige código 1, mensagem específica e ausência de JSON;
 Gum ausente exige código 2. Cobertura: versão com erro/vazia, fechamento
 prematuro, fallback numérico, operação administrativa bloqueada, frame
 inesperado, silêncio/timeout e limite de saída. O job Test Shell existente
-executará a suite; aprovação pendente no candidato. Não confundir com
+executou a suite no CI 45932442002, job 140287906239, com nove PASS. Não confundir com
 validação física ou SSH e não dispensar o gate M2.
