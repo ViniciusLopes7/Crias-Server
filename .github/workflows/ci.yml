@@ -11,9 +11,9 @@
 #   test-shell-arch ─────────────→└──────────────┘
 #
 # Triggers:
-#   - push to main          → lint + test + build (no release)
+#   - push to main          → core + affected Discord components (no release)
 #   - push tag v*.*.*       → lint + test + build + release (stable)
-#   - PR to main            → lint + test only (no build, no release)
+#   - PR to main            → core + affected Discord lint/test/build, no release
 #   - workflow_dispatch     → full pipeline + optional release
 #   - push main com [release] → full pipeline + release (opt-in, gates iguais)
 
@@ -44,7 +44,7 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: '1.27.1'
+  GO_VERSION: '1.27.4' # security patches; C01 detailed scan (GO-2026-6859 et al.)
   PYTHON_VERSION: '3.12'
   # protoc-gen-go versions aligned with Dockerfile + Makefile.
   # Definidas como env vars (em vez de literais vX.Y.Z nos comandos) para:
@@ -57,6 +57,24 @@ env:
   PROTOC_GEN_GO_GRPC_VERSION: 'v1.6.2'
 
 jobs:
+  scope:
+    name: Detect Discord component changes
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    outputs:
+      agent: ${{ steps.scope.outputs.agent }}
+      bot: ${{ steps.scope.outputs.bot }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test change detection
+        run: python3 tests/ci-scope-test.py
+      - name: Determine affected components
+        id: scope
+        run: python3 tools/ci-scope.py
+
   # ═══════════════════════════════════════════════════════
   # LINT (3 jobs paralelos: shell, go, python)
   # ═══════════════════════════════════════════════════════
@@ -99,6 +117,8 @@ jobs:
 
   lint-go:
     name: Lint Go
+    needs: scope
+    if: needs.scope.outputs.agent == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     defaults:
@@ -143,6 +163,8 @@ jobs:
 
   lint-python:
     name: Lint Python
+    needs: scope
+    if: needs.scope.outputs.bot == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     defaults:
@@ -193,6 +215,8 @@ jobs:
           bash tests/run-all-contract-test.sh
           # Policy + reproducible baseline smoke (no new LoC threshold).
           python3 tests/quality-report-test.py
+          python3 tests/hub-baseline-test.py
+          python3 tests/hub-gum-negative-test.py
           python3 tools/quality-report.py --format markdown
           bash tests/stack-installer-test.sh
           bash tests/agent-install-hook-test.sh
@@ -212,6 +236,8 @@ jobs:
           bash tests/crias-tui-deploy-test.sh
           bash tests/hub-gum-test.sh
           bash tests/hub-ssh-console-status-test.sh
+          bash tests/hub-service-menu-test.sh
+          bash tests/hub-backend-contract-test.sh
           bash tests/hub-memory-menu-test.sh
           bash tests/chunky-progress-watch-test.sh
           bash tests/minecraft-heap-control-test.sh
@@ -233,6 +259,13 @@ jobs:
           bash tests/terraria-tuning-test.sh
           bash tests/download-modrinth-test.sh
           python3 tests/docs-links-test.py
+
+      - name: Observe legacy numeric Hub baseline (fixture, non-gating timings)
+        run: |
+          for stack in minecraft terraria; do
+            python3 tools/hub-baseline.py --stack "$stack" --samples 30 |
+              python3 -c 'import json, sys; print("HUB_BASELINE_JSON=" + json.dumps(json.load(sys.stdin), separators=(",", ":")))'
+          done
 
   test-release-migration:
     name: Real release migration (pinned GitHub ZIPs)
@@ -303,7 +336,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 qemu-utils ovmf cloud-image-utils
           if [ -e /dev/kvm ]; then sudo chmod a+rw /dev/kvm; fi
+      - name: Set up Go for Hub integration test
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: crias-hub/go.sum
+      - name: Build read-only Hub systemd integration test
+        working-directory: crias-hub
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go test -mod=readonly -c -trimpath -o "$RUNNER_TEMP/hub-systemd.test" ./internal/metrics
       - name: Boot and test Arch VM
+        env:
+          CRIAS_HUB_SYSTEMD_TEST: ${{ runner.temp }}/hub-systemd.test
         run: bash tests/qemu/run-vm.sh
       - name: Preserve QEMU diagnostics
         if: always()
@@ -316,6 +359,8 @@ jobs:
 
   test-go:
     name: Test Go (race)
+    needs: scope
+    if: needs.scope.outputs.agent == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     defaults:
@@ -359,8 +404,107 @@ jobs:
           path: discord-agent/coverage.out
           retention-days: 14
 
+  test-hub:
+    name: Test Hub Go (race and PTY)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: crias-hub/go.sum
+      - name: Validate experimental C01 Hub
+        working-directory: crias-hub
+        run: |
+          go mod tidy -diff
+          go mod download
+          go mod verify
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            printf 'Go files requiring gofmt:\n%s\n' "$unformatted"
+            gofmt -d .
+            exit 1
+          fi
+          go vet -mod=readonly ./...
+          go test -mod=readonly -race -timeout 120s ./...
+          CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$RUNNER_TEMP/crias-tui-next" ./cmd/crias-tui-next
+          git diff --exit-code -- go.mod go.sum
+          "$RUNNER_TEMP/crias-tui-next" --help
+          "$RUNNER_TEMP/crias-tui-next" --version
+          if "$RUNNER_TEMP/crias-tui-next" </dev/null >"$RUNNER_TEMP/hub-no-tty.log" 2>&1; then
+            echo 'FAIL: prototype accepted non-TTY' >&2
+            exit 1
+          fi
+          stat -c 'C01 binary bytes: %s' "$RUNNER_TEMP/crias-tui-next"
+          python3 ../tests/hub-c01-pty-test.py "$RUNNER_TEMP/crias-tui-next" --samples 30 --idle-seconds 5
+
+      # C03 evidence on its draft PR, then manual validation only after
+      # the branch is consolidated. No new artifact or separate job.
+      - name: C03 history window microbenchmark
+        if: github.head_ref == 'feat/hub-go-c03-metrics' || github.event_name == 'workflow_dispatch'
+        working-directory: crias-hub
+        run: go test -mod=readonly -run '^$' -bench '^BenchmarkHistoryWindow$' -benchtime=200ms -count=3 ./internal/metrics
+
+      - name: C03 terminal width microbenchmark
+        if: github.head_ref == 'feat/hub-go-c03-metrics' || github.event_name == 'workflow_dispatch'
+        working-directory: crias-hub
+        run: go test -mod=readonly -run '^$' -bench '^BenchmarkFitWidth$' -benchtime=200ms -count=3 ./internal/ui
+
+      - name: C03 telemetry comparison (observational)
+        if: github.head_ref == 'feat/hub-go-c03-metrics' || github.event_name == 'workflow_dispatch'
+        working-directory: crias-hub
+        run: |
+          python3 ../tests/hub-c03-evidence-test.py
+          python3 ../tests/hub-c01-pty-test.py "$RUNNER_TEMP/crias-tui-next" --compare-telemetry --samples 5 --idle-seconds 60 --warmup-seconds 15
+
+      - name: VM validation runner smoke
+        if: github.head_ref == 'feat/hub-go-c03-metrics' || github.event_name == 'workflow_dispatch'
+        run: |
+          python3 tests/hub-vm-validation-test.py
+          python3 tools/hub-vm-validation.py --binary "$RUNNER_TEMP/crias-tui-next" --go-only --mode quick --output-parent "$RUNNER_TEMP"
+
+      - name: Hub module update inventory (read-only)
+        if: github.head_ref == 'feat/hub-go-c03-metrics' || github.event_name == 'workflow_dispatch'
+        working-directory: crias-hub
+        run: |
+          go list -m -u -mod=readonly all
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Hub vulnerability scan (detailed findings)
+        working-directory: crias-hub
+        run: |
+          mkdir -p "$RUNNER_TEMP/c01-tools"
+          GOBIN="$RUNNER_TEMP/c01-tools" go install golang.org/x/vuln/cmd/govulncheck@v1.10.0
+          GOFLAGS=-mod=readonly "$RUNNER_TEMP/c01-tools/govulncheck" -show verbose ./...
+          git diff --exit-code -- go.mod go.sum
+
+      # Full assurance measurements already have C01 evidence. Repeat on
+      # manual validation or a release, not on every ordinary PR/push.
+      - name: Hub independent-cache rebuild
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release]'))
+        working-directory: crias-hub
+        run: |
+          mkdir -p "$RUNNER_TEMP/c01-rebuild-cache"
+          CGO_ENABLED=0 GOCACHE="$RUNNER_TEMP/c01-rebuild-cache" go build -mod=readonly -trimpath -o "$RUNNER_TEMP/crias-tui-next-rebuilt" ./cmd/crias-tui-next
+          cmp "$RUNNER_TEMP/crias-tui-next" "$RUNNER_TEMP/crias-tui-next-rebuilt"
+          sha256sum "$RUNNER_TEMP/crias-tui-next" "$RUNNER_TEMP/crias-tui-next-rebuilt"
+          go version -m "$RUNNER_TEMP/crias-tui-next"
+          git diff --exit-code -- go.mod go.sum
+          echo 'PASS: C01 identical binaries from separate build caches'
+
+      - name: C01 presentation-only comparison on the same runner
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release]'))
+        run: |
+          GOBIN="$RUNNER_TEMP/c01-tools" go install charm.land/gum/v2@v2.0.2
+          python3 tools/hub-gum-baseline.py --mode fixture --stack minecraft --gum-dir "$RUNNER_TEMP/c01-tools" --no-color --samples 30 --idle-seconds 5 |
+            python3 -c 'import json, sys; print("HUB_C01_GUM_JSON=" + json.dumps(json.load(sys.stdin), separators=(",", ":")))'
+
   test-python:
     name: Test Python
+    needs: scope
+    if: needs.scope.outputs.bot == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     defaults:
@@ -406,8 +550,8 @@ jobs:
 
   build-agent:
     name: Build Agent (${{ matrix.goos }}/${{ matrix.goarch }})
-    needs: [lint-go, test-go]
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    needs: [scope, lint-go, test-go]
+    if: needs.scope.outputs.agent == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     strategy:
@@ -470,8 +614,8 @@ jobs:
 
   build-bot:
     name: Build Bot (Docker)
-    needs: [lint-python, test-python]
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    needs: [scope, lint-python, test-python]
+    if: needs.scope.outputs.bot == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
@@ -508,7 +652,7 @@ jobs:
     # Antes: needs=[build-agent, build-bot] e os builds nao dependiam de
     # lint-shell/test-shell/test-shell-arch — uma release podia ser publicada
     # com a pipeline geral vermelha (testes Shell falhos).
-    needs: [build-agent, build-bot, lint-shell, test-shell, test-shell-arch, test-release-migration, test-minecraft-jvm, test-arch-vm]
+    needs: [scope, build-agent, build-bot, test-hub, lint-shell, test-shell, test-shell-arch, test-release-migration, test-minecraft-jvm, test-arch-vm]
     if: |
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.create_release) ||

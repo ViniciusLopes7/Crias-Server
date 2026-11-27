@@ -2,6 +2,21 @@
 # Run inside a disposable Arch VM as root. No third-party game EULA is accepted.
 set -euo pipefail
 root="${1:?repository path required}"
+hub_systemd_test="${2:-}"
+run_hub_systemd_check() {
+    local expected="$1" output
+    [ -n "$hub_systemd_test" ] || return 0
+    test -x "$hub_systemd_test"
+    if ! output="$(runuser -u ci -- env CRIAS_HUB_REAL_SYSTEMD="$expected" "$hub_systemd_test" -test.run '^TestRealSystemdReadOnly$' -test.v -test.timeout=20s 2>&1)"; then
+        printf '%s\n' "$output" >&2
+        return 1
+    fi
+    printf '%s\n' "$output"
+    if ! grep -Eq '^--- PASS: TestRealSystemdReadOnly \([0-9.]+s\)$' <<< "$output"; then
+        echo "FAIL: Hub systemd integration test did not execute and pass ($expected)" >&2
+        return 1
+    fi
+}
 # Resumo legivel e logs integrais separados: coletados pelo runner QEMU
 # tanto em sucesso quanto em falha. Somente dados sinteticos de teste.
 MC_QEMU_LOG_DIR=/tmp/crias-qemu-minecraft
@@ -22,7 +37,7 @@ mc_ci_preview() {
 }
 
 [ "$(ps -p 1 -o comm=)" = systemd ] || { echo 'systemd is not PID 1' >&2; exit 1; }
-pacman -Syu --noconfirm --needed bash coreutils gettext jq tar zstd zip unzip jdk21-openjdk
+pacman -Syu --noconfirm --needed bash coreutils gettext jq tar zstd zip unzip jdk21-openjdk python
 cd "$root"
 bash tests/crias-bootstrap-test.sh
 bash tests/backup-integrity-test.sh
@@ -137,6 +152,7 @@ server_pid="$(systemctl show -p MainPID --value minecraft.service)"
 [ "$(ps -o user= -p "$server_pid" | xargs)" = criasvm ]
 echo "PASS: unit systemd real isolada, sem root e com limites aplicados"
 mc_ci_event "PASS" "systemd" "servico como criasvm e MemoryMax/MemorySwapMax aplicados"
+run_hub_systemd_check active
 # A recalibracao NAO pode alterar MemoryMax com a JVM ativa.
 if CRIS_MANAGER_ALLOW_UNSAFE=1 SERVER_DIR="$server" SERVER_USER=criasvm \
     bash "$root/minecraft/mc-manager.sh" reconfigure-hardware LOW >/tmp/crias-memory-active-test.log 2>&1; then
@@ -146,6 +162,20 @@ fi
 grep -q "completamente parado" /tmp/crias-memory-active-test.log
 systemctl stop minecraft.service
 ! systemctl is-active --quiet minecraft.service
+# The synthetic JVM may exit with a failure status on SIGINT. A stopped
+# service can legitimately be failed, not inactive. Independently verify
+# the manager state and that no main process remains; never clear failure.
+if [ -n "$hub_systemd_test" ]; then
+    stopped_state="$(systemctl show -p ActiveState --value minecraft.service)"
+    stopped_sub="$(systemctl show -p SubState --value minecraft.service)"
+    case "$stopped_state/$stopped_sub" in
+        inactive/dead|failed/failed) ;;
+        *) echo "FAIL: unexpected stopped unit state $stopped_state/$stopped_sub" >&2; exit 1 ;;
+    esac
+    test "$(systemctl show -p MainPID --value minecraft.service)" = 0
+    systemctl show -p ActiveState -p SubState -p Result -p ExecMainCode -p ExecMainStatus -p MainPID minecraft.service
+    run_hub_systemd_check "$stopped_state"
+fi
 # Valide o limite persistente de memoria usando systemd real e drop-in.
 write_minecraft_systemd_memory_limit 640
 [ "$(systemctl show -p MemoryMax --value minecraft.service)" = 671088640 ]
@@ -258,6 +288,52 @@ if [ "$ready" != true ]; then
 fi
 systemctl stop terraria.service
 echo 'PASS: real Terraria stack installed and opened its game port'
+
+# C00: observational baseline against the installed legacy Hub, with real
+# Arch/systemd discovery as the unprivileged ci account. Both stacks are
+# stopped or use disposable fixtures; no game workload or Gum is measured.
+# The harness intercepts administrative calls, including automatic package
+# recovery. Report in guest.log (already retained by the QEMU workflow).
+echo '[QEMU] C00 baseline: installed numeric Hub, real systemd, unprivileged'
+test "$(id -u ci)" -ne 0
+runuser -u ci -- python3 "$root/tools/hub-baseline.py" \
+    --hub /usr/local/bin/crias-tui --mode host --samples 30 \
+    > /tmp/crias-qemu-hub-baseline.json
+python3 - /tmp/crias-qemu-hub-baseline.json <<'PY'
+import json
+import sys
+with open(sys.argv[1], encoding="utf-8") as stream:
+    report = json.load(stream)
+if report["mode"] != "host" or report["startup_ms"]["count"] != 30 or report["navigation_ms"]["count"] != 60:
+    raise SystemExit("unexpected C00 host benchmark report")
+print("HUB_BASELINE_ARCH_JSON=" + json.dumps(report, separators=(",", ":")))
+PY
+echo 'PASS: C00 installed Hub numeric PTY baseline (Arch VM; timings observational)'
+
+# Real Gum is needed only inside the disposable VM, not on production hosts.
+# All samples run unprivileged and refuse fallback/unknown screens.
+pacman -S --needed --noconfirm gum
+for stack in minecraft terraria; do
+    runuser -u ci -- python3 "$root/tools/hub-gum-baseline.py" \
+        --mode fixture --stack "$stack" --samples 3 --idle-seconds 2 \
+        > "/tmp/crias-qemu-gum-${stack}.json"
+done
+runuser -u ci -- python3 "$root/tools/hub-gum-baseline.py" \
+    --hub /usr/local/bin/crias-tui --mode host --samples 30 --idle-seconds 5 \
+    > /tmp/crias-qemu-gum-host.json
+python3 - /tmp/crias-qemu-gum-minecraft.json /tmp/crias-qemu-gum-terraria.json /tmp/crias-qemu-gum-host.json <<'PY'
+import json
+import sys
+for path, mode, count in zip(sys.argv[1:], ("fixture", "fixture", "host"), (3, 3, 30)):
+    with open(path, encoding="utf-8") as stream:
+        report = json.load(stream)
+    if report["mode"] != mode or report["startup_ms"]["count"] != count or report["navigation_ms"]["count"] != 2*count:
+        raise SystemExit("unexpected Gum benchmark report")
+    print("HUB_BASELINE_GUM_JSON=" + json.dumps(report, separators=(",", ":")))
+PY
+echo 'PASS: C00 real Gum controlling PTY benchmark (Arch VM; timings observational)'
+
+
 
 # Exercise the real Minecraft downloader and launcher up to the EULA prompt.
 # The test keeps eula=false and does not create or play a Minecraft world.
