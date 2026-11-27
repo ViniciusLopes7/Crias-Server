@@ -10,6 +10,7 @@ import os
 import platform
 import re
 import shutil
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -47,6 +48,14 @@ def report_from_log(path, prefix=None):
     return json.loads(rows[0])
 
 
+def metric_summary(values):
+    if not values:
+        return None
+    values = sorted(values)
+    return {"count": len(values), "median": statistics.median(values),
+            "p95_nearest_rank": values[math.ceil(len(values) * 0.95) - 1], "max": values[-1]}
+
+
 def telemetry_summary(data, binary_hash, count, idle):
     if (data.get("schema") != 2 or data.get("mode") != "hub-telemetry-comparison"
             or data.get("binary_sha256") != binary_hash
@@ -65,10 +74,28 @@ def telemetry_summary(data, binary_hash, count, idle):
                 or q["seconds"] < idle or len(raw) != q["memory_sample_count"]
                 or len(raw) < 2 or raw[0][:3] != [0, 0, 0]):
             raise ValueError("incomplete telemetry samples")
+        for point in raw:
+            if (len(point) != 6 or any(type(n) is not int or n < 0 for n in point[:4])
+                    or any(n is not None and (type(n) is not int or n < 0) for n in point[4:])
+                    or (point[4] is not None and point[5] is not None and point[5] > point[4])):
+                raise ValueError("invalid raw telemetry point")
         for a, b in zip(raw, raw[1:]):
             if b[0] <= a[0] or b[1] < a[1] or b[2] < a[2]:
                 raise ValueError("non-monotonic telemetry samples")
+        for field, column in (("rss_kib", 3), ("rollup_rss_kib", 4), ("pss_kib", 5)):
+            values = [point[column] for point in raw if point[column] is not None]
+            if metric_summary(values) != q[field]:
+                raise ValueError("memory summary does not match raw series")
+            if column > 3 and q[field.removesuffix("_kib") + "_missing_samples"] != len(raw) - len(values):
+                raise ValueError("memory missing count does not match series")
+        if q["rss_delta_kib"] != raw[-1][3] - raw[0][3]:
+            raise ValueError("RSS delta does not match raw series")
+        if (metric_summary([row["startup_ms"] for row in v["samples"]]) != v["startup_ms"]
+                or metric_summary([n for row in v["samples"] for n in row["navigation_ms"]]) != v["navigation_ms"]):
+            raise ValueError("latency summary does not match sessions")
         last = raw[-1]
+        if not math.isclose(last[0] / 1e9, q["cpu_sample_seconds"], abs_tol=1e-9):
+            raise ValueError("CPU interval does not match raw timestamps")
         cpu = 100 * (last[1] + last[2]) / hz / (last[0] / 1e9)
         if not math.isclose(cpu, q["cpu_main_plus_waited_percent_one_core"], abs_tol=1e-9):
             raise ValueError("CPU summary does not match raw ticks")
@@ -249,6 +276,9 @@ def main():
                 revisions = re.findall(r"^\s*build\s+vcs\.revision=([0-9a-f]{40})$", info, re.M)
                 suite.report["binary_source_revision"] = revisions[0] if len(revisions) == 1 else None
                 suite.report["binary_matches_checkout"] = suite.report["binary_source_revision"] == suite.report["checkout_sha"]
+                if suite.report["binary_source_revision"] and not suite.report["binary_matches_checkout"]:
+                    suite.note("binary-source-revision", "FAIL")
+                    raise ValueError("binary source revision differs from checkout")
         else:
             suite.report["binary_matches_checkout"] = None
         if args.source_audit:
@@ -285,7 +315,7 @@ def main():
                                             "--mode", "host", "--samples", count]):
                 suite.parse("legacy-numeric-json", lambda: report_from_log(out / "legacy-numeric.log"))
             if suite.step("legacy-gum", [py, ROOT / "tools/hub-gum-baseline.py", "--hub", legacy,
-                                        "--mode", "host", "--samples", count, "--idle-seconds", idle]):
+                                        "--mode", "host", "--samples", count, "--idle-seconds", idle, "--no-color"]):
                 suite.parse("legacy-gum-json", lambda: report_from_log(out / "legacy-gum.log"))
             if digest(legacy) != suite.report["legacy_sha256"]:
                 suite.note("legacy-unchanged", "FAIL")
