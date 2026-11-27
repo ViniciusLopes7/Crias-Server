@@ -62,14 +62,18 @@ func packagePower(r metrics.Reading[metrics.PowerDomains]) string {
 	if len(packages) == 0 {
 		return label + "indisponível"
 	}
-	d := packages[0]
-	if d.Instant.Valid() && d.Instant.Unit == metrics.Watts {
-		return fmt.Sprintf("%s%.1f W (instant.)", label, d.Instant.Value)
+	sample, average := packages[0].SummaryEvidence()
+	if sample.State == metrics.Available || sample.State == metrics.Estimated {
+		source, estimate := "instant.", ""
+		if average {
+			source = "média"
+		}
+		if sample.State == metrics.Estimated {
+			estimate = "~"
+		}
+		return fmt.Sprintf("%s%s%.1f W (%s)", label, estimate, sample.Value, source)
 	}
-	if d.Average.Valid() && d.Average.Unit == metrics.Watts {
-		return fmt.Sprintf("%s%.1f W (média)", label, d.Average.Value)
-	}
-	return label + availability(d.Average.State)
+	return label + availability(sample.State)
 }
 
 func batteryHeader(r metrics.Reading[metrics.PowerSupplies]) string {

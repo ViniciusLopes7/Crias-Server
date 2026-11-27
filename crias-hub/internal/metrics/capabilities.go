@@ -44,11 +44,12 @@ func (c *Capability) add(s Sample, unit Unit) {
 	}
 }
 
-// powerEvidence selects one item of evidence per domain. Prefer a usable
+// SummaryEvidence selects one item of evidence per domain. Prefer a usable
 // measured value over an estimate, then preserve diagnostic states rather
 // than letting an absent alternate source hide a failed primary source.
-// The detailed view still exposes both independent readings.
-func powerEvidence(instant, average Sample) Sample {
+// The bool identifies selection of the average rather than instantaneous
+// reading. The detailed view still exposes both independent readings.
+func (d PowerDomain) SummaryEvidence() (sample Sample, average bool) {
 	rank := func(s Sample) int {
 		switch s.State {
 		case Available, Estimated:
@@ -71,10 +72,15 @@ func powerEvidence(instant, average Sample) Sample {
 			return 0
 		}
 	}
-	if rank(average) > rank(instant) {
-		return average
+	sample = d.Instant
+	if rank(d.Average) > rank(d.Instant) {
+		sample, average = d.Average, true
 	}
-	return instant
+	if (sample.State == Available || sample.State == Estimated) &&
+		(sample.Unit != Watts || math.IsNaN(sample.Value) || math.IsInf(sample.Value, 0)) {
+		sample.State = Invalid
+	}
+	return sample, average
 }
 
 // Capabilities derives a bounded inventory from the current snapshot.
@@ -106,7 +112,8 @@ func Capabilities(h HardwareSnapshot) []Capability {
 	out = append(out, zones)
 	power := Capability{Name: "Potência por domínio", Group: h.Domains.State}
 	for _, d := range h.Domains.Data.Values {
-		power.add(powerEvidence(d.Instant, d.Average), Watts)
+		sample, _ := d.SummaryEvidence()
+		power.add(sample, Watts)
 	}
 	out = append(out, power)
 	bat := Capability{Name: "Carga de bateria", Group: h.Supplies.State}

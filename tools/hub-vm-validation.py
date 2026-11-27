@@ -23,8 +23,11 @@ PIN = "go1.27.4"
 
 
 def digest(path):
+    value = hashlib.sha256()
     with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            value.update(block)
+    return value.hexdigest()
 
 
 def executable(path):
@@ -181,8 +184,8 @@ def main():
     args = parser.parse_args()
     if sys.platform != "linux" or os.geteuid() == 0:
         parser.error("Linux and an unprivileged user are required")
-    if sys.version_info < (3, 11):
-        parser.error("Python 3.11+ required")
+    if sys.version_info < (3, 10):
+        parser.error("Python 3.10+ required")
     if args.installed_release and not re.fullmatch(r"[A-Za-z0-9._+-]{1,80}", args.installed_release):
         parser.error("invalid release identifier")
     if args.expected_binary_sha256 and not re.fullmatch(r"[a-fA-F0-9]{64}", args.expected_binary_sha256):
@@ -212,12 +215,14 @@ def main():
         for name in ("go.mod", "go.sum"):
             locks[name] = digest(module / name)
         suite.report["source_locks_sha256"] = locks
-        if suite.step("checkout", ["git", "rev-parse", "HEAD"], timeout=10):
-            suite.report["checkout_sha"] = (out / "checkout.log").read_text().strip()
-        if suite.step("checkout-clean", ["git", "status", "--porcelain"], timeout=10):
-            if (out / "checkout-clean.log").stat().st_size:
-                suite.note("source-tree-clean", "FAIL")
-                raise ValueError("checkout must be clean")
+        if not suite.step("checkout", ["git", "rev-parse", "HEAD"], timeout=10):
+            raise ValueError("trusted Git checkout required")
+        suite.report["checkout_sha"] = (out / "checkout.log").read_text().strip()
+        if not suite.step("checkout-clean", ["git", "status", "--porcelain"], timeout=10):
+            raise ValueError("cannot verify clean checkout")
+        if (out / "checkout-clean.log").stat().st_size:
+            suite.note("source-tree-clean", "FAIL")
+            raise ValueError("checkout must be clean")
         if args.build or args.source_audit or args.check_updates:
             if not go or not suite.step("go-version", [go, "env", "GOVERSION"], env=env, timeout=10):
                 raise ValueError("Go toolchain unavailable")
@@ -239,8 +244,19 @@ def main():
             raise ValueError("binary digest mismatch")
         suite.report["binary_identity"] = "hash-matched" if args.expected_binary_sha256 else "recorded-not-externally-verified"
         if go:
-            suite.step("binary-build-info", [go, "version", "-m", binary], env=env, timeout=10)
+            if suite.step("binary-build-info", [go, "version", "-m", binary], env=env, timeout=10):
+                info = (out / "binary-build-info.log").read_text()
+                revisions = re.findall(r"^\s*build\s+vcs\.revision=([0-9a-f]{40})$", info, re.M)
+                suite.report["binary_source_revision"] = revisions[0] if len(revisions) == 1 else None
+                suite.report["binary_matches_checkout"] = suite.report["binary_source_revision"] == suite.report["checkout_sha"]
+        else:
+            suite.report["binary_matches_checkout"] = None
         if args.source_audit:
+            gofmt = shutil.which("gofmt")
+            if not gofmt:
+                suite.note("gofmt", "FAIL")
+            elif suite.step("gofmt", [gofmt, "-l", "."], cwd=module, timeout=30):
+                suite.note("format-clean", "PASS" if not (out / "gofmt.log").stat().st_size else "FAIL")
             for name, cmd in (
                 ("module-tidy", ["mod", "tidy", "-diff"]),
                 ("module-verify", ["mod", "verify"]),

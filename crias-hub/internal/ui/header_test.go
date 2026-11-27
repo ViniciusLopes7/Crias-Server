@@ -76,3 +76,28 @@ func TestHardwareHeaderLayout(t *testing.T) {
 		}
 	}
 }
+
+func TestPackagePowerDiagnosticParity(t *testing.T) {
+	for _, tc := range []struct {
+		instant, average metrics.Sample
+		want             string
+	}{
+		{metrics.Sample{State: metrics.Permission}, metrics.Sample{State: metrics.Unavailable}, "sem permissão"},
+		{metrics.Sample{State: metrics.Invalid}, metrics.Sample{State: metrics.Waiting}, "inválido"},
+		{metrics.Sample{State: metrics.Available, Unit: metrics.MHz}, metrics.Sample{State: metrics.Unavailable}, "inválido"},
+		{metrics.Sample{State: metrics.Stale}, metrics.Sample{State: metrics.Waiting}, "obsoleto"},
+		{metrics.Sample{State: metrics.Permission}, metrics.Sample{State: metrics.Available, Unit: metrics.Watts, Value: 10}, "10.0 W (média)"},
+		{metrics.Sample{State: metrics.Estimated, Unit: metrics.Watts, Value: 8}, metrics.Sample{State: metrics.Unavailable}, "~8.0 W (instant.)"},
+	} {
+		r := metrics.Reading[metrics.PowerDomains]{
+			State: metrics.Available,
+			Data: metrics.PowerDomains{Values: []metrics.PowerDomain{{
+				Name: "package-0", NameState: metrics.Available,
+				Instant: tc.instant, Average: tc.average,
+			}}},
+		}
+		if got := packagePower(r); got != "Pot. pacote CPU: "+tc.want {
+			t.Fatalf("got %q, want %q", got, tc.want)
+		}
+	}
+}
